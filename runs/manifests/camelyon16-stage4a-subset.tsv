@@ -1,0 +1,55 @@
+# Stage 4.A 50-slide subset for camelyon16
+# Generated 2026-05-08 from /mnt/liad/tissue-detection/3.0/camelyon16/n64/patches
+# Method: random.Random(42).sample(slide_ids, 50)
+# Total source slides: 399
+slide_id
+normal_004
+normal_013
+normal_014
+normal_016
+normal_017
+normal_023
+normal_045
+normal_048
+normal_050
+normal_053
+normal_058
+normal_072
+normal_080
+normal_082
+normal_103
+normal_112
+normal_113
+normal_114
+normal_116
+normal_121
+normal_127
+normal_137
+normal_142
+normal_144
+test_014
+test_016
+test_018
+test_025
+test_036
+test_057
+test_059
+test_072
+test_101
+test_122
+test_130
+tumor_014
+tumor_015
+tumor_021
+tumor_022
+tumor_040
+tumor_045
+tumor_059
+tumor_070
+tumor_072
+tumor_079
+tumor_086
+tumor_090
+tumor_092
+tumor_101
+tumor_103

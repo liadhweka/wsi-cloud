@@ -1,0 +1,7 @@
+### wsi-cucim-2604
+/data/local-nvme/miniforge/bin/mamba create -y -p /data/local-nvme/conda-envs/wsi-cucim-2604 -c rapidsai -c conda-forge -c nvidia cucim=26.04.00 cuda-version=12.* python=3.11 pytorch=*=cuda* torchvision monai h5py openslide-python numpy pandas tqdm
+/data/local-nvme/miniforge/bin/mamba install -y -p /data/local-nvme/conda-envs/wsi-cucim-2604 -c rapidsai -c conda-forge kvikio
+/data/local-nvme/miniforge/bin/mamba install -p /data/local-nvme/conda-envs/wsi-cucim-2604 -c conda-forge huggingface_hub timm safetensors transformers --yes
+### wsi-cucim
+/data/local-nvme/miniforge/bin/mamba create -y -p /data/local-nvme/conda-envs/wsi-cucim -c rapidsai -c conda-forge -c nvidia cucim cuda-version=12.* python=3.10
+/data/local-nvme/miniforge/bin/mamba install -y -p /data/local-nvme/conda-envs/wsi-cucim -c conda-forge -c nvidia pytorch=*=cuda* torchvision monai h5py openslide-python

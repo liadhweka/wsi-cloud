@@ -1,0 +1,53 @@
+{
+  // ===========================================================================
+  // cuFile / GPUDirect-Storage config TEMPLATE — WEKA WSI kvikIO path (4.C / 5.A / 6.A / 7).
+  // Doc-grounded 2026-06-29 (NVIDIA GDS config guide + docs.weka.io networking/GDS).
+  //
+  // POST-REINSTALL: copy this to the CUFILE_ENV_PATH_JSON target
+  //   (~/wsi-debug/p1-gdsio/cufile-full-rdma.json), then REPLACE every
+  //   "REPLACE-WITH-A100-CLIENT-IB-NIC-IPs" with the A100 client's actual IB NIC
+  //   addresses (see GDS-TUNING-CHECKLIST.md Step 2). cuFile tolerates // comments
+  //   (the stock /etc/cufile.json ships with them).
+  //
+  // Baseline values = the PROVEN config (3 WEKA-essential deltas, marked ★) +
+  // NVIDIA defaults for everything else. NVIDIA: "default settings work very well…
+  // use defaults unless your storage vendor has a specific recommendation." So tune
+  // the // CANDIDATE knobs ONLY if a measured gdsio / fe-core-kvikio run is below
+  // the healthy per-client ceiling — procedure in GDS-TUNING-CHECKLIST.md.
+  // ===========================================================================
+  "logging": { "level": "INFO", "dir": "/home/liadhermelin/wsi-debug/p1-gdsio" },   // "ERROR" trims logging overhead for perf runs (optional)
+  "profile": { "nvtx": false, "cufile_stats": 0 },
+
+  "execution": {
+    "max_io_queue_depth": 128,        // CANDIDATE TUNE → 256/512: the reader issues n_buffer=256 async preads/batch; a 128-deep queue can throttle them. Most likely useful knob — try first if measured-low.
+    "max_io_threads": 4,              // CANDIDATE TUNE → 8/16: drain many concurrent ~192 KB pread completions faster (multi-GPU).
+    "parallel_io": true,              // keep (NVIDIA rec)
+    "min_io_threshold_size_kb": 8192, // splits only reads >= this. Our 192 KB random tiles are below it (NOT split) → irrelevant to 4.C.2 random mode. For 4.C.1 faithful (large sequential reads) lowering toward 1024/256 lets cuFile decompose them — try only if faithful-mode measured-low.
+    "max_request_parallelism": 4      // sub-buffer split per work-item; only affects reads >= min_io_threshold. Default fine for our IO sizes.
+  },
+
+  "properties": {
+    "max_direct_io_size_kb": 16384,             // 16 MB max single direct IO >> our 192 KB tiles. Default fine.
+    "max_device_cache_size_kb": 131072,         // default; keep unless vendor rec
+    "max_device_pinned_mem_size_kb": 33554432,  // 32 GB/process pinned cap. CANDIDATE → 64 GB only if pinning errors at very high n_buffer × N_GPU.
+    "use_poll_mode": false,                     // keep false — poll mode only helps sub-4 KB reads; ours are 192 KB
+    "poll_mode_max_size_kb": 4,
+    "allow_compat_mode": true,                  // ★ WEKA-ESSENTIAL — POSIX fallback for non-GDS-eligible / unaligned edge cases (avoids EBADF). Keep true.
+    "gds_rdma_write_support": true,             // keep
+    "rdma_dev_addr_list": ["REPLACE-WITH-A100-CLIENT-IB-NIC-IPs"],   // ★ re-derive post-reinstall — the A100's OWN IB interface IPs across all subnets, NOT backend IPs. See checklist Step 2.
+    "rdma_peer_affinity_policy": "RoundRobinMaxMin",
+    "rdma_dynamic_routing": true                // ★ WEKA-ESSENTIAL — route when GPU/NIC don't share a PCIe root (our NUMA topology). Keep true.
+    // optional: "rdma_dynamic_routing_order": ["GPU_MEM_NVLINKS","GPU_MEM","SYS_MEM","P2P"]  // NVIDIA default order; only set if deliberately changing it.
+  },
+
+  "fs": {
+    "generic": { "posix_unaligned_writes": false },
+    "weka": {
+      "rdma_write_support": true,
+      "posix_gds_min_kb": 0,
+      "rdma_dev_addr_list": ["REPLACE-WITH-A100-CLIENT-IB-NIC-IPs"]   // ★ same client IB IPs as properties.rdma_dev_addr_list
+    }
+  },
+
+  "denylist": { "drivers": [], "devices": [], "mounts": [], "filesystems": [] }
+}

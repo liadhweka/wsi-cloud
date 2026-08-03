@@ -1,0 +1,99 @@
+# ── Data: never commit these ───────────────────────────────────────────────────
+# WSI slide formats
+*.svs
+*.tif
+*.tiff
+*.mrxs
+*.ndpi
+*.scn
+*.vms
+*.vmu
+*.bif
+*.svslide
+*.qptiff
+*.czi
+*.dcm
+*.zarr/
+*.n5/
+data/
+datasets/
+
+# Cached features / patches / tiles (pipeline outputs — regenerable)
+*.h5
+*.hdf5
+*.npy
+*.npz
+patches/
+features/
+embeddings/
+tiles/
+thumbnails/
+masks/
+stitches/
+
+# Model weights / checkpoints
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+checkpoints/
+weights/
+models/
+
+# ── Benchmark recording outputs ────────────────────────────────────────────────
+# Per CLAUDE.md → Durability & backup: git is authoritative for SMALL TEXT
+# (results.json, metadata.json, 0_README.md, notes.md, cmd.txt, pre/, post/, and the
+# summary CSVs at the runs/ root — all COMMITTED). S3 is authoritative for the heavy
+# write-once telemetry below, which must NOT enter git.
+runs/*/raw/
+runs/*/cmd.log
+runs/sweep-logs/
+
+# Large per-workload telemetry CSVs — per-interval output balloons on long endurance
+# cells (hundreds of MB each), exceeds GitHub per-file limits, and is regenerable from
+# the raw output that is already excluded. Headline numbers live in the summary CSVs.
+**/workload-*.csv
+
+# Defensive: catch the same patterns at any depth, in case a subtree is ever added.
+**/runs/*/raw/
+**/runs/*/cmd.log
+**/runs/sweep-logs/
+
+# ── Secrets / credentials ──────────────────────────────────────────────────────
+*.env
+*.pem
+*.key
+credentials*
+.aws/
+
+# ── Local scratch (mounted outside the repo; defensive) ────────────────────────
+/data/
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ── Logs ──────────────────────────────────────────────────────────────────────
+*.log
+results/
+
+# ── Editors / OS ──────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# ── Claude Code ───────────────────────────────────────────────────────────────
+# The project-shared settings.json IS tracked; per-machine overrides are not.
+.claude/settings.local.json
