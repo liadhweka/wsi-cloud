@@ -2,7 +2,10 @@
 # sweep-stage4b-tilesread.sh — Stage 4.B on-the-fly random tile reads.
 #
 # Strategy B: random tile reads from many slides to model production DataLoader workloads.
-# CPU-only methodology (cuCIM GPU axis dropped — see cuCIM-GPU-wekafs-finding.md).
+# CPU-only methodology. The cuCIM GPU read_region axis is ruled out as a LIBRARY
+# defect — filesystem-independent, therefore not a comparison axis and never to be
+# reported as a storage finding for either side. See the
+# `cucim-gpu-read-region-non-viable` memory; do not re-investigate.
 #
 # Two backends:
 #   openslide: per-tile via multiprocessing.Pool of N processes — production-reality pattern (MONAI/Slideflow)
@@ -30,10 +33,12 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_ALT:?CONDA_ENV_ALT is unset -- source cloud-setup/env.sh}"
 PYTHON=$CONDA_ENV/bin/python
 READER=$REPO/runs/lib/read-tiles-onthefly.py
-POOL_CACHE_DIR=/data/local-nvme/stage4b-pool-cache
+: "${SCRATCH_DIR:?SCRATCH_DIR is unset -- source cloud-setup/env.sh}"
+POOL_CACHE_DIR=${SCRATCH_DIR}/stage4b-pool-cache
 LATENCY_DIR=/tmp/stage4b-latencies
 LOG_DIR=$REPO/runs/sweep-logs
 RUNTIME=60

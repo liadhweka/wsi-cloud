@@ -36,4 +36,4 @@ bucket name, region, and instance-profile role, so it is the **cloud session's j
 `record-run.sh` during-run sync. Don't assume a run's telemetry is durable until that exists and has been
 verified once.
 
-Related: `[[feedback_git_commit_cadence]]`, `[[user-values-accuracy-safety-dependability-exhaustive-recording-over-speed]]`.
+Related: `[[feedback_git_commit_cadence]]`, `[[feedback_accuracy_safety_dependability]]`.

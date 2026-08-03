@@ -24,7 +24,7 @@
 #     dtype = fp32
 #     = 3 cells
 #
-# Total: 24 cells. Per cell: 5 min ramp + 10 min steady = ~15 min wallclock.
+# Total: 25 cells (18 + 3 + 4). Per cell: 5 min ramp + 10 min steady.
 # Total sweep wallclock: ~6 hr.
 #
 # Required env (set below): CONDA_PREFIX; no LD_PRELOAD needed (no kvikIO/GDS in 6.B).
@@ -34,8 +34,8 @@
 #   ./sweep-stage6b-stress.sh smoke             # single-cell validation (small corpus, short runtime)
 #   ./sweep-stage6b-stress.sh b2a               # B.2.a saturation (18 cells)
 #   ./sweep-stage6b-stress.sh b2b               # B.2.b production scale (3 cells)
-#   ./sweep-stage6b-stress.sh b2c               # B.2.c file-size sensitivity (3 cells)
-#   ./sweep-stage6b-stress.sh all               # b2a + b2b + b2c (24 cells)
+#   ./sweep-stage6b-stress.sh b2c               # B.2.c file-size sensitivity (4 cells)
+#   ./sweep-stage6b-stress.sh all               # b2a + b2b + b2c (25 cells)
 set -uo pipefail
 
 # Repo root derived from this script's own location (runs/lib -> runs -> root),
@@ -43,7 +43,9 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${LEG:?LEG is unset -- source cloud-setup/env.sh. The run-dir name must carry the filesystem: sync-to-s3.sh and teardown-preflight.sh glob runs/*-$LEG-s*/, so a dir without it is never backed up}"
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
 READER="$REPO/runs/lib/read-feature-files-stage6b.py"
 GENERATOR="$REPO/runs/lib/generate-synthetic-features-stage6b.py"
@@ -75,9 +77,9 @@ run_cell() {
 
   local cell_name="stress-${corpus_name}-n${n_processes}-${pattern}"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s6.B.2-${cell_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.2-${cell_name}"
 
-  local note="Stage 6.B.2 cell: corpus=${corpus_name} pattern=${pattern} n_processes=${n_processes} ramp=${ramp}s steady=${runtime}s. WHY: Phase 2 file-IO stress sweep — the workload that exercises WekaFS's distributed metadata path at production scale. Per-file-load latency CSV is PRIMARY headline source for the customer-quotable metadata-stress numbers."
+  local note="Stage 6.B.2 cell on fs=${LEG}: corpus=${corpus_name} pattern=${pattern} n_processes=${n_processes} ramp=${ramp}s steady=${runtime}s. WHY: the small-file/metadata substage — structurally NOT bandwidth-bound, so it stays discriminating even under a client-capped ceiling, and it exercises whichever metadata architecture this leg's filesystem uses. Per-file-load latency CSV is the PRIMARY headline source. Cache state recorded as achieved, not asserted (D13)."
 
   echo ""
   echo "=========================================="
@@ -110,13 +112,13 @@ prep() {
 
   local cell_name="generate-synthetic-corpora-standard"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s6.B.1-${cell_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.1-${cell_name}"
 
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.B.1 \
-    --note "Stage 6.B.1 prep: generate the standard synthetic corpus suite for 6.B.2/B.3. WHY: corpus generation is a real recordable WekaFS write workload (~13.75 TB over ~1.5 hr; 200 MB tier restored 2026-05-25) — sustained write throughput data point worth capturing per CLAUDE.md recording philosophy." \
+    --note "Stage 6.B.1 prep: generate the standard synthetic corpus suite for 6.B.2/B.3. WHY: corpus generation is itself a real recordable write workload against $FS_MOUNT — a sustained-write data point worth capturing per CLAUDE.md recording philosophy. ⏳ Corpus size is open item 5b: it must exceed the client page cache PLUS the larger of the two filesystems' server-side caches, using ONE identical definition on both legs." \
     -- "$PY" "$GENERATOR" \
        --standard-suite \
        --output-base "$CORPUS_BASE" \
@@ -141,7 +143,7 @@ smoke() {
 
   local cell_name="stress-smoke-${smoke_corpus}-n4-random"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s6.B.2-${cell_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.2-${cell_name}"
 
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
@@ -188,7 +190,7 @@ b2c_file_size() {
 }
 
 all() {
-  echo "=== Stage 6.B.2 sweep: b2a + b2b + b2c (24 cells, ~6 hr) ==="
+  echo "=== Stage 6.B.2 sweep: b2a + b2b + b2c (25 cells) ==="
   b2a_saturation
   b2b_production
   b2c_file_size

@@ -16,7 +16,7 @@
 #
 # Per-cell:
 #   - RECORD_RUN_DIR pre-computed to avoid timestamp-race (per the 6.A bug fix pattern).
-#   - LD_PRELOAD scoped per-cell (kvikIO cells set libcufile-1.17; cuCIM cells unset).
+#   - LD_PRELOAD scoped per-cell (kvikIO cells set the system libcufile; cuCIM unset).
 #   - UNI2-h cells auto-tagged [PENDING-APPROVAL-DO-NOT-EXTERNALIZE] (per uni2h memory).
 #   - Per-process inference batch size scales DOWN as N rises (Q8 revision 2026-05-26).
 set -uo pipefail
@@ -26,9 +26,19 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${LEG:?LEG is unset -- source cloud-setup/env.sh. The run-dir name must carry the filesystem: sync-to-s3.sh and teardown-preflight.sh glob runs/*-$LEG-s*/, so a dir without it is never backed up}"
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
-LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+# The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
+# the environment (cloud-setup/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the conda env bundles an older copy, the right path is instance-specific, and a
+# path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
+# quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
+# the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see cloud-setup/NAMING-AND-VARIABLES.md Table 3)}"
+LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
+[ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 RECORD="$REPO/runs/lib/record-run.sh"
@@ -75,15 +85,15 @@ run_single_inference_cell() {
   local gpu="${11:-2}"
 
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s7-${cell_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s7-${cell_name}"
 
   # UNI2-h conditional-use tag (per uni2h-conditional-use-status memory)
   local approval_tag=""
   [ "$model" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
 
-  # Per-cell LD_PRELOAD scoping (per cucim_libcufile_preload_abi_clash memory)
+  # Per-cell LD_PRELOAD scoping (per cucim-segfaults-when-libcufile-is-ld-preloaded memory)
   local preload=""
-  [ "$backend" = "kvikio" ] && preload="$LIBCUFILE_117"
+  [ "$backend" = "kvikio" ] && preload="$LIBCUFILE_SYSTEM"
 
   local heatmap_dir="${FS_MOUNT}/heatmaps/stage7/${cell_name}"
   mkdir -p "$heatmap_dir"
@@ -132,7 +142,7 @@ run_orchestrator_cell() {
   local ramp="$4"; local runtime="$5"
   local extra_env="${6:-}"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s7-${cell_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s7-${cell_name}"
   local bs; bs=$(bs_for_n "$n_concurrent")
 
   local stage_tag="7.2"
@@ -235,21 +245,21 @@ tier3_heatmaps() {
 tier4_streaming() {
   echo "=== Tier 7.4 — Streaming clinical loop + read-after-write (2 cells) ==="
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s7-7.4.a-streaming-loop-virchow2-kvikio"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s7-7.4.a-streaming-loop-virchow2-kvikio"
   echo "[$now_utc] cell: 7.4.a-streaming-loop-virchow2-kvikio"
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" --run-name "7.4.a-streaming-loop-virchow2-kvikio" --stage 7.4 \
-    --note "Stage 7.4.a streaming clinical loop — 10 slides emitted @ 60s cadence (~1500 slides/day rate). Captures end-to-end 'scanner-to-pathologist-visibility' wallclock per slide + cross-slide queueing if inference falls behind scanner. WHY: bookend customer story for the full clinical-deployment workflow loop." \
+    --note "Stage 7.4.a streaming clinical loop — 10 slides emitted @ 60s cadence (~1500 slides/day rate). Captures end-to-end 'scanner-to-pathologist-visibility' wallclock per slide + cross-slide queueing if inference falls behind scanner. WHY: the end-to-end workflow bookend — it also captures cross-slide queueing if inference falls behind the emitter, which a per-slide latency number alone hides." \
     -- "$STREAMING" --run-dir "$run_dir" --n-slides 10 --cadence-s 60 \
        --model virchow2 --backend kvikio --manifest "$BRCA_SUBSET_MANIFEST"
 
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  run_dir="$REPO/runs/${now_utc}-s7-7.4.b-read-after-write"
+  run_dir="$REPO/runs/${now_utc}-${LEG}-s7-7.4.b-read-after-write"
   echo "[$now_utc] cell: 7.4.b-read-after-write"
   RECORD_RUN_DIR="$run_dir" \
   CONDA_PREFIX="$CONDA_ENV" \
   "$RECORD" --run-name "7.4.b-read-after-write" --stage 7.4 \
-    --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: WekaFS strong-consistency story — 'just-written file visible to other clients within Y ms'. Customer-decisive single number." \
+    --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: read-after-write visibility is a CONSISTENCY property, not a bandwidth one, and the two filesystems have different metadata architectures — so there is no reason to assume they behave the same. SCOPE: single-client (writer and reader are processes on one instance); cross-client consistency would need a second instance and is out of scope." \
     -- "$PY" "$RAW_HELPER" \
        --output-dir "${FS_MOUNT}/heatmaps/stage7/7.4b" \
        --n-slides 20 --bytes-per-write 50000000 \

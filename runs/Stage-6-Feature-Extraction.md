@@ -332,7 +332,7 @@ Over-capture by default — Stage 6 is the largest stage and re-running a cell i
 | `orchestrate-concurrent-stage6c.sh` · `sweep-stage6c.sh` · `aggregate-stage6c-concurrent.py` | 6.C |
 | `pipeline-end-to-end-stage6d.sh` · `aggregate-stage6d.py` | 6.D |
 
-All need the per-filesystem adapter work (open item 11) and `$FS_MOUNT` retargeting (open item 13). Per-cell
+All need the per-filesystem adapter work (deferred item `D-4`). Mount retargeting is done (`D-1`). Per-cell
 `LD_PRELOAD` scoping applies to every sweep mixing kvikIO and cuCIM.
 
 ## Datasets

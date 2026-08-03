@@ -11,11 +11,17 @@ Lustre (later)** — followed by the head-to-head synthesis.
 **Nothing has been benchmarked. Every number in the repo is `[PENDING]`.** You are the first session to run
 a cell.
 
-**What the human has already done** (per `cloud-setup/NEW-CLOUD-SETUP.md`): provisioned the instance, the S3
-bucket + IAM role, and the WEKA cluster; created the user, wired SSH↔GitHub, installed Claude, cloned this
-repo, restored the memories, authenticated to Hugging Face, and mounted WEKA at `/mnt/weka`. A **prior
-env-prep session** (`cloud-setup/prompt-env-prep-cloud.md`) verified the GPU/CUDA/GDS/networking stack,
-installed miniforge, and provisioned `/data/local-nvme`.
+**What the human has already done** (per `cloud-setup/NEW-CLOUD-SETUP.md`): provisioned the instance (from a
+pinned AMI — **verify in 4.0 that it actually carries the GPU stack**; the image choice was still an open
+decision when this prompt was written, `C10`), the S3 bucket + IAM role, and the WEKA cluster; wired SSH↔GitHub and set their git identity;
+installed Claude; cloned this repo; restored the memories; filled in `cloud-setup/env.sh`; and mounted WEKA at
+`/mnt/weka`. A **prior env-prep session** (`cloud-setup/prompt-env-prep-cloud.md`) verified the
+GPU/CUDA/GDS/networking stack, reported the system `libcufile` path, installed miniforge, and provisioned
+`/data/local-nvme`.
+
+**One thing they probably have NOT done: the Hugging Face login.** `hf` ships with the Python environments,
+which *you* build in 4.1 — so `hf auth login` cannot have run yet, and one of the three foundation models is
+access-gated. Check it in 4.0 and remind them; it blocks 6.A, not the earlier stages.
 
 **You re-verify all of it yourself, read-only, before touching anything. Trust nothing; confirm it.**
 
@@ -60,7 +66,7 @@ Two rules that follow, and that you will be tempted to bend:
     assumption is referenced. Keep the index current.
   - Plus the framing, MIL, cuCIM, and UNI2-h memories.
   - **If `MEMORY.md` is missing, STOP** and tell the human to run the restore block in
-    `cloud-setup/NEW-CLOUD-SETUP.md` § B8. Do not proceed without the memories.
+    `cloud-setup/NEW-CLOUD-SETUP.md` § 4.3. Do not proceed without the memories.
 
 ## STEP 2 — Read the project docs
 
@@ -72,7 +78,7 @@ Two rules that follow, and that you will be tempted to bend:
 - **`runs/README.md`** — the runbook, **both canaries**, the silent-skip hazards, the cross-leg integrity
   gates.
 - **`SCRIPT-TRACKER.md`** — per-script reference, the **cross-cutting patterns** (eight hard-won ones; each
-  exists because its absence caused a real failure), and the **deferred-work table** (`D-4`…`D-13`, nine items) that is
+  exists because its absence caused a real failure), and the **deferred-work table** (`D-4`…`D-19`, fourteen items) that is
   most of your build job — plus the table above it recording what was already completed and how it was
   verified.
 - **`cloud-setup/NAMING-AND-VARIABLES.md`** — **read this before touching any script.** Every path, name, and
@@ -84,10 +90,16 @@ Two rules that follow, and that you will be tempted to bend:
 
 ## STEP 3 — Where things stand
 
-- **Docs and methodology: complete.** Scripts: **63 files, syntax-clean.** Mount/repo retargeting, `--fs`
-  plumbing, the environment contract, the leg orchestrator, and the S3 sync layer were **already done on the
-  build machine** — every script now resolves the mount through `$FS_MOUNT` and **aborts loudly if it is
-  unset**, rather than defaulting.
+- **Docs and methodology: complete.** Scripts: **63 files** (32 shell + 29 Python + a cuFile template +
+  the GDS checklist), all syntax-clean. Mount/repo retargeting, filesystem labelling, the environment
+  contract, the leg orchestrator, and the S3 sync layer were **already done on the build machine** — every
+  script resolves the mount through `$FS_MOUNT`, builds its interpreter from `$CONDA_ENVS_DIR`, reads
+  `$LIBCUFILE_PRELOAD`, and **aborts loudly if any of them is unset**, rather than defaulting.
+- **How a cell is labelled:** the sweep drivers take **no arguments**. `record-run.sh` accepts `--fs` and
+  falls back to `$LEG`; both it and `run-leg.sh` cross-check the label against `FS_MOUNT` and refuse on
+  disagreement. Every pre-computed run-dir name carries the `-<leg>-` segment, which is **load-bearing**:
+  `sync-to-s3.sh` and `teardown-preflight.sh` glob `runs/*-$LEG-s*/`, so a dir without it is never backed up
+  and the teardown gate does not notice.
 - **What is missing is exactly the deferred work in `SCRIPT-TRACKER.md`'s table and section B of the
   open-items memory.** That is not incidental cleanup; **it is a hard prerequisite for a valid cell.**
 - **Leg A is WEKA.** Leg B is FSx for Lustre, provisioned later. The instance is the same in both.
@@ -123,9 +135,32 @@ recommendation. **Surface it to the human before mutating state.**
 
 ### 4.1 — Build the environment
 
-- **Python environments** from `cloud-setup/env-specs/` onto `/data/local-nvme/conda-envs/`. **Use conda, not
-  pip, for cuCIM.** Verify imports (torch+CUDA, cupy, cucim, kvikio, openslide, tifffile, h5py, timm,
-  transformers) and that the visible GPU count matches the hardware.
+- **Python environments** into `$CONDA_ENVS_DIR` (`/data/local-nvme/conda-envs/`), named `$CONDA_ENV_MAIN` and
+  `$CONDA_ENV_ALT`. **Use conda/mamba, not pip, for cuCIM** — pip wheels have been observed to crash on a
+  libstdc++ ABI mismatch inside `read_region()`.
+
+  **`cloud-setup/env-specs/` holds four kinds of file, and they are NOT interchangeable. Pick deliberately:**
+
+  | File | What it is | Use it when |
+  |---|---|---|
+  | `env-create-history.txt` | **The recipe** — the actual `mamba create` / `mamba install` commands, with loose pins (`cucim=26.04.00`, `cuda-version=12.*`, `pytorch=*=cuda*`) | **Building the FIRST environment on a new instance.** It re-solves against this instance's CUDA, so it is the route most likely to succeed |
+  | `*.conda-explicit.txt` | Fully pinned package URLs — reproduces the environment **bit-identically** (`conda create -p <path> --file <file>`) | **The Leg-B rebuild.** Use this so Leg B's environment matches Leg A exactly |
+  | `*.environment.yml` | Solved spec with versions. Note its `name:` is an absolute **path**, so create with `-p`, not `-n` | A middle route if the explicit file will not solve |
+  | `*.pip-freeze.txt` | Record of the pip-installed remainder | Cross-check only — never the primary route |
+
+  **Why this ordering matters, not just which command runs:** `conda_env_main` and `python_version` are
+  `MUST_MATCH` fields in the environment contract. So the environment is a **held-constant input**: whatever
+  Leg A ends up with, Leg B must reproduce, which is exactly what the explicit file is for. If the recipe
+  resolves to different versions on the Leg-B instance, that is a contract violation, not a detail.
+
+  **After building:** verify imports (torch+CUDA, cupy, cucim, kvikio, openslide, tifffile, h5py, timm,
+  transformers) and that the visible GPU count matches the hardware. Then **regenerate the spec files from what
+  you actually built** and say so — the ones in the repo came from a different machine, so the explicit file is
+  only a valid Leg-B target once it describes *this* environment.
+
+  Remind the human to do the **Hugging Face login** (`NEW-CLOUD-SETUP.md` § 7.2) as soon as the environments
+  exist: `hf` does not exist before this step, one model is access-gated, and the failure surfaces deep inside a
+  Stage-6 cell.
 - **cuFile configuration for THIS instance** — instantiate the template with **this** instance's own
   addresses and the transport options the mounted filesystem needs. Follow
   `runs/lib/GDS-TUNING-CHECKLIST.md`, which currently carries a **`⏳ PENDING RETARGET`** banner listing what
@@ -147,12 +182,13 @@ while they run.
 
 ### 4.3 — The deferred script work (the core build task)
 
-Work `D-4` … `D-13` (nine items) from `SCRIPT-TRACKER.md` / open-items section B. **This is where the comparison's
+Work `D-4` … `D-19` (fourteen items; `D-12` and `D-14` are done) from `SCRIPT-TRACKER.md` / open-items section B. **This is where the comparison's
 validity is won or lost.** Priorities and traps:
 
-- **`D-1` mount retargeting to `$FS_MOUNT` (36 files) is the highest-severity item.** A hardcoded mount makes
-  a Lustre cell silently measure WEKA, and the number still looks correct — there is no failure signal. Do
-  this thoroughly and grep to prove it.
+- **Do not redo `D-1`/`D-2`/`D-3`/`D-12`/`D-14`** — they are complete, with what was done and how it was
+  verified recorded in `SCRIPT-TRACKER.md` § "Done before leaving the build machine". Re-grep to satisfy
+  yourself (a hardcoded mount makes a Lustre cell silently measure WEKA and the number still looks correct),
+  but the work itself is done.
 - **`D-4` per-filesystem recording adapters (13 aggregators).** Write them against the **real** telemetry
   schemas. Preserve the **per-timestamp client-summing pattern** (a naive pre-aggregated mean under-reports
   by ~100×) and filter by a stable identity, never a numeric node id.
@@ -188,9 +224,11 @@ re-running cells. Two deserve special attention:
 
 ### 4.5 — Baseline, then STOP for greenlight
 
-Run the pre-cell canary, then capture the synthetic baseline **per block size** (`runs/lib/fe-core-fio.sh`,
-`fe-core-kvikio.sh`). Confirm the post-cell canary is consistent. **Do not anchor on any number from any
-prior environment.**
+Run the pre-cell canary, then capture the synthetic baseline **per block size** — that means the Stage 1.0
+sweeps (`sweep-stage1-{seqw,seqr,randw,randr}.sh`), which are the cells every downstream "% of ceiling"
+divides by. `fe-core-fio.sh` / `fe-core-kvikio.sh` are **single-cell spot checks at one fixed
+configuration**, useful for a quick recorded reference point but **not** the per-block-size ceiling. Confirm
+the post-cell canary is consistent. **Do not anchor on any number from any prior environment.**
 
 **Stop and get the human's greenlight on the baseline before Step 4.6.** It becomes the denominator for
 every "% of ceiling" in the leg, so a wrong baseline propagates everywhere.
@@ -199,11 +237,44 @@ Also check the **pre-committed instance revisit trigger** (**D10**) here: if the
 across block sizes *and* the concurrency sweeps saturate on CPU cores rather than storage, the instance is
 measuring itself rather than the filesystem — surface that before Leg B rather than after.
 
+### 4.5b — THE BLOCKER GATE: close these before the first measured cell
+
+**Do not start 4.6 until every line below is either closed or explicitly waived by the human, in writing, with
+the reason recorded.** These are not cleanup. Each one either stops a cell, or — worse — lets a cell complete
+and report a number that is wrong in a way nothing downstream can detect. A pre-deployment audit
+(`cloud-setup/AUDIT-REPORT.md`) found each of them by grep and execution, not by reading, which is exactly why
+a checklist is needed rather than a careful re-read.
+
+| # | Blocker | Where | Closed when |
+|---|---|---|---|
+| 1 | **Per-filesystem recording adapters** — the current recorder set and required-stream list are the WEKA-over-InfiniBand ones, so on AWS the IB streams are empty and **every run marks `INCOMPLETE`** | `D-4` | a cell records this leg's real Primary sources and `INDEX.md` says `OK` |
+| 2 | **Per-filesystem consistency relation** — the canary cannot evaluate without it, and it must be derived, never ported | `D-5` | the post-cell canary passes on a real cell, with the derivation written down |
+| 3 | **cuFile path accounting** — a kvikIO cell without recorded GPU-direct-vs-bounced bytes is **incomplete** (**D8**); a config flag is not proof | `D-6` | a kvikIO cell's run dir contains the byte split |
+| 4 | **The nine worker measurement bugs** — each yields a plausible wrong number: latency measured before the I/O wait, uninitialised GPU memory saved as features, per-second rates not divided by dt, and six more | open item `A.9b` | each fixed and re-verified against a real cell |
+| 5 | **`LIBCUFILE_PRELOAD` located and exported** — every kvikIO driver refuses without it, and a wrong path is a silent no-op that runs the cell on the wrong libcufile | `D-10` | `env.sh --check` shows it, and the file exists |
+| 6 | **GPU/NUMA/NIC map and core accounting re-derived** — the index lists in the drivers are 0-based placeholders; the reserved-core set is a per-filesystem parameter (**D15**) | `D-8`, `D-9` | measured on this instance and substituted |
+| 7 | **1.7 hydration driver built** — `run-leg.sh` reports it MISSING and aborts rather than skipping | `D-13` | step 1.7 runs and the datasets byte-verify |
+| 8 | **Step 4.D actually recorded** — `convert-stage4c-rawtiff.sh` never calls `record-run.sh`, so the 20× conversion produces no run dir at all | `D-15` | 4.D produces a run dir with telemetry |
+| 9 | **Open-items section A resolved** (4.4) — every item there changes what the numbers *mean* | section A | each closed or waived |
+
+**Leg-B-only, and they must be closed before Leg B's first cell, not discovered during it:**
+
+| # | Blocker | Where |
+|---|---|---|
+| 10 | **Lustre client-side EFA configuration** — without it the client mounts over TCP, forfeiting GDS *and* the per-server-cap escape while still producing numbers. That breaks the "Lustre at maximum" fairness basis (**D7**) invisibly | `D-16` |
+| 11 | **The kernel-vs-contract policy** — installing `linux-aws` can move the kernel, and `kernel` is a `MUST_MATCH` contract field, so the documented procedure can invalidate the comparison it protects | `D-17` |
+| 12 | **Lustre tuning** — part of "Lustre at maximum"; skipping it understates Lustre | `D-11` |
+
+**How to report this gate:** before 4.6, give the human the table above with each row marked
+closed / waived / open, and **name the evidence** for every "closed". "Done" without evidence is what this
+project's Rule 11 exists to forbid. If any row is still open, say so and stop — a leg run on an open blocker
+costs more than the wait, because the cells look fine.
+
 ### 4.6 — Run Leg A
 
-Follow the dependency-ordered plan in `runs/STAGES.md`. Every cell through `record-run.sh` with `--fs weka`;
-both canaries every sweep; fill numbers into the roadmaps as they land — **numbers and caveats only, no
-narrative.**
+Follow the dependency-ordered plan in `runs/STAGES.md`. Every cell goes through `record-run.sh`, which takes
+the filesystem from `--fs` or from `$LEG`; both canaries every sweep; fill numbers into the roadmaps as they
+land — **numbers and caveats only, no narrative.**
 
 ### 4.7 — Close out Leg A
 
@@ -249,6 +320,8 @@ project-specific parts.
 1. The **discovery report** and anything broken or suboptimal — before mutating state.
 2. **Corpus sizing for 6.B** (open item 5b) — needs a decision before generating anything.
 3. The **baseline greenlight** (4.5) — new environment, new number; anchor on nothing prior.
+3b. **The blocker gate (4.5b)** — the 9 Leg-A rows and 3 Leg-B rows, each marked closed / waived / open with
+   the evidence named. Any open row means Leg A does not start.
 4. Any **client-reconfigure** proposal, the **dataset plan**, and the **script adaptations** — get sign-off on
    the mutating ones.
 5. Any **methodology revisit** the real hardware justifies (concurrency ranges, GPU-count sweeps, the
@@ -263,7 +336,9 @@ a plain-text numbered list, each with a recommendation.
 
 **Surface problems and questions first.** Then, once you have sign-off, execute in order — environment →
 datasets → deferred script work → Stage-0 proof → open-items section A → baseline (**stop for greenlight**)
-→ Leg A.
+→ **the blocker gate (4.5b), reported row by row with evidence** → Leg A.
 
 Do not build environments, mutate the client or filesystem, download datasets, or run any measured cell
-before you have read everything, completed the read-only discovery, and gotten sign-off.
+before you have read everything, completed the read-only discovery, and gotten sign-off. **And do not run a
+measured cell before the 4.5b blocker gate is reported and cleared** — a cell run on an open blocker looks
+identical to a good one.

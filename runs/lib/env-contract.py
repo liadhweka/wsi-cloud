@@ -7,8 +7,10 @@ WHY THIS EXISTS
     is indistinguishable from a filesystem difference once the numbers are in. The
     contract makes comparability a mechanical check instead of a judgement call:
 
-        end of Leg A :  env-contract.py write  --leg weka   -> leg-a-weka.json
-        start of Leg B: env-contract.py verify --against leg-a-weka.json
+        end of Leg A :  env-contract.py write  --leg weka
+                          -> runs/env-contract-leg-weka.json (also uploaded to
+                             s3://$S3_BUCKET/env-contracts/ by sync-to-s3.sh --mode full)
+        start of Leg B: env-contract.py verify --against <that file>
 
     A mismatch on a held-constant field is FAIL-LOUD. That is the whole point.
 
@@ -33,6 +35,7 @@ import argparse
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -51,7 +54,7 @@ MUST_MATCH = [
 ]
 # EXPECTED to differ: filesystem-specific, i.e. the variable under test.
 MAY_DIFFER = [
-    "leg", "fs_mount", "fs_type", "client_hostname",
+    "leg", "fs_mount", "fs_type", "client_hostname", "libcufile_path",
     "weka_backend_type", "weka_backend_count", "weka_capacity_tb",
     "weka_ec_scheme", "weka_backend_ram_total",
     "weka_client_cores", "weka_client_nics",
@@ -76,6 +79,14 @@ def env(name):
     return v or None
 
 
+def _libcufile_version(path):
+    """Extract a 3-component version from a libcufile filename, or None."""
+    if not path:
+        return None
+    m = re.search(r"libcufile\.so\.(\d+\.\d+\.\d+)$", path)
+    return m.group(1) if m else None
+
+
 def collect(leg, repo_root):
     """Gather every contract field. Unavailable facts are null, never guessed."""
     fs_mount = env("FS_MOUNT")
@@ -92,8 +103,18 @@ def collect(leg, repo_root):
         "driver_version":  sh("nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1"),
         "cuda_version":    sh("nvidia-smi | grep -oE 'CUDA Version: [0-9.]+' | grep -oE '[0-9.]+'"),
         "nvidia_fs_version": sh("cat /sys/module/nvidia_fs/version"),
-        "libcufile_version": sh("ls /usr/local/cuda*/targets/*/lib/libcufile.so.* 2>/dev/null "
-                                "| head -1 | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+'"),
+        # Prefer the libcufile the kvikIO cells actually preload; fall back to the
+        # newest versioned file under the CUDA install.
+        # WHY not `ls … | head -1`: that sorts the SONAME symlink `libcufile.so.0`
+        # first, which has no 3-component version, so the grep found nothing and
+        # this held-constant field came out null — making `write` exit non-zero and
+        # `verify` report it UNVERIFIABLE (= FAILED) on every single run.
+        "libcufile_version": (
+            _libcufile_version(env("LIBCUFILE_PRELOAD"))
+            or sh("ls -1 /usr/local/cuda*/targets/*/lib/libcufile.so.* 2>/dev/null "
+                  "| grep -E 'libcufile\\.so\\.[0-9]+\\.[0-9]+\\.[0-9]+$' "
+                  "| sort -V | tail -1 | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+$'")),
+        "libcufile_path": env("LIBCUFILE_PRELOAD"),
         "gpu_model":       sh("nvidia-smi --query-gpu=name --format=csv,noheader | head -1"),
         "gpu_count":       sh("nvidia-smi --query-gpu=name --format=csv,noheader | wc -l"),
         "cpu_count":       str(os.cpu_count()),

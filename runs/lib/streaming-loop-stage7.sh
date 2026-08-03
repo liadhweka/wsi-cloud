@@ -29,9 +29,18 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
-LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+# The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
+# the environment (cloud-setup/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the conda env bundles an older copy, the right path is instance-specific, and a
+# path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
+# quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
+# the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see cloud-setup/NAMING-AND-VARIABLES.md Table 3)}"
+LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
+[ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 INFER_WORKER="$REPO/runs/lib/inference-per-slide-stage7.py"
 
@@ -79,9 +88,9 @@ if [ "$N_AVAIL" -lt "$N_SLIDES" ]; then
 fi
 echo "[streaming] $(date -u +%FT%TZ) start; N=$N_SLIDES cadence=${CADENCE_S}s model=$MODEL backend=$BACKEND" | tee "$ORCH_LOG"
 
-# Backend-specific env (LD_PRELOAD scoping per cucim_libcufile_preload_abi_clash)
+# Backend-specific env (LD_PRELOAD scoping per cucim-segfaults-when-libcufile-is-ld-preloaded)
 PRELOAD=""
-[ "$BACKEND" = "kvikio" ] && PRELOAD="$LIBCUFILE_117"
+[ "$BACKEND" = "kvikio" ] && PRELOAD="$LIBCUFILE_SYSTEM"
 
 t_zero=$(date +%s.%N)
 

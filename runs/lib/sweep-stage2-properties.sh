@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # sweep-stage2-properties.sh — Stage 2.0 OpenSlide property extraction sweep.
 #
-# Customer story: how fast does WEKA's distributed metadata path absorb
-# whole-dataset metadata extraction at varying parallelism? Establishes
-# the apples-to-apples baseline for a future S3 / legacy-NAS comparison.
+# The question this answers: how fast does the filesystem under test absorb
+# whole-dataset metadata extraction at varying parallelism? The metric is
+# operations per second, not bytes per second — this is the stage where the two
+# filesystems' metadata architectures differ most (Lustre concentrates metadata on
+# dedicated targets with independently provisioned IOPS; WEKA distributes it).
+# ⚠ Cross-leg headline is APP-LEVEL throughput. Filesystem-reported ops/s counts
+# are within-leg diagnostics until counter equivalence is verified (open item 6).
 #
 # 2D grid: datasets ∈ {tcga-brca, camelyon16} × concurrency ∈ {1, 8, 64, 256}
 # = 8 cells. Per cell: single-pass over the full dataset via openslide-python's
-# multiprocessing.Pool, JSON sidecar per slide written to wekafs.
+# multiprocessing.Pool, JSON sidecar per slide written under $FS_MOUNT.
 #
 # Per-cell wallclock estimate based on smoke-test timings (~30-75 ms per slide
 # on warmed cache):

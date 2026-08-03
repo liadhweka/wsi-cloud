@@ -10,9 +10,14 @@
 #   3. Delete that chunk's raw-TIFF dir to reclaim disk
 #
 # WHY chunked:
-#   Full BRCA raw-TIFF is ~32 TB if all-resident. Filesystem is 31 TB. Chunked
-#   conversion (200 slides × ~28 GB/slide avg = ~5.6 TB per chunk) keeps peak
-#   raw-TIFF disk usage bounded and reclaims after each chunk.
+#   Full-cohort raw-TIFF does not fit on the filesystem all-resident, so conversion
+#   is chunked and each chunk's artifact is reclaimed before the next. That bounds
+#   peak raw-TIFF usage to one chunk instead of the whole cohort.
+#   ⏳ CHUNK_SIZE below was sized against a DIFFERENT environment's capacity. Re-derive
+#   it from THIS leg's provisioned capacity ($WEKA_CAPACITY_TB / $FSX_CAPACITY_TIB) and
+#   the measured per-slide raw-TIFF size before running Tier 2 — it is the parameter
+#   that decides whether Tier 2 fits on disk at all, and a stale value either wastes
+#   capacity or fails mid-cohort after hours of conversion.
 #
 # WHY inlined conversion (vs calling Stage 4.C's `convert-stage4c-rawtiff.sh`):
 #   The Stage 4.C script hardcodes manifest paths + output dirs for the 50-slide
@@ -43,7 +48,8 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
 CONVERTER="$REPO/runs/lib/convert-rawtiff-20x.py"
 EXTRACTOR="$REPO/runs/lib/extract-features-foundation-stage6.py"

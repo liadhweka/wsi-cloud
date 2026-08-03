@@ -50,6 +50,12 @@ runs/*/raw/
 runs/*/cmd.log
 runs/sweep-logs/
 
+# run-leg.sh's per-step completion markers. Per-leg scratch state, not a record:
+# it is recreated by the orchestrator and meaningless on another instance. It must
+# be ignored because teardown-preflight.sh NO-GOes on a dirty working tree, so an
+# untracked marker dir would block every teardown until someone committed scratch.
+runs/.leg-state/
+
 # Large per-workload telemetry CSVs — per-interval output balloons on long endurance
 # cells (hundreds of MB each), exceeds GitHub per-file limits, and is regenerable from
 # the raw output that is already excluded. Headline numbers live in the summary CSVs.

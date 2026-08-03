@@ -32,7 +32,9 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${LEG:?LEG is unset -- source cloud-setup/env.sh. The run-dir name must carry the filesystem: sync-to-s3.sh and teardown-preflight.sh glob runs/*-$LEG-s*/, so a dir without it is never backed up}"
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
 TRAINER="$REPO/runs/lib/train-mil-stage6b.py"
 RECORD="$REPO/runs/lib/record-run.sh"
@@ -59,7 +61,7 @@ run_cell() {
   local ramp="${2:-300}"; local runtime="${3:-900}"
   local cell_name="train-mil-${MODEL}-${FEATURES_TAG}-bs1-nw${num_workers}"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s6.B.3-${cell_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.3-${cell_name}"
 
   if [ ! -d "$FEATURES_DIR" ] || [ "$(ls "$FEATURES_DIR"/*.pt 2>/dev/null | wc -l)" -lt 50 ]; then
     echo "[ERR] $FEATURES_DIR has fewer than 50 .pt files; Stage 6.A.Tier2 must run first." >&2

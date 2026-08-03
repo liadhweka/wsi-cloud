@@ -5,7 +5,7 @@
 #   run-multiproc-kvikio.sh <N> <gpu_csv> <compat_mode> <n_buffer> <num_threads> <run_dir>
 #
 # Each of the N processes:
-#   - Gets one GPU from gpu_csv (e.g. "2,3,6,7" for N=4)
+#   - Gets one GPU from gpu_csv (e.g. "0,1,2,3" for N=4)
 #   - Writes its own reader-summary.json to <run_dir>/proc<i>-summary.json
 #   - Writes its own latency CSV to <run_dir>/proc<i>-latencies.csv
 #
@@ -37,7 +37,8 @@ RUN_DIR="$6"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
 READER="$REPO/runs/lib/read-tiles-kvikio.py"
 
@@ -47,12 +48,17 @@ if [ "${#GPU_ARR[@]}" -ne "$N" ]; then
   exit 2
 fi
 
-# Common env (the parent sweep driver already exports CONDA_PREFIX, LD_PRELOAD,
-# CUFILE_ENV_PATH_JSON but we set them again here for safety since this is the
-# direct child of record-run.sh).
+# Common env. The parent sweep driver already exports these; re-assert them here
+# because this script is the direct child of record-run.sh and may also be run by
+# hand. Both are REQUIRED rather than defaulted: a libcufile path from another
+# machine makes LD_PRELOAD a silent no-op (the kvikIO cell then runs on the conda
+# env's bundled copy and still reports numbers), and a missing cuFile config means
+# the transport options this filesystem needs are simply absent.
 export CONDA_PREFIX="${CONDA_PREFIX:-$CONDA_ENV}"
-export LD_PRELOAD="${LD_PRELOAD:-/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0}"
-export CUFILE_ENV_PATH_JSON="${CUFILE_ENV_PATH_JSON:-${CUFILE_ENV_PATH_JSON}}"
+: "${LD_PRELOAD:?LD_PRELOAD is unset -- this is a kvikIO cell and needs the system libcufile preloaded; the parent driver sets it from LIBCUFILE_PRELOAD}"
+[ -f "${LD_PRELOAD%%:*}" ] || { echo "LD_PRELOAD points at a nonexistent file: $LD_PRELOAD" >&2; exit 1; }
+: "${CUFILE_ENV_PATH_JSON:?CUFILE_ENV_PATH_JSON is unset -- see cloud-setup/NAMING-AND-VARIABLES.md}"
+export CUFILE_ENV_PATH_JSON      # re-export so the reader children inherit it
 
 mkdir -p "$RUN_DIR"
 

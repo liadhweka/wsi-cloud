@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # sweep-stage1-mixed.sh — Stage 1.6 concurrent fpsync ingest + fio read sweep.
 #
-# Customer story: "while the scanner is feeding via fpsync at moderate pace,
-# can pathologists pan/zoom existing slides at viewer-acceptable latency?"
+# The question this answers: while ingest is running at a realistic scanner pace,
+# can readers still work at acceptable latency — and does reader load throttle
+# ingest? Both sides are captured, because either direction is a real answer.
 #
 # Maps to:
-#   - WRITE side: fpsync local-NVMe -> wekafs at FIXED n=4 (1.72 GiB/s from 1.5,
-#     ~56% of write ceiling — realistic scanner pace, leaves headroom)
+#   - WRITE side: fpsync local-NVMe -> $FS_MOUNT at a FIXED concurrency, chosen as
+#     a FRACTION OF THIS LEG'S OWN 1.5 write curve, not an absolute rate — an
+#     absolute rate carried between legs would make the two cells different
+#     workloads. ⏳ Parameterise from this leg's 1.5 results before running.
 #   - READ side:  fio --rw=randread --iodepth=8 against pre-existing fio scratch
-#     on wekafs, sweeping bs × jobs to characterize the read-side under load
+#     on $FS_MOUNT, sweeping bs × jobs to characterise the read side under load
 #
 # Grid: bs ∈ {4K, 64K} × jobs ∈ {1, 4, 16, 64} = 8 cells.
 # Per cell: ~600s steady + 60s ramp = 11 min fio, plus fpsync running concurrent.
@@ -25,7 +28,7 @@
 #   - per-run notes.md with app-level fpsync bytes/duration sidecar
 #
 # Prerequisites:
-#   - /data/local-nvme/fpsync-source/tcga-brca/ populated (Stage 1.5 prep already did this)
+#   - $SCRATCH_DIR/fpsync-source/tcga-brca/ populated (Stage 1.5 prep already did this)
 #   - ${FS_MOUNT}/benchmarks/fio-scratch-mixed/ populated with 64×4G fio files
 #     (run the Stage 1.6 prep first; see comment block at end of file)
 set -uo pipefail
@@ -35,7 +38,8 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-SRC=/data/local-nvme/fpsync-source/tcga-brca/
+: "${SCRATCH_DIR:?SCRATCH_DIR is unset -- source cloud-setup/env.sh}"
+SRC=${SCRATCH_DIR}/fpsync-source/tcga-brca/
 WRITE_TARGET=${FS_MOUNT}/data/fpsync-target/mixed
 READ_SCRATCH=${FS_MOUNT}/benchmarks/fio-scratch-mixed
 SHDIR_ROOT=/tmp/fpsync-stage1.6
@@ -82,7 +86,7 @@ for bs in "${BS_LIST[@]}"; do
     i=$(( i + 1 ))
     name="mixed-bs${bs}-jobs${jobs}"
     SHDIR="$SHDIR_ROOT/bs${bs}-jobs${jobs}"
-    note="Stage 1.6 mixed sweep cell $i/$TOTAL: concurrent ingest+read. Ingest = fpsync -n $INGEST_N (fixed; ~1.72 GiB/s from 1.5 baseline = ~56% of WEKA write ceiling). Read = fio --rw=randread --bs=$bs --numjobs=$jobs --iodepth=8 --runtime=600 --ramp_time=60 libaio --direct=1 against pre-staged fio scratch ($SCRATCH_FILES files at $READ_SCRATCH). Wrapper: fpsync kicked off in background, fio runs in foreground for the timed window, fpsync killed when fio exits. Per-cell isolation via record-run.sh; any cell failure leaves rest of sweep intact."
+    note="Stage 1.6 mixed sweep cell $i/$TOTAL: concurrent ingest+read. Ingest = fpsync -n $INGEST_N (fixed, and set as a FRACTION OF THIS LEG'S OWN 1.5 write curve — an absolute rate carried across legs would make the two cells different workloads). Read = fio --rw=randread --bs=$bs --numjobs=$jobs --iodepth=8 --runtime=600 --ramp_time=60 libaio --direct=1 against pre-staged fio scratch ($SCRATCH_FILES files at $READ_SCRATCH). Wrapper: fpsync kicked off in background, fio runs in foreground for the timed window, fpsync killed when fio exits. Per-cell isolation via record-run.sh; any cell failure leaves rest of sweep intact."
 
     log ""
     log "=== [cell $i/$TOTAL] $name ==="
@@ -125,7 +129,7 @@ for bs in "${BS_LIST[@]}"; do
 
         # Foreground: fio. --output-format=json+ writes JSON to stdout (cmd.log).
         # Files already exist in scratch from prep, so fio skips layout phase.
-        /usr/local/bin/fio \\
+        fio \\
           --name=read-$name \\
           --directory=$READ_SCRATCH \\
           --rw=randread --bs=$bs --size=4G \\
@@ -183,11 +187,19 @@ operation. For the timed-window-only duration, use raw/.run_start and raw/.run_e
 
 ## Cross-source check (post-aggregation)
 
-Expected for mixed write+read workload at the WEKA-side primary sources:
-- weka client a100 Write sustained ≈ fpsync app-level (1.72 GiB/s from 1.5 baseline)
-- weka client a100 Read  sustained ≈ fio app-level
-- RDMA xmit on mlx5_0 ≈ 2× weka client Write (3+2 erasure-coding amplification)
-- RDMA rcv  on mlx5_0 ≈ 1× weka client Read  (no amplification on reads)
+Run the post-cell cross-source consistency canary using THIS leg's Primary
+sources (runs/README.md § What gets recorded) and THIS leg's consistency
+relation, derived per filesystem and never ported across (STAGES.md D12):
+- filesystem-side Write sustained  vs  fpsync app-level
+- filesystem-side Read  sustained  vs  fio app-level
+- wire counters for the data path in use  vs  the app-level rate, at the
+  amplification the relation implies (WEKA: from the provisioned EC scheme;
+  Lustre: from the actual stripe layout)
+⚠ Mixed read+write cells need WIDER bands than single-direction cells — the wire
+carries payload plus acknowledgements in both directions, and at small block
+sizes the non-payload share is material. Widen deliberately and say so here.
+⏳ D-5: the relation itself is not derived yet. Do not fill numbers in from
+another environment.
 EOF
       if [[ -d "$SHDIR/log" ]]; then
         mkdir -p "$RUN_DIR/raw/fpsync-shdir-log"
@@ -217,10 +229,10 @@ log "         rm -rf $SHDIR_ROOT/* (fpsync shared dirs, small)"
 #             files at ${FS_MOUNT}/benchmarks/fio-scratch-mixed/ for the read
 #             side of the mixed sweep. Created once, reused across all 8 cells
 #             (avoids per-cell layout phase). Same fio --rw=write recipe as
-#             1.0a's bs=1M/jobs=N to verify wekafs absorbs the layout cleanly.
-#             Side measurement: 256 GB sequential write to wekafs at moderate
+#             1.0a's bs=1M/jobs=N to verify the filesystem absorbs the layout.
+#             Side measurement: 256 GB sequential write to ${FS_MOUNT} at moderate
 #             concurrency, useful as a 1.0a cross-check on real-world write." \
-#     -- /usr/local/bin/fio \
+#     -- fio \
 #         --name=fio-scratch-layout \
 #         --directory=${FS_MOUNT}/benchmarks/fio-scratch-mixed \
 #         --rw=write --bs=1M --size=4G --numjobs=64 --iodepth=1 \

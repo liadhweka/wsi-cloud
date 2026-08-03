@@ -17,7 +17,7 @@ a cell `runs/README.md`; for the rules `CLAUDE.md`.
 |---|---|
 | **WEKA** | `/mnt/weka` |
 | **Lustre (FSx)** | `/mnt/lustre` |
-| **What scripts use** | **`$FS_MOUNT`**, resolved from `--fs {weka\|lustre}` |
+| **What scripts use** | **`$FS_MOUNT`**, resolved from `$LEG` (`weka` \| `lustre`) in `env.sh` |
 
 **Scripts never hardcode a mount path.** The filesystem is a *dimension* (**D11**), so every path in this
 document that a benchmark touches is written relative to `$FS_MOUNT`. A hardcoded `/mnt/weka` in a script is
@@ -39,7 +39,7 @@ WEKA run and a Lustre run is which mount `$FS_MOUNT` points at.
 ├── SCRIPT-TRACKER.md          # per-script reference for runs/lib/
 ├── FILESYSTEM-MAP.md          # THIS FILE
 ├── README.md                  # repo entry point
-├── backup.sh                  # memories → mirror, then S3 sync (S3 half: cloud-session build item)
+├── backup.sh                  # memories → mirror, then S3 sync (delegates to runs/lib/sync-to-s3.sh)
 ├── .gitignore                 # excludes datasets, heavy raw telemetry, secrets, caches
 ├── .claude/settings.json      # permission rules (committed)
 │
@@ -48,7 +48,15 @@ WEKA run and a Lustre run is which mount `$FS_MOUNT` points at.
 │   └── *.md                   #   one file per memory
 │
 ├── cloud-setup/               # provisioning + handoff artifacts
+│   ├── NEW-CLOUD-SETUP.md     #   the human-facing walkthrough: empty AWS account → running benchmark
 │   ├── SPINUP-CHECKLIST.md    #   what to tell the person provisioning the environment
+│   ├── TEARDOWN-AND-REBUILD.md#   the do-every-time checklist for both halves
+│   ├── NAMING-AND-VARIABLES.md#   every path/name/variable, with its recommended value
+│   ├── env.example.sh         #   → env.sh (gitignored); has a --check validator
+│   ├── prompt-env-prep-cloud.md  #   Claude prompt 1: system stack + local scratch
+│   ├── handoff-cloud.md       #   Claude prompt 2: build + run the leg
+│   ├── AUDIT-PROMPT.md        #   the pre-deployment repo audit brief
+│   ├── AUDIT-REPORT.md        #   its findings: what was fixed, what is raised, the verdict
 │   └── env-specs/             #   conda env specs for rebuilding the Python stack
 │
 └── runs/                      # benchmark records — ONE tree, filesystem as a dimension
@@ -56,7 +64,7 @@ WEKA run and a Lustre run is which mount `$FS_MOUNT` points at.
     ├── STAGES.md              #   stage map, per-leg plan, decision log D1–D15
     ├── INDEX.md               #   one line per run — AUTO-GENERATED, never hand-edit
     ├── Stage-{1..7}-*.md      #   per-stage roadmaps (the audit trail)
-    ├── lib/                   #   the script library
+    ├── lib/                   #   the script library (+ GDS-TUNING-CHECKLIST.md, cuFile template)
     ├── manifests/             #   dataset manifests
     ├── sweep-logs/            #   tee'd driver output (gitignored)
     └── <UTC>-<fs>-s<stage>-<name>/   # one dir per run
@@ -84,9 +92,9 @@ s3://<bucket>/                          # private, same region as everything els
 │   ├── tcga-brca/                      # downloaded once from GDC, reused by BOTH legs
 │   └── camelyon16/                     # mirror of the open-data pull
 ├── runs/<leg>/<run-dir>/raw/           # heavy telemetry — synced during and after each run
-└── env-contracts/
-    ├── leg-a-weka.json                 # written at end of Leg A
-    └── leg-b-lustre.json               # Leg B verifies against Leg A's before its first cell
+└── env-contracts/                      # uploaded by sync-to-s3.sh --mode full
+    ├── env-contract-leg-weka.json      # written at end of Leg A (name set by env-contract.py)
+    └── env-contract-leg-lustre.json    # Leg B verifies against Leg A's before its first cell
 ```
 
 **Two sync semantics, deliberately different:** mirror-with-delete for docs and memories (git backs them
@@ -167,7 +175,7 @@ GPU-direct-vs-bounced byte accounting** — a configuration flag is not proof of
 | CLAM | `~/wsi-tools/CLAM/` | Tissue detection (3.0) + tile coords; commit recorded per run |
 | conda environments | `/data/local-nvme/conda-envs/` | Rebuilt from `cloud-setup/env-specs/` on each instance |
 | `gdc-client`, `aws` CLI | `~/.local/bin/` | Dataset staging into S3 (once, pre-leg) and 1.7 hydration |
-| `fpart` / `fpsync` | system | 1.5 bulk copy, 1.6 mixed, 6.C ingest workload |
+| `fpart` / `fpsync` | system | 1.5 bulk copy, 1.6 mixed, 6.C ingest workload. **One package:** `fpsync` ships inside `fpart` |
 | `fio` | system | 1.0 synthetic ceilings, viewer patterns in 1.6 / 6.C / 7.5 |
 | Lustre client tools (`lctl`, `lfs`) | system | Lustre-leg recording + stripe layout inspection |
 | WEKA client tools | system | WEKA-leg recording |
@@ -179,7 +187,8 @@ GPU-direct-vs-bounced byte accounting** — a configuration flag is not proof of
 ## Memory (Claude's persistent context — NOT in git; mirrored into it)
 
 Live: `~/.claude/projects/<slug>/memory/`, where `<slug>` is the repo path with `/` → `-`
-(→ `-home-liadhermelin-weka-vs-lustre-cloud`). `MEMORY.md` indexes the rest.
+(for the recommended cloud paths: `-home-ubuntu-wsi-cloud`). **Derive it, never type it** — the command
+below does. `MEMORY.md` indexes the rest.
 
 `backup.sh` mirrors it into `claude-memory-mirror/` — **derive the slug rather than hardcoding it** (the
 script does). To restore on a fresh instance:

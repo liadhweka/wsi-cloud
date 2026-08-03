@@ -500,11 +500,13 @@ def make_reader(args, slide_ids, rank):
 def worker(local_rank, world_size, args, master_port):
     """Per-rank training entry. Called once per DDP rank (rank=local_rank for single-host).
 
-    NOTE: we bypass torchrun entirely. The c10d rendezvous on this host tries to
-    bind a TCP store to socket.gethostname()=a100 → /etc/hosts → a100.cluster.local
-    → 192.168.6.102, which is NOT bound to any interface ("No route to host").
-    Using torch.multiprocessing.spawn + explicit MASTER_ADDR=127.0.0.1 avoids
-    the rendezvous machinery entirely for single-host DDP.
+    NOTE: we bypass torchrun entirely. Its c10d rendezvous binds a TCP store to
+    whatever socket.gethostname() resolves to; on a host where that name resolves
+    via /etc/hosts to an address not bound to any local interface, the store fails
+    with "No route to host". That depends on the machine's hostname and interface
+    layout, so it must be assumed possible on any new instance rather than
+    re-diagnosed. torch.multiprocessing.spawn + explicit MASTER_ADDR=127.0.0.1
+    sidesteps the rendezvous machinery entirely for single-host DDP.
     """
     rank = local_rank
     os.environ["RANK"] = str(rank)

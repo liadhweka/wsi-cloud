@@ -25,5 +25,5 @@ problem.
 installed versions there and re-verify. The durable part is the *pattern*: bundled-vs-system libcufile
 skew breaks cuCIM under preload, so scope it per-cell regardless of version.
 
-Related: `[[cucim-read-region-device-cuda-non-viable-for-random-tile-reads]]`,
+Related: `[[cucim-gpu-read-region-non-viable]]`,
 `[[weka-vs-lustre-cloud-project]]`.

@@ -42,7 +42,8 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_ALT:?CONDA_ENV_ALT is unset -- source cloud-setup/env.sh}"
 PYTHON=$CONDA_ENV/bin/python
 EXTRACTOR=$REPO/runs/lib/extract-tiles-to-hdf5.py
 PATCHES_OUT=${FS_MOUNT}/patches/4.A

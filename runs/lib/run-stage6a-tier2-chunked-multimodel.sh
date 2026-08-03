@@ -11,11 +11,13 @@
 #
 # WHY this exists (vs the single-model orchestrator):
 #   For Stage 6.A Tier 2 across 3 models, the single-model orchestrator would
-#   convert each slide 3 times (once per model run). Smoke data shows convert
-#   wallclock is ~15× the per-model extract wallclock per chunk → re-converting
-#   3× would waste ~55 hr. Sharing the conversion within each chunk's lifetime
-#   collapses kvikIO Tier 2 from ~88 hr → ~32 hr while preserving each model's
-#   per-slide .pt output for downstream Stage 6.B/6.D use.
+#   convert each slide 3 times (once per model run). Conversion is a large share of
+#   per-chunk wallclock, so sharing it within each chunk's lifetime is STRUCTURAL,
+#   not a micro-optimisation — full-cohort raw-TIFF does not fit at once, and the
+#   saving scales with the model count. Each model's per-slide .pt output is still
+#   produced for downstream Stage 6.B/6.D use.
+#   Actual per-chunk convert-vs-extract split is RECORDED per run, not estimated
+#   here — a wallclock estimate from another environment would be fiction.
 #
 # WHY a new file (vs editing the single-model orchestrator):
 #   The single-model file was smoke-validated 2026-05-21 and is correct for
@@ -44,7 +46,8 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
 CONVERTER="$REPO/runs/lib/convert-rawtiff-20x.py"
 EXTRACTOR="$REPO/runs/lib/extract-features-foundation-stage6.py"
@@ -64,6 +67,11 @@ N_GPUS=""
 GPU_CSV=""
 OUTPUT_DIR_BASE=""
 RUN_DIR=""
+# ⏳ D-8/D-11: sized against a DIFFERENT environment's capacity. Re-derive from THIS
+# leg's provisioned capacity ($WEKA_CAPACITY_TB / $FSX_CAPACITY_TIB) and the measured
+# per-slide raw-TIFF size before running Tier 2 — this is the parameter that decides
+# whether Tier 2 fits on disk, and a stale value either wastes capacity or fails
+# mid-cohort after hours of conversion. Override with --chunk-size.
 CHUNK_SIZE=200
 KEEP_RAWTIFF=0
 MAX_SLIDES=0

@@ -33,9 +33,18 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
-LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+# The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
+# the environment (cloud-setup/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the conda env bundles an older copy, the right path is instance-specific, and a
+# path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
+# quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
+# the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see cloud-setup/NAMING-AND-VARIABLES.md Table 3)}"
+LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
+[ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 # Default config (override via env)
@@ -45,7 +54,7 @@ EXTRACT_GPUS="${EXTRACT_GPUS:-2,3,6,7}"
 EXTRACT_N_GPUS="${EXTRACT_N_GPUS:-4}"
 MIL_FEATURES_TAG="${MIL_FEATURES_TAG:-brca_full}"
 INGEST_N="${INGEST_N:-4}"
-INGEST_SRC="${INGEST_SRC:-/data/local-nvme/fpsync-source/tcga-brca}"
+INGEST_SRC="${INGEST_SRC:-${SCRATCH_DIR:?SCRATCH_DIR is unset -- source cloud-setup/env.sh}/fpsync-source/tcga-brca}"
 INGEST_DST="${INGEST_DST:-${FS_MOUNT}/runs-stage6c-ingest-target}"
 VIEWER_N="${VIEWER_N:-4}"
 VIEWER_SCRATCH="${VIEWER_SCRATCH:-${FS_MOUNT}/benchmarks/fio-scratch-6c-viewer}"
@@ -138,7 +147,7 @@ workload_extract() {
   # cleanly via SIGTERM to -$extract_pid (kills all DDP rank processes + master).
   local manifest="$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv"
   CUDA_VISIBLE_DEVICES="$EXTRACT_GPUS" \
-  LD_PRELOAD="$LIBCUFILE_117" \
+  LD_PRELOAD="$LIBCUFILE_SYSTEM" \
   CUFILE_ENV_PATH_JSON="$CUFILE_JSON" \
   CONDA_PREFIX="$CONDA_ENV" \
   OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 \

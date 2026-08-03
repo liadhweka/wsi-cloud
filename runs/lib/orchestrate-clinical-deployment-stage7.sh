@@ -48,9 +48,18 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
-LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+# The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
+# the environment (cloud-setup/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the conda env bundles an older copy, the right path is instance-specific, and a
+# path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
+# quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
+# the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see cloud-setup/NAMING-AND-VARIABLES.md Table 3)}"
+LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
+[ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 INFER_WORKER="$REPO/runs/lib/inference-per-slide-stage7.py"
 
@@ -65,7 +74,7 @@ INFER_RAWTIFF_DIR="${INFER_RAWTIFF_DIR:-${FS_MOUNT}/data/tcga-brca-rawtiff}"
 INFER_SVS_DIR="${INFER_SVS_DIR:-${FS_MOUNT}/data/tcga-brca}"
 
 INGEST_N="${INGEST_N:-4}"
-INGEST_SRC="${INGEST_SRC:-/data/local-nvme/fpsync-source/tcga-brca}"
+INGEST_SRC="${INGEST_SRC:-${SCRATCH_DIR:?SCRATCH_DIR is unset -- source cloud-setup/env.sh}/fpsync-source/tcga-brca}"
 INGEST_DST="${INGEST_DST:-${FS_MOUNT}/runs-stage7-ingest-target}"
 VIEWER_N="${VIEWER_N:-4}"
 VIEWER_SCRATCH="${VIEWER_SCRATCH:-${FS_MOUNT}/benchmarks/fio-scratch-7-viewer}"
@@ -110,25 +119,18 @@ echo "[orch] ramp=${RAMP}s runtime=${RUNTIME}s" | tee -a "$ORCH_LOG"
 
 PIDS=()
 
-# NUMA-aware GPU map for N concurrent inference processes:
-#   N=1  → GPU 2
-#   N=4  → GPU 2,3,6,7 (NUMA-0 IB-adjacent + NUMA-2)
-#   N=8  → all 8 GPUs (one proc/GPU, no oversubscription)
-#   N=16 → all 8 GPUs (2 procs/GPU, bs=64)
-#   N=32 → all 8 GPUs (4 procs/GPU, bs=32)
-#   N=64 → all 8 GPUs (8 procs/GPU, bs=16)
+# GPU map for N concurrent inference processes. The instance has 4 GPUs
+# (STAGES.md D10), so N>4 deliberately OVERSUBSCRIBES them — which is the point of
+# the high-concurrency Stage 7.2 cells: they measure storage and queueing, not GPU
+# throughput.
+# ⏳ D-8: this is plain round-robin over 0..N_GPU-1. Substitute the NUMA/NIC-aware
+# ordering once the topology map is derived on the real instance; on the previous
+# hardware the pinning order measurably mattered for the GPU-direct path, so it is
+# expected to matter here too — but the map itself must be re-derived, never copied.
+N_GPU_TOTAL="${N_GPU_TOTAL:-4}"
 gpu_for_proc() {
   local proc_id="$1"; local n="$2"
-  case "$n" in
-    1)  echo "2" ;;
-    2)  case "$proc_id" in 0) echo "2";; 1) echo "3";; esac ;;
-    4)  case "$proc_id" in 0) echo "2";; 1) echo "3";; 2) echo "6";; 3) echo "7";; esac ;;
-    8)  echo "$proc_id" ;;
-    *)  # N>8 oversubscribes 8 GPUs — round-robin starting from GPU 2 so single
-        # process per GPU at N=8 stays NUMA-0-first (matches the project's
-        # IB-adjacent pinning convention; verified to matter for kvikIO+GDS).
-        echo $((proc_id % 8)) ;;
-  esac
+  echo $(( proc_id % N_GPU_TOTAL ))
 }
 
 # ---------- Workload: inference (N concurrent inference-per-slide processes) -
@@ -155,11 +157,11 @@ workload_inference() {
     local proc_hm_csv="$RUN_DIR/workload-inference.proc${i}-heatmap.csv"
     local proc_summary="$RUN_DIR/workload-inference.proc${i}-summary.json"
 
-    # kvikIO cells need LD_PRELOAD libcufile-1.17; cuCIM cells leave it UNSET
-    # (cucim 26.04 segfaults with libcufile-1.17 preloaded — per
-    # cucim_libcufile_preload_abi_clash memory). Scope per-cell here.
+    # kvikIO cells need the SYSTEM libcufile preloaded; cuCIM cells leave it UNSET
+    # (cuCIM segfaults under a preloaded newer libcufile — per
+    # cucim-segfaults-when-libcufile-is-ld-preloaded memory). Scope per-cell here.
     local preload=""
-    if [ "$INFER_BACKEND" = "kvikio" ]; then preload="$LIBCUFILE_117"; fi
+    if [ "$INFER_BACKEND" = "kvikio" ]; then preload="$LIBCUFILE_SYSTEM"; fi
 
     local total_budget=$(($RAMP + $RUNTIME))
 
@@ -341,7 +343,7 @@ workload_heatmap_viewer() {
   # Pre-stage heatmap viewer scratch: pre-create 4 × 1 GB files for fio random
   # reads (independent of inference's heatmap output stream). This isolates the
   # "viewer reads heatmaps" pattern from "inference writes heatmaps" — they
-  # share WekaFS but not the same files. Realistic clinical: pathologists view
+  # share the filesystem but not the same files. Realistic clinical: pathologists view
   # heatmaps that have been on disk for a while AS WELL AS just-written ones.
   touch "$READY_DIR/.heatmap-viewer-ready"
   while [ ! -f "$BARRIER" ]; do sleep 0.1; done

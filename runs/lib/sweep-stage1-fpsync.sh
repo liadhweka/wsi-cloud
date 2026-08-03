@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
-# sweep-stage1-fpsync.sh — Stage 1.5 fpsync local-NVMe → wekafs sweep.
+# sweep-stage1-fpsync.sh — Stage 1.5 bulk copy, local NVMe → the filesystem
+# under test ($FS_MOUNT). Runs identically on both legs.
 #
-# Strategy B for Stage 1: with the source pre-staged on local NVMe (Stage 1.4
-# tier), fpsync drives a clean wekafs WRITE-path benchmark on real WSI data
-# at varying parallelism. No WAN bottleneck, no cloud throttling — the only
-# variable is fpsync's -n concurrency vs wekafs's write ceiling (1.0a's
-# 3.05 GiB/s synthetic upper bound).
+# With the source pre-staged on local NVMe (Stage 1.4), fpsync drives a clean
+# WRITE-path benchmark on real WSI data at varying parallelism: no WAN bottleneck
+# and no cloud throttling, so the only variable is fpsync's -n concurrency against
+# this leg's write ceiling. Compare each cell against the block-size-matched
+# Stage 1.0a cell measured on THIS leg — never against a number from elsewhere.
 #
-# Grid: n ∈ {1, 4, 16, 64} = 4 cells. Each cell ingests the full TCGA-BRCA
-# corpus (1133 SVS, 1.05 TiB) into its own per-cell target subdir on wekafs.
-# Per-cell duration depends on n: n=1 single-stream is single-rsync-bound
-# (~1 hr expected); n≥16 should saturate wekafs write ceiling (~6 min each).
+# Grid: n ∈ {1, 4, 16, 64} = 4 cells. Each cell ingests the full TCGA-BRCA corpus
+# (1133 SVS, 1.05 TiB per the manifest) into its own per-cell target subdir.
+# Per-cell duration is n-dependent and is RECORDED, not estimated: n=1 is
+# single-stream-bound, higher n is the point of the sweep.
 #
 # Per-cell isolation: each cell calls record-run.sh which captures pre/raw/post
 # independently. A failed cell goes INCOMPLETE in INDEX.md without taking
@@ -29,7 +30,8 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-SRC=/data/local-nvme/fpsync-source/tcga-brca/
+: "${SCRATCH_DIR:?SCRATCH_DIR is unset -- source cloud-setup/env.sh}"
+SRC=${SCRATCH_DIR}/fpsync-source/tcga-brca/
 TARGET_ROOT=${FS_MOUNT}/data/fpsync-target
 SHDIR_ROOT=/tmp/fpsync-stage1.5
 LOG_DIR=$REPO/runs/sweep-logs
@@ -66,7 +68,7 @@ for n in "${CONCURRENCIES[@]}"; do
   TARGET="$TARGET_ROOT/n${n}"
   SHDIR="$SHDIR_ROOT/n${n}"
   name="fpsync-n${n}"
-  note="Stage 1.5 fpsync sweep cell $i/$TOTAL: local NVMe -> wekafs, fpsync -n $n. Source: $SRC ($SRC_FILES files, $SRC_BYTES bytes). Target: $TARGET (cleaned pre-cell). fpsync 1.4.0 default partition (-f 2000 -s 4G), default rsync opts (-lptgoD -v --numeric-ids), shdir $SHDIR. Per-cell isolation via record-run.sh: any single cell failure leaves rest of sweep intact."
+  note="Stage 1.5 fpsync sweep cell $i/$TOTAL on fs=${LEG}: local NVMe -> ${FS_MOUNT}, fpsync -n $n. Source: $SRC ($SRC_FILES files, $SRC_BYTES bytes). Target: $TARGET (cleaned pre-cell). fpsync 1.4.0 default partition (-f 2000 -s 4G), default rsync opts (-lptgoD -v --numeric-ids), shdir $SHDIR. Per-cell isolation via record-run.sh: any single cell failure leaves rest of sweep intact."
 
   log ""
   log "=== [cell $i/$TOTAL] $name ==="
@@ -119,10 +121,17 @@ For the timed-window-only duration, use raw/.run_start and raw/.run_end.
 
 ## Cross-source check
 
-After running aggregate-stage1-fpsync.py (or eyeballing results.json):
+After running aggregate-stage1-fpsync.py (or eyeballing results.json), run the
+post-cell cross-source consistency canary using THIS leg's Primary sources
+(runs/README.md § What gets recorded) and THIS leg's consistency relation, derived
+per filesystem and never ported across (STAGES.md D12):
 - App-level bytes/sec = $POST_TARGET_BYTES / wall-time
-- Compare to weka-stats client Write sustained_mean
-- Compare to RDMA xmit on mlx5_0 sustained_mean (expect ~2× app on writes)
+- Compare to the filesystem-side client Write sustained_mean
+- Compare to the wire counters for the data path in use, at the write amplification
+  this leg's relation implies (WEKA: from the provisioned EC scheme; Lustre: from the
+  actual stripe layout)
+⏳ D-5: the relation is not derived yet. Do not fill numbers in from another
+environment.
 EOF
     # Copy fpsync's own per-partition rsync logs into the run dir for
     # archival (they live under \$SHDIR/log/ during the run).

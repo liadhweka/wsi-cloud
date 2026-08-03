@@ -82,7 +82,7 @@ Accuracy beats speed: **reference official docs, not training data**, before giv
 - **AWS** → `docs.aws.amazon.com` (EC2 instance specs, FSx for Lustre performance/tiers/limits, EFA, S3, IAM, service quotas). **WEKA** → `docs.weka.io`. **Lustre** → `doc.lustre.org` (+ AWS's FSx guide for the managed specifics). **NVIDIA** → GDS / cuFile / nvidia-fs docs. **WSI toolkits** → their official docs/repos: OpenSlide, cuCIM + kvikIO (`docs.rapids.ai`), tifffile, large_image, MONAI, CLAM, Trident / Patho-Bench, Slideflow, QuPath. **Datasets** → their portals: TCGA (GDC), CAMELYON16/17 (+ the AWS Open Data registry), PANDA, BRACS, GTEx, PCam.
 - Cite the specific page/file used. **If docs and training data disagree, the docs win — say so.** If something's undocumented, say that; don't fabricate flags. Flag version sensitivity and check the installed version (`pip show`, `--version`) first.
 - **Never quote a cloud spec, cap, quota, or price from memory** — fetch it, and stamp any price figure with the date it was checked.
-- Fetching official docs is standing-approved — never ask first (`docs-fetch-standing-approval` memory).
+- Fetching official docs is standing-approved — never ask first (`feedback_docs_fetch_standing_approval` memory).
 
 ## Memory hygiene — non-negotiable
 
@@ -100,11 +100,11 @@ Memory (`~/.claude/projects/.../memory/`, indexed by `MEMORY.md`) holds durable 
 
 **Safety.** Verify before mutating state you haven't checked this session; state the reason and ask before any `sudo`, mount/format, package install, or destructive op (say what would be lost first). (`feedback_accuracy_safety_dependability` memory.)
 
-**Pause only for these four triggers:** (1) open decisions / un-pre-decided methodology forks; (2) actual issues to debug; (3) soft issues that may reshape FUTURE-step methodology (flag in the summary; don't block agreed work); (4) anything else needing my attention (surprising results, external steps I must take, sudo or destructive ops). Otherwise proceed. Unattended overnight chains are the normal mode, so a trigger that fires at 3am must be **mechanical** — the canary aborts the chain itself rather than waiting to be noticed. (`autonomous-execution-cadence` memory.)
+**Pause only for these four triggers:** (1) open decisions / un-pre-decided methodology forks; (2) actual issues to debug; (3) soft issues that may reshape FUTURE-step methodology (flag in the summary; don't block agreed work); (4) anything else needing my attention (surprising results, external steps I must take, sudo or destructive ops). Otherwise proceed. Unattended overnight chains are the normal mode, so a trigger that fires at 3am must be **mechanical** — the canary aborts the chain itself rather than waiting to be noticed. (`feedback_autonomous_execution_cadence` memory.)
 
-**The roadmap is planning truth, not a frozen contract.** Per-stage roadmaps capture decisions before much is measured; before each tier/substage, reassess against accumulated findings and revise proactively (surface before committing wallclock). "Locked" decisions are revisable; the goal is THE BEST BENCHMARK. **Leg B's plan is explicitly provisional until Leg A's results exist** — improving it from what Leg A taught us is the point, not a deviation. (`methodology-revisability` memory.)
+**The roadmap is planning truth, not a frozen contract.** Per-stage roadmaps capture decisions before much is measured; before each tier/substage, reassess against accumulated findings and revise proactively (surface before committing wallclock). "Locked" decisions are revisable; the goal is THE BEST BENCHMARK. **Leg B's plan is explicitly provisional until Leg A's results exist** — improving it from what Leg A taught us is the point, not a deviation. (`feedback_methodology_revisability` memory.)
 
-**Interpret instructions completely** — do the requisite surrounding work (state cleanup, doc + memory updates, forensic preservation), not just the literal verb; never leave a half-clean state. (`complete-implied-work` memory.)
+**Interpret instructions completely** — do the requisite surrounding work (state cleanup, doc + memory updates, forensic preservation), not just the literal verb; never leave a half-clean state. (`feedback_complete_implied_work` memory.)
 
 **Benchmarking data preservation is non-negotiable** — re-running costs hours-to-days and real money; never lose granular results.
 
@@ -206,9 +206,12 @@ artifacts at end-of-run and periodically during long runs, and `backup.sh` does 
 before a commit, and **always before any teardown.** The sync is **verified, not assumed** (Rule 11:
 "backed up" is wrong if three files errored and you didn't say so).
 
-**Teardown & rebuild checklist** (`cloud-setup/TEARDOWN-AND-REBUILD.md`, with `runs/lib/teardown-preflight.sh` as the GO/NO-GO gate) — in order, skipping any one loses work
-permanently: handoff prompt written → `./backup.sh` → `git push` → **verified S3 sync** → **environment
-contract written**.
+**Teardown & rebuild checklist** (`cloud-setup/TEARDOWN-AND-REBUILD.md`, with `runs/lib/teardown-preflight.sh` as the GO/NO-GO gate) — in this order, skipping any one loses work
+permanently: handoff prompt written → `./backup.sh` → **environment contract written**
+(`env-contract.py write --leg $LEG`) → **verified S3 sync** (`sync-to-s3.sh --mode full`, which carries the
+contract) → `git commit && git push` → **pre-flight GO**. *Why the contract comes before the commit and the
+sync:* it is a git-tracked file *and* an S3 object, so writing it last would leave it in neither — and the
+pre-flight checks for it in both.
 
 **Iterative allowlist (`.claude/settings.json`):** add safe, repeated operations to `allow` as prompt-fatigue shows up; add never-auto-run patterns to `ask`/`deny`; mention any change I make.
 
@@ -221,6 +224,7 @@ After any exchange that shifts the picture durably, update every doc whose caden
 | Doc | Purpose | Cadence |
 |---|---|---|
 | `CLAUDE.md` (`/`) | Project rules | Only when I steer a new convention (rare) |
+| `README.md` (`/`) | Repo entry point: status banner, what makes it a real comparison, the Start-here and Layout tables, the path to a first result | When the status changes, a doc is added or renamed, a count in Layout drifts, or the deferred-work set changes |
 | `PROJECT-THESIS.md` (`/`) | What we measure and why: the question, the held-constant contract, both asymmetries, sequencing, scope | When the framing or a load-bearing assumption changes |
 | `PRESENTING.md` (`/`) | Presentable per-stage script — self-contained (WSI context, what, **why**, the question it answers, numbers, caveats, pointers). A methodology script with `[STORY PENDING RESULTS]` until results exist; update in place, never an index (`feedback_presenting_md_role` memory) | In place when a finding/caveat lands; heaviest at stage closeout |
 | `SCRIPT-TRACKER.md` (`/`) | Per-script reference for `runs/lib/` (what + why, I/O, caveats, reusability, deferred TODOs) | After each script created/changed |

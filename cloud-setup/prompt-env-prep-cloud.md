@@ -40,6 +40,10 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
 2. **CUDA toolkit + GDS tools + `libcufile`.** Locate `gdscheck` and `gdsio` (typically under the CUDA
    install's `gds/tools/`, often **not** on `$PATH`) and `libcufile.so.*` — record the version. If absent,
    note what needs installing and cite the NVIDIA GDS install guide.
+   > **Report the full path of the system `libcufile`, not just its version.** Every kvikIO sweep driver
+   > reads it as `LIBCUFILE_PRELOAD` and **refuses to start without it** — a path from another machine makes
+   > `LD_PRELOAD` a silent no-op, so the GPU-direct cells would run on the conda env's bundled copy and still
+   > report numbers. The human puts your reported path into `cloud-setup/env.sh`.
 3. **GDS kernel path.** `nvidia-fs` module version and whether the GPU peer-memory module is loaded. Record
    both versions and **whether they are matched to each other** — a mismatch is a known source of subtle
    failures. Load or install if cleanly possible; **flag anything needing a module build or reboot.**
@@ -47,8 +51,11 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
    **EFA** is present and its driver/libfabric versions; and all interface addresses (you will need them for
    the cuFile configuration later). **EFA matters even though Leg A does not use it** — Leg B requires it, and
    it must be working on this instance.
-5. **System tools** (ask before installing): `git build-essential tmux rsync curl jq sysstat fio fpart
-   fpsync`. `sysstat` provides the `sar` tooling the recorder uses.
+5. **System tools** (ask before installing): `git build-essential tmux rsync curl jq sysstat fio fpart`.
+   `sysstat` provides the `sar` tooling the recorder uses. **`fpsync` ships inside the `fpart` package** —
+   there is no separate `fpsync` package, so asking apt for one fails
+   ([Ubuntu `fpart` file list](https://packages.ubuntu.com/jammy/amd64/fpart/filelist): `/usr/bin/fpart`,
+   `/usr/bin/fpsync`). Confirm `fpsync --help` works after installing, since Stages 1.5/1.6/6.C need it.
 6. **Local NVMe scratch at `/data/local-nvme`.** This is fast scratch for the Python environments, dataset
    staging, and in-flight telemetry. Inspect with `lsblk`. Identify the instance's local NVMe devices and
    propose a layout — RAID-0 across them if there are several, otherwise a single filesystem. **This ERASES
@@ -81,5 +88,14 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
 5. **A ready / not-ready verdict** plus a numbered list of anything the human still needs to resolve, each
    with a recommendation.
 
-Then **stop.** The human continues with `cloud-setup/NEW-CLOUD-SETUP.md` (restore memories, HF login, mount
-the filesystem) and then pastes the project handoff.
+Then **stop.** The human resumes `cloud-setup/NEW-CLOUD-SETUP.md` at **Part 6** — provision the WEKA
+cluster, record its configuration, mount it, write the first environment contract — and then pastes the
+project handoff (Part 7). Memory restore and the Hugging Face login are Parts 4.3 and 4.4, i.e. **before**
+this prompt; note that `hf` does not exist until Part 7 builds the Python environments, so the human may
+still owe that step.
+
+**Two things you must hand back explicitly, because later steps refuse to run without them:**
+- the **full path of the system `libcufile`** → the human puts it in `LIBCUFILE_PRELOAD` in
+  `cloud-setup/env.sh`; every kvikIO sweep driver reads it and aborts if it is unset;
+- the **GPU/NUMA/NIC topology map and core counts** → deferred items `D-8` and `D-9` are re-derived from it,
+  and it must not be guessed.

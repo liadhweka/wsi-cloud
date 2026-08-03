@@ -21,9 +21,12 @@ user commits and pushes**; do not do it autonomously.
   > source of truth** and there is no live directory to copy from. **Do not tell the user to run
   > `backup.sh` before that first commit** — it would be backing up from a directory that doesn't exist.
   > (The script's guard refuses and exits 1 rather than emptying the mirror, so nothing breaks — but the
-  > instruction is still wrong.) Once `NEW-CLOUD-SETUP.md` § B8 restores the mirror into the live memory
+  > instruction is still wrong.) Once `NEW-CLOUD-SETUP.md` § 4.3 restores the mirror into the live memory
   > directory, the normal live→mirror direction resumes and this rule applies unconditionally.
 
 **Cloud addition:** git push is also a **teardown prerequisite**. The repo is the only thing that
 survives an instance rebuild, so the full teardown order is: handoff prompt → `./backup.sh` →
-`git push` → verified S3 sync → environment contract written. See `cloud-setup/TEARDOWN-AND-REBUILD.md` (and `runs/lib/teardown-preflight.sh`, which gates it).
+**environment contract written** → verified S3 sync → `git commit && git push` → pre-flight GO.
+The contract comes **before** the commit and the sync because it is both a git-tracked file and an S3
+object — writing it last would leave it in neither, and the pre-flight checks for it in both.
+See `cloud-setup/TEARDOWN-AND-REBUILD.md` (and `runs/lib/teardown-preflight.sh`, which gates it).

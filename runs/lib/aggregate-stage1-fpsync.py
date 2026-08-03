@@ -26,6 +26,7 @@ we have just `fpsync-n<N>`. Cleaner to keep them separate than to overload.
 import csv
 import glob
 import json
+import os
 import re
 import statistics
 import sys
@@ -277,7 +278,8 @@ def main():
     print()
     print("# Stage 1.5 fpsync sweep — local NVMe -> wekafs (POSIX)")
     print()
-    print("Source: TCGA-BRCA full (1133 SVS, 1.05 TiB), pre-staged on /data/local-nvme/.")
+    print(f"Source: TCGA-BRCA full (1133 SVS, 1.05 TiB per the manifest), "
+          f"pre-staged on {os.environ.get('SCRATCH_DIR', '$SCRATCH_DIR')}/fpsync-source/.")
     print()
     print("## Headline grid")
     print()

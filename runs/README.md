@@ -14,9 +14,14 @@ per-filesystem source adapters, durability, framing — see [`../CLAUDE.md`](../
 
 ## The one thing that makes this tree different
 
-**The filesystem is a dimension of every run, not a separate tree** (**D11**). Every cell carries
-`--fs {weka|lustre}`, which becomes a segment of the run-dir name **and** a field in `metadata.json`, so
-the aggregators pivot on it and emit head-to-head CSVs directly.
+**The filesystem is a dimension of every run, not a separate tree** (**D11**). Every cell carries its
+filesystem, which becomes a segment of the run-dir name **and** a field in `metadata.json` — the two places
+the head-to-head is assembled from.
+
+> ⏳ **The aggregators do not read it yet.** None of them opens `metadata.json` or emits an `fs` column, so
+> a cross-filesystem CSV still has to be assembled by hand today. Teaching them to group on `fs` is part of
+> the per-filesystem adapter work (**D-4**) — see `../SCRIPT-TRACKER.md`. The *data* is recorded correctly
+> now; only the pivot is missing.
 
 ```
 <UTC-timestamp>-<fs>-s<stage>-<workload>-<config>/
@@ -25,8 +30,11 @@ the aggregators pivot on it and emit head-to-head CSVs directly.
 Scripts resolve the mount through **`$FS_MOUNT`** (`/mnt/weka` or `/mnt/lustre`) rather than hardcoding a
 path — the filesystem is a parameter, never a fork in the code.
 
-**This tree is self-locating.** `record-run.sh` derives its runs root from its own location on disk, and the
-aggregators derive their `runs/` path from `__file__`. Run the copies that live in this tree's `lib/`.
+**This tree is self-locating** — mostly. `record-run.sh` derives its runs root from its own location on
+disk, and **7 of the 14 aggregators** derive their `runs/` path from `__file__`: stages 4.C, 5, 6.A, 6.B, 6.C,
+6.D and 7. The other seven (`aggregate-sweep.py` plus the stage 1.5, 1.6, 2.0, 3.0, 4.A and 4.B aggregators)
+**take an explicit glob argument** and exit 2 with a usage message without one. Either way, run the copies
+that live in this tree's `lib/`.
 
 ---
 
@@ -71,7 +79,8 @@ runs/
   lib/                the script library
     record-run.sh     wrapper: pre/during/post recording around a benchmark cmd
     parse-results.py  raw CSVs → results.json
-    aggregate-*.py    per-stage sweep aggregators (self-locating; pivot on --fs)
+    aggregate-*.py    per-stage sweep aggregators (7 self-locating, 7 take a glob;
+                      the --fs pivot is deferred to D-4)
     sweep-*.sh        per-stage sweep drivers (loop params, call record-run.sh per cell)
     …                 readers, converters, trainers, orchestrators (see ../SCRIPT-TRACKER.md)
   manifests/          dataset manifests, incl. the 1073-slide cohort
@@ -171,11 +180,16 @@ A sweep is a driver in `lib/` that loops parameters and calls `record-run.sh` pe
 run dir, so a single bad cell goes `INCOMPLETE` in `INDEX.md` without taking down the rest.
 
 ```bash
+source cloud-setup/env.sh          # sets LEG, FS_MOUNT, S3_BUCKET, CONDA_ENVS_DIR, ...
 LIB=<repo>/runs/lib
 mkdir -p "$(dirname "$LIB")/sweep-logs"
-"$LIB/sweep-stage1-seqw.sh" --fs weka 2>&1 \
-  | tee "$(dirname "$LIB")/sweep-logs/$(date -u +%F-%H%M)-weka-stage1-seqw.log"
+"$LIB/sweep-stage1-seqw.sh" 2>&1 \
+  | tee "$(dirname "$LIB")/sweep-logs/$(date -u +%F-%H%M)-$LEG-stage1-seqw.log"
 ```
+
+**The sweep drivers take no arguments** — they read the environment. `record-run.sh` accepts an explicit
+`--fs`, and falls back to `$LEG` when it is absent, so a driver never has to pass it. With neither set the
+wrapper refuses. Every driver also refuses to start without `FS_MOUNT` and `LEG`.
 
 **Tee even though you are in tmux** — the log survives even if tmux dies, and on an overnight run it is the
 primary forensic record of what happened while nobody was watching.
@@ -201,9 +215,16 @@ does not need the benchmark re-run:
 "$LIB/parse-results.py" <run-dir>/     # overwrites results.json in place; raw untouched
 ```
 
-**Re-aggregate a sweep** — the `aggregate-stage*.py` scripts derive their glob and output path from
-`__file__`, so running them from this tree walks this tree's run dirs, **pivots on `--fs`**, and writes the
-summary CSV here. The generic `aggregate-sweep.py` is the exception: it takes an explicit glob.
+**Re-aggregate a sweep** — the seven self-locating aggregators (4.C, 5, 6.A, 6.B, 6.C, 6.D, 7) derive their
+glob and output path from `__file__`, so running them from this tree walks this tree's run dirs and writes the
+summary CSV here. The other seven — `aggregate-sweep.py` and the stage 1.5, 1.6, 2.0, 3.0, 4.A, 4.B
+aggregators — take an explicit glob:
+
+```bash
+"$LIB/aggregate-stage2-properties.py" '<repo>/runs/*-'"$LEG"'-s2.0-*'
+```
+
+Neither group groups by filesystem yet (⏳ **D-4**).
 
 ---
 

@@ -138,6 +138,16 @@ case "$MODE" in
     do_sync mirror "$REPO_ROOT/claude-memory-mirror/" "s3://$S3_BUCKET/repo/claude-memory-mirror/"
     do_sync mirror "$REPO_ROOT/runs/manifests/"       "s3://$S3_BUCKET/repo/manifests/"
 
+    # ---- Environment contracts ----
+    # These are what let Leg B prove it matched Leg A, so several consumers expect
+    # them in S3: teardown-preflight.sh NO-GOes without them, and Leg B fetches
+    # Leg A's contract from s3://<bucket>/env-contracts/ (NEW-CLOUD-SETUP.md § 8.7).
+    # ARCHIVE, not MIRROR, deliberately: a --delete sync run from a checkout that
+    # happens not to hold the other leg's contract would remove the one artifact
+    # whose loss makes the whole comparison unverifiable. Tiny files; never prune.
+    do_sync archive "$REPO_ROOT/runs/" "s3://$S3_BUCKET/env-contracts/" \
+      --exclude '*' --include 'env-contract-leg-*.json'
+
     # ---- ARCHIVE group: heavy, write-once, may be pruned locally ----
     # Every run dir's raw/ for this leg. Requires LEG so two legs never collide.
     if [ -n "${LEG:-}" ]; then

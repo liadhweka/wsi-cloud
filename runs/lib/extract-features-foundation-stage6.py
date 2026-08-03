@@ -31,13 +31,15 @@ WHY single in-process reader per rank
   handles. Reusing Stage 4.C/4.B reader logic directly minimizes engineering risk.
 
 WHY mp.spawn (not torchrun)
-  torchrun's c10d rendezvous binds its TCP store to socket.gethostname()=a100 →
-  /etc/hosts → a100.cluster.local → 192.168.6.102 (NOT bound to any interface on this
-  host). Verified bug from Stage 5 pre-flight; mp.spawn + explicit MASTER_ADDR=127.0.0.1
+  torchrun's c10d rendezvous binds its TCP store to whatever socket.gethostname()
+  resolves to. Where that resolves via /etc/hosts to an address not bound to any local
+  interface, the store fails with "No route to host" — a machine-dependent failure, so
+  assume it is possible on any new instance. mp.spawn + explicit MASTER_ADDR=127.0.0.1
   sidesteps the entire rendezvous machinery for single-host DDP.
 
 WHY torch.cuda.synchronize() + CUDA events per step
-  Per-step timing must be accurate for the customer-quotable per-extraction-step CSV.
+  Per-step timing must be accurate: the per-extraction-step CSV is this stage's PRIMARY
+  headline source, so a timing artifact there propagates into the comparison.
   CUDA events record per-phase stream time without forcing host syncs between phases;
   a single sync at end of step flushes events for reading.
 
@@ -47,7 +49,7 @@ WHY 4096-byte aligned reads (kvikIO backend only)
   via `aligned_read_props()` (verbatim from cucim's gds_whole_slide example).
 
 WHY per-cell LD_PRELOAD scoping (mentioned for caller; this script doesn't set it)
-  Per `cucim_libcufile_preload_abi_clash` memory: kvikIO+GDS needs LD_PRELOAD of
+  Per `cucim-segfaults-when-libcufile-is-ld-preloaded` memory: kvikIO+GDS needs LD_PRELOAD of
   libcufile-1.17 to override the conda env's bundled 1.14.1, but cuCIM 26.04 segfaults
   inside `slide.read_region()` with that preload due to ABI mismatch. Sweep driver
   must set LD_PRELOAD per-cell (kvikio cells = set; cucim cells = unset).

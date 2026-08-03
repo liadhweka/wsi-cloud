@@ -54,6 +54,7 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Provision the environment | **`cloud-setup/NEW-CLOUD-SETUP.md`** + **`SPINUP-CHECKLIST.md`** |
 | Know what every path / name / variable should be | **`cloud-setup/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
 | Tear down or rebuild the instance | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** (+ `runs/lib/teardown-preflight.sh`) |
+| Know what the pre-deployment audit found | **`cloud-setup/AUDIT-REPORT.md`** — fixed, raised, and the verdict |
 
 **A fresh Claude session continuing this work** starts with the memories — `cloud-session-open-items` (the
 work list), `weka-vs-lustre-cloud-project` (what this is), `weka-vs-lustre-cloud-open-decisions` (what is
@@ -76,7 +77,8 @@ runs/
   STAGES.md            stage map, per-leg plan, decision log D1–D15
   README.md            operational runbook + both canaries
   Stage-{1..7}-*.md    per-stage roadmaps (the audit trail)
-  lib/                 63-script library
+  lib/                 script library: 63 files (32 shell + 29 Python + a cuFile
+                       template + the GDS checklist)
   manifests/           dataset manifests, incl. the 1073-slide cohort
 ```
 
@@ -87,9 +89,11 @@ runs/
 1. **Provision** — `cloud-setup/SPINUP-CHECKLIST.md` (region, quota, instance, S3 + IAM, WEKA cluster).
 2. **Bootstrap** — `cloud-setup/NEW-CLOUD-SETUP.md`, which hands off to Claude twice: once for the system
    stack (`prompt-env-prep-cloud.md`), once for the project (`handoff-cloud.md`).
-3. **Build + Leg A** — Claude does the deferred script work (mount retargeting, `--fs` plumbing,
-   per-filesystem recording adapters, S3 sync), proves the pipeline on a throwaway cell, takes a baseline,
-   and runs Leg A.
+3. **Build + Leg A** — Claude does the deferred script work (per-filesystem recording adapters and
+   consistency relations, cuFile path accounting, core accounting, the cuFile config, the 1.7 hydration
+   driver), proves the pipeline on a throwaway cell, takes a baseline, and runs Leg A. Mount and repo
+   retargeting, filesystem labelling, the environment contract, the leg orchestrator and the S3 sync layer
+   are already done — see the two "Done" tables in `SCRIPT-TRACKER.md`.
 4. **Leg B** — provision FSx at maximum, rebuild the instance from the pinned AMI, verify the environment
    contract, repeat.
 5. **Synthesis** — the actual deliverable.
@@ -102,9 +106,11 @@ runs/
 
 ## Conventions worth knowing before you touch anything
 
-- **`--fs {weka|lustre}` is a dimension, not a fork.** One `runs/` tree; the filesystem appears in the
-  run-dir name and in `metadata.json`; aggregators pivot on it. Scripts resolve the mount through
-  **`$FS_MOUNT`** — a hardcoded mount path is a bug, because it silently makes one leg measure the other.
+- **The filesystem is a dimension, not a fork.** One `runs/` tree; it appears as a segment of the run-dir
+  name and as a field in `metadata.json`. Scripts resolve the mount through **`$FS_MOUNT`**, derived from
+  `$LEG` — a hardcoded mount path is a bug, because it silently makes one leg measure the other. The run-dir
+  segment is equally load-bearing: the S3 sync and the teardown gate both glob on it. (Teaching the
+  aggregators to *group* on the field is deferred work — `D-4`.)
 - **The primary telemetry sources differ per filesystem.** The client's network counters are *diagnostic* on
   the WEKA leg and the *actual data path* on the Lustre leg. Never quote a bypassed source.
 - **Both mounts and local scratch are ephemeral.** git is authoritative for small text; **S3** for heavy

@@ -2,9 +2,14 @@
 # record-run.sh — wrap a benchmark command with full pre/during/post recording.
 #
 # Usage:
-#   record-run.sh --run-name <name> --stage <N> [--note "..."] -- <cmd> [args...]
+#   record-run.sh --fs <weka|lustre> --run-name <name> --stage <N> [--note "..."] -- <cmd> [args...]
 #
-# Captures, all in runs/<utc-timestamp>-<name>/:
+# --fs is REQUIRED, but may be supplied by the environment instead of the flag:
+# if omitted it falls back to $LEG (set by cloud-setup/env.sh, exported by
+# run-leg.sh). With neither set the wrapper REFUSES — an unlabelled cell cannot
+# be attributed to a filesystem, so the head-to-head cannot be assembled.
+#
+# Captures, all in runs/<utc-timestamp>-<fs>-s<stage>-<name>/:
 #   pre/   cluster + host state snapshot (one-shot)
 #   raw/   during-run time series at 1-second resolution
 #   post/  state snapshot after run (same set as pre/)
@@ -28,17 +33,25 @@ while [[ $# -gt 0 ]]; do
     --fs)       FS="$2";       shift 2 ;;
     --note)     NOTE="$2";     shift 2 ;;
     --)         shift; break ;;
-    -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
+    -h|--help)  sed -n '2,20p' "$0"; exit 0 ;;
     *)          echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 
 [[ -z "$RUN_NAME" ]] && { echo "missing --run-name" >&2; exit 2; }
 [[ -z "$STAGE" ]]    && { echo "missing --stage"    >&2; exit 2; }
+# The sweep drivers take no arguments (see run-leg.sh's plan comment), so they do
+# not pass --fs; they inherit $LEG from the sourced env.sh / from run-leg.sh's
+# `export LEG`. Falling back to $LEG is NOT a convenience default: it is explicit
+# configuration, and with neither the flag nor LEG set we still refuse.
 if [[ -z "${FS:-}" ]]; then
-  echo "missing --fs (weka|lustre)" >&2
+  FS="${LEG:-}"
+fi
+if [[ -z "$FS" ]]; then
+  echo "missing --fs (weka|lustre), and \$LEG is unset" >&2
   echo "  Every run must be attributable to a filesystem, or the head-to-head" >&2
   echo "  comparison cannot be assembled. See runs/STAGES.md D11." >&2
+  echo "  Fix: source cloud-setup/env.sh (which sets LEG), or pass --fs." >&2
   exit 2
 fi
 case "$FS" in weka|lustre) ;; *) echo "--fs must be weka|lustre, got '$FS'" >&2; exit 2 ;; esac
@@ -59,6 +72,7 @@ CMD=("$@")
 # ---------- paths ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$RUNS_ROOT/.." && pwd)"
 # If the caller pre-computed the run-dir (e.g., to pass paths into the wrapped
 # command's args before invoking us), respect it via $RECORD_RUN_DIR. Otherwise
 # we pick our own timestamp. Avoids a race where caller and wrapper each call
@@ -70,22 +84,26 @@ if [[ -n "${RECORD_RUN_DIR:-}" ]]; then
   TS=$(basename "$RUN_DIR" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' || date -u +%Y-%m-%d-%H%M%S)
 else
   TS=$(date -u +%Y-%m-%d-%H%M%S)
-  # Run dir name: <UTC-timestamp>-s<stage>-<run-name>. Stage prefix makes the
-  # stage immediately visible in `ls runs/` without needing to read metadata.
+  # Run dir name: <UTC-timestamp>-<fs>-s<stage>-<run-name>. The fs segment is
+  # load-bearing, not cosmetic: sync-to-s3.sh and teardown-preflight.sh both
+  # glob runs/*-$LEG-s*/, so a dir without it is never backed up and the
+  # teardown gate does not notice. The stage prefix makes the stage visible in
+  # `ls runs/` without reading metadata.
   RUN_DIR="$RUNS_ROOT/${TS}-${FS}-s${STAGE}-${RUN_NAME}"
 fi
 
 mkdir -p "$RUN_DIR/pre" "$RUN_DIR/post" "$RUN_DIR/raw/.pids" "$RUN_DIR/plots"
 
-# IB netdevs for the IPoIB control-plane capture (the wekafs DATA plane is
-# native RDMA, captured separately across ALL /sys/class/infiniband devices
-# below). Discover the UP IB netdevs dynamically so the client's actual NIC
-# binding is always captured — this was hardcoded to ibp97s0f0/f1, which are
-# NOT this client's data NICs after the 2026-07 reinstall (data flows on
-# ibp12s0/ibp18s0 = mlx5_0/1). Dynamic discovery also auto-adapts if the client
-# is later rebound to more NICs.
+# IB netdevs for the IPoIB control-plane capture. Discovered dynamically rather
+# than named, so the client's actual NIC binding is always what gets captured and
+# nothing carries over from another machine.
+# ⏳ D-4: on AWS there are no InfiniBand devices at all — the wire path is ENA
+# (WEKA leg, via DPDK) or ENA/EFA (Lustre leg). This capture yields nothing there
+# and must be replaced by the per-filesystem wire-counter adapter. Left in place
+# rather than deleted because it is the shape the adapter replaces, and deleting
+# it would lose the "capture every device, let analysis pick the active ones"
+# property that the replacement needs.
 IB_NETDEVS=$(for n in /sys/class/net/ib*; do [[ -e "$n" ]] || continue; [[ "$(cat "$n/operstate" 2>/dev/null)" == up ]] && basename "$n"; done | tr '\n' ' ')
-[[ -z "$IB_NETDEVS" ]] && IB_NETDEVS="ibp12s0 ibp18s0"
 
 # ---------- helpers ----------
 log() { echo "[record-run $(date -u +%FT%TZ)] $*" >&2; }
@@ -172,8 +190,9 @@ EOF
 # args from the caller. Future humans (or future Claude sessions) can read
 # this and immediately understand what this run was without parsing JSON.
 cat > "$RUN_DIR/0_README.md" <<EOF
-# ${TS}-s${STAGE}-${RUN_NAME}
+# ${TS}-${FS}-s${STAGE}-${RUN_NAME}
 
+**Filesystem:** ${FS} (mounted at ${FS_MOUNT:-unset})
 **Stage:** ${STAGE}  ·  **Started (UTC):** ${META_TS}
 **Hostname:** ${HN}  ·  **User:** ${USER:-unknown}  ·  **Kernel:** ${KR}
 
@@ -194,21 +213,21 @@ ${NOTE:-(no note provided)}
 - \`metadata.json\` — structured metadata (programmatic).
 - \`cmd.txt\` / \`cmd.log\` — exact command and tee'd stdout+stderr from the benchmark.
 - \`pre/\` — cluster + host state snapshot before the run.
-- \`raw/\` — during-run time series at 1-second resolution:
-  - \`weka-stats.csv\` — WEKA per-process per-second stats.
-  - \`rdma-counters.csv\` — actual RDMA traffic per IB device (the wekafs data path).
-  - \`ipoib-counters.csv\` — IPoIB control plane (sanity check, NOT the data path).
-  - \`nvidia-smi.csv\` — per-GPU per-second (8 GPUs × ~1Hz).
+- \`raw/\` — during-run time series at 1-second resolution. Which streams are
+  present depends on the filesystem under test — the recorder set is a
+  per-filesystem adapter (deferred item \`D-4\`); \`runs/README.md\` holds the
+  authoritative Primary-vs-Diagnostic table for each leg. Always present:
+  - \`nvidia-smi.csv\` — per-GPU per-second.
   - \`sar-{cpu,disk,net,mem,swap,paging,queue,ctxsw}.csv\` — host-side categories.
 - \`post/\` — same snapshot taken after the run, for delta computation.
 - \`results.json\` — parsed aggregates. Re-runnable any time via \`runs/lib/parse-results.py <this-dir>\`.
 
 ## Project context
 
-This run is part of the WEKA WSI benchmarking project.
+This run is part of the WEKA-vs-Lustre WSI storage comparison on AWS.
 - \`CLAUDE.md\` — project rules (docs citation, memory hygiene, recording philosophy).
-- \`${REPO}/runs/STAGES.md\` — stage breakdown (1.0 = synthetic upper bound, 1.1 = TCGA pilot, etc.).
-- \`${REPO}/runs/README.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
+- \`${REPO_ROOT}/runs/STAGES.md\` — the \`--stage\` code map, the per-leg plan, and the decision log.
+- \`${REPO_ROOT}/runs/README.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
 EOF
 
 # ---------- start recorders ----------
@@ -278,11 +297,11 @@ echo $! > "$PIDS_DIR/ipoib-counters.pid"
 # (5) RDMA counters from /sys/class/infiniband/<ibdev>/ports/1/counters/.
 # THIS is the data plane wekafs actually uses. port_xmit_data and
 # port_rcv_data are in 4-byte words per the IB spec (multiplied by 4 here
-# for bytes). Poll ALL infiniband devices: wekafs's DPDK process binds to
-# physical devices that don't necessarily match the kernel netdev's symlink to
-# mlx5_X, so we never assume which device carries data — we capture them all and
-# let analysis pick the active ones (verified empirically; post-2026-07 the
-# a100 client's data flows on mlx5_0 / mlx5_1 = ibp12s0 / ibp18s0).
+# for bytes). Poll ALL infiniband devices: a DPDK process binds to physical
+# devices that don't necessarily match the kernel netdev's symlink, so we never
+# assume which device carries data — we capture them all and let analysis pick
+# the active ones. That "capture everything, decide later" property is the part
+# the AWS replacement must keep (⏳ D-4).
 IB_DEVICES=$(ls /sys/class/infiniband/ 2>/dev/null | tr '\n' ' ')
 {
   echo "timestamp,ibdev,xmit_bytes,rcv_bytes,xmit_packets,rcv_packets,xmit_wait,xmit_discards"
@@ -363,7 +382,13 @@ EOF
   log "post-run snapshot to $RUN_DIR/post/"
   snapshot "$RUN_DIR/post"
 
-  # Verify recordings produced data
+  # Verify recordings produced data.
+  # ⏳ D-4: this required-stream list is the WEKA-over-InfiniBand set carried over
+  # from a previous environment. On AWS there are no IB devices, so
+  # rdma-counters.csv / ipoib-counters.csv will be header-only, and on the Lustre
+  # leg weka-stats.csv will be absent — which marks EVERY run INCOMPLETE until the
+  # per-filesystem recorder adapters replace both the recorders above and this
+  # list. Expect that on the first cloud cell; it is a known gap, not a surprise.
   log "verifying recordings..."
   INCOMPLETE=0
   for f in weka-stats.csv nvidia-smi.csv ipoib-counters.csv rdma-counters.csv \
@@ -394,7 +419,10 @@ EOF
   # Append to INDEX.md
   STATUS=$( (( RC == 0 && INCOMPLETE == 0 )) && echo "OK" || echo "INCOMPLETE" )
   ESC_NOTE=$(printf '%s' "$NOTE" | head -c 200 | tr '\n' ' ')
-  echo "- \`${TS}-s${STAGE}-${RUN_NAME}\` (stage $STAGE, $START_TS, rc=$RC, $STATUS) — ${ESC_NOTE}" \
+  # The entry must name the run dir EXACTLY, fs segment included — INDEX.md is the
+  # run history, and an entry that omits the filesystem loses the one dimension
+  # the whole comparison pivots on.
+  echo "- \`${TS}-${FS}-s${STAGE}-${RUN_NAME}\` (fs $FS, stage $STAGE, $START_TS, rc=$RC, $STATUS) — ${ESC_NOTE}" \
     >> "$RUNS_ROOT/INDEX.md"
 
   log "done: $RUN_DIR"

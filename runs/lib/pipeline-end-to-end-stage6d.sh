@@ -29,9 +29,18 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
-LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+# The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
+# the environment (cloud-setup/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the conda env bundles an older copy, the right path is instance-specific, and a
+# path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
+# quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
+# the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see cloud-setup/NAMING-AND-VARIABLES.md Table 3)}"
+LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
+[ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 BACKEND=""
@@ -107,12 +116,12 @@ MANIFEST="$REPO/runs/manifests/tcga-brca-full40x-stage4a-format.tsv"
 if [ "$BACKEND" = "kvikio" ]; then
   # Chunked orchestrator handles convert + extract internally
   CUDA_VISIBLE_DEVICES=2,3,6,7 \
-  LD_PRELOAD="$LIBCUFILE_117" \
+  LD_PRELOAD="$LIBCUFILE_SYSTEM" \
   CUFILE_ENV_PATH_JSON="$CUFILE_JSON" \
   CONDA_PREFIX="$CONDA_ENV" \
   OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 \
   bash "$REPO/runs/lib/run-stage6a-tier2-chunked.sh" \
-    --model "$MODEL" --n-gpus 4 --gpu-csv "2,3,6,7" \
+    --model "$MODEL" --n-gpus 4 --gpu-csv "0,1,2,3"   # ⏳ D-8: NUMA order TBD \
     --output-dir "$FEATURES_OUT" \
     --extraction-steps-csv "$RUN_DIR/phase3-extraction-steps.csv" \
     --per-slide-csv "$RUN_DIR/phase3-per-slide.csv" \

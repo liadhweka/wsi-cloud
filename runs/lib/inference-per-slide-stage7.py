@@ -66,7 +66,7 @@ REUSE FROM STAGE 6
 
 LD_PRELOAD SCOPING
 ==================
-Per `cucim_libcufile_preload_abi_clash` memory: kvikIO+GDS needs
+Per `cucim-segfaults-when-libcufile-is-ld-preloaded` memory: kvikIO+GDS needs
 LD_PRELOAD=libcufile-1.17 (matches kernel nvidia-fs 2.28.2); cuCIM 26.04
 segfaults if libcufile-1.17 is preloaded. Caller (orchestrator / sweep driver)
 must scope LD_PRELOAD per-cell. This script doesn't touch LD_PRELOAD.
@@ -77,10 +77,10 @@ Typically invoked by `orchestrate-clinical-deployment-stage7.sh` or
 `sweep-stage7-clinical.sh`. Direct invocation example for the 7.1.a cell:
 
   CUDA_VISIBLE_DEVICES=2 \\
-  LD_PRELOAD=/usr/local/cuda-13.2/.../libcufile.so.1.17.0 \\
+  LD_PRELOAD=$LIBCUFILE_PRELOAD \\
   CUFILE_ENV_PATH_JSON=.../cufile-full-rdma.json \\
-  CONDA_PREFIX=/data/local-nvme/conda-envs/wsi-cucim-2604 \\
-  /data/local-nvme/conda-envs/wsi-cucim-2604/bin/python \\
+  CONDA_PREFIX=$CONDA_ENVS_DIR/$CONDA_ENV_MAIN \\
+  $CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python \\
   inference-per-slide-stage7.py \\
     --backend kvikio --model virchow2 \\
     --rawtiff-dir $FS_MOUNT/data/tcga-brca-rawtiff \\
@@ -578,10 +578,16 @@ def main():
 
     # The caller pins the GPU via CUDA_VISIBLE_DEVICES (single GPU per process);
     # we always use cuda:0 inside this script's CUDA context.
-    if 'CUDA_VISIBLE_DEVICES' not in os.environ:
-        print("[infer] WARNING: CUDA_VISIBLE_DEVICES not set; defaulting to GPU 2",
-              file=sys.stderr, flush=True)
-        os.environ['CUDA_VISIBLE_DEVICES'] = '2'
+    # REFUSE rather than default. Every caller pins it (sweep-stage7-clinical.sh,
+    # orchestrate-clinical-deployment-stage7.sh, streaming-loop-stage7.sh,
+    # pipeline-end-to-end-stage6d.sh), so an unset value means the cell was launched
+    # some other way — and the old default of GPU 2 encoded a previous machine's
+    # NIC-adjacency finding, so it would silently pin to a GPU chosen for different
+    # hardware. Same rule as every other unset-configuration path in this project.
+    if not os.environ.get('CUDA_VISIBLE_DEVICES', '').strip():
+        sys.exit("FATAL: CUDA_VISIBLE_DEVICES is unset. Pin the GPU explicitly -- "
+                 "refusing to guess, because the pinning choice is instance-specific "
+                 "(see cloud-setup/NAMING-AND-VARIABLES.md and deferred item D-8).")
     torch.cuda.set_device(0)
     device = torch.device('cuda:0')
     torch.backends.cudnn.benchmark = True

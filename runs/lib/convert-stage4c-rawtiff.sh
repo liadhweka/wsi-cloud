@@ -3,11 +3,11 @@
 # uncompressed raw TIFF on ${FS_MOUNT} for the kvikIO+GDS sweep.
 #
 # WHY this is a recorded "Stage 4.C-convert" cell rather than a flat tee'd log:
-#   - 100 slides × ~30-80 GB raw output each = ~6-10 TB sustained writes to wekafs.
-#   - That's a genuine recordable workload (matches Stage 1.5's recording pattern
-#     for the local-NVMe-staged re-stage). The recording captures sustained wekafs
-#     write throughput under 4-way-parallel conversion at scale as a side
-#     data point.
+#   - 100 slides of uncompressed raw output is TB-scale sustained writes to
+#     $FS_MOUNT — the artifact is order ~7 TB at the full cohort (STAGES.md D4).
+#   - That is a genuine recordable workload in its own right (substage 4.D), so it
+#     runs through record-run.sh rather than as a side task: the recording captures
+#     sustained write throughput under parallel conversion at scale.
 #   - Per CLAUDE.md memory-hygiene rule + project preference for recording any
 #     measurable WSI workload.
 #
@@ -37,7 +37,8 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PYTHON="$CONDA_ENV/bin/python3"
 CONVERTER="$REPO/runs/lib/convert-rawtiff-20x.py"
 

@@ -1,33 +1,51 @@
 #!/usr/bin/env bash
 # fe-core-kvikio.sh <label>
-# Frontend-core scaling — the ACTUAL pipeline path: kvikIO+GDS N=8 random raw-TIFF
-# tile reads across all 8 GPUs (the Stage 4.C peak config that hit 5.48 GB/s),
-# fully recorded. Run once per frontend-core count, alongside fe-core-fio.sh.
+# ONE fully-recorded kvikIO/cuFile cell on the pipeline path: random raw-TIFF tile
+# reads across the instance's GPUs. A single-cell spot check, not a sweep — for a
+# quick recorded reference point, and for varying one client-side knob while
+# holding the cell identical.
 #
-#   ./fe-core-kvikio.sh fe8     # baseline at current cores
-#   <colleague adds cores; client restarts>
-#   ./fe-core-kvikio.sh fe12 ...
+#   ./fe-core-kvikio.sh <label>          # <label> names the client config under test
+#
+# The label is free text and goes into the run name, so successive runs form a
+# curve over whatever you varied. NOTE: varying the *storage client's* reserved
+# core count is a WEKA-leg-only axis — the Lustre client reserves none (D15). Do
+# not read a cross-leg comparison out of a label sequence.
+#
+# ⚠ Not the Phase-0 ceiling capture. "% of ceiling" denominators must come from the
+# block-size-matched Stage 1.0a-d cells (sweep-stage1-{seqw,seqr,randw,randr}.sh);
+# this helper runs one fixed configuration.
+# ⏳ D-6: cuFile GPU-direct-vs-bounced byte accounting is mandatory per kvikIO cell
+# and is not recorded yet, so a cell from here is incomplete until that lands.
 set -uo pipefail
 LABEL="${1:?usage: $0 <label, e.g. fe8 = current frontend-core count>}"
 
 # Repo root derived from this script's own location (runs/lib -> runs -> root),
 # so the tree is wherever the script physically lives. No hardcoded path.
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+: "${LEG:?LEG is unset -- source cloud-setup/env.sh. The run-dir name must carry the filesystem: sync-to-s3.sh and teardown-preflight.sh glob runs/*-$LEG-s*/, so a dir without it is never backed up}"
 RECORD="$REPO/runs/lib/record-run.sh"
 MULTI="$REPO/runs/lib/run-multiproc-kvikio.sh"
 STAGE="4.C"
-RUN_NAME="frontend-core-${LABEL}-kvikio-n8-gds"
-GPUS="0,1,2,3,4,5,6,7"; NB=256; NT=16; COMPAT=off
+# ⏳ D-8: 4 GPUs to match the instance (STAGES.md D10); the NUMA/NIC-aware ordering
+# is still to be re-derived on the real instance.
+NGPU=4; GPUS="0,1,2,3"
+NB=256; NT=16
+# compat=off REQUESTS the GPU-direct path; it does not prove one was taken. Whether
+# true GDS is achievable here is an empirical, per-filesystem question (D8).
+COMPAT=off
+RUN_NAME="clientcfg-${LABEL}-kvikio-n${NGPU}-compat${COMPAT}"
 export DATASET="${DATASET:-brca}"
 
 TS=$(date -u +%Y-%m-%d-%H%M%S)
-export RECORD_RUN_DIR="$REPO/runs/${TS}-s${STAGE}-${RUN_NAME}"
+export RECORD_RUN_DIR="$REPO/runs/${TS}-${LEG}-s${STAGE}-${RUN_NAME}"
 mkdir -p "$RECORD_RUN_DIR"
 
-NOTE="Frontend-core scaling — PIPELINE path. kvikIO+GDS N=8 (all 8 GPUs) random raw-TIFF tile reads, compat=${COMPAT} (GDS engaged), n_buffer=${NB}, num_threads=${NT}, DATASET=${DATASET}. This is the Stage 4.C peak config (5.48 GB/s reference). LABEL=${LABEL} = current wekafs client FRONTEND core count (confirm live: sudo weka local resources). PRIMARY = aggregate app tiles/sec + GB/s (proc summaries) cross-checked with WEKA-side Read (weka stats) + RDMA rcv."
+NOTE="Single-cell kvikIO/cuFile spot check on fs=${LEG}, PIPELINE path: random raw-TIFF tile reads, N=${NGPU} processes on GPUs ${GPUS}, compat_mode=${COMPAT} (REQUESTED, not proven — path accounting per D-6 settles which path ran), n_buffer=${NB}, num_threads=${NT}, DATASET=${DATASET}. LABEL=${LABEL} = the client configuration being varied across successive runs; record what it means in this note when you use it. PRIMARY = aggregate app tiles/sec + GB/s from the per-process summaries, cross-checked against this leg's filesystem-side primary per runs/README.md's source table (which differs per leg — never quote a bypassed source). NOT a % -of-ceiling denominator: those come from the block-size-matched Stage 1.0 cells."
 
 "$RECORD" --stage "$STAGE" --run-name "$RUN_NAME" --note "$NOTE" -- \
-  "$MULTI" 8 "$GPUS" "$COMPAT" "$NB" "$NT" "$RECORD_RUN_DIR"
+  "$MULTI" "$NGPU" "$GPUS" "$COMPAT" "$NB" "$NT" "$RECORD_RUN_DIR"
 
 echo "  Run dir: $RECORD_RUN_DIR"
-echo "  (aggregate GB/s printed above by run-multiproc; WEKA-side read: $RECORD_RUN_DIR/raw/weka-stats.csv)"
+echo "  (aggregate GB/s printed above by run-multiproc; the filesystem-side primary for"
+echo "   this leg is listed in runs/README.md § What gets recorded)"

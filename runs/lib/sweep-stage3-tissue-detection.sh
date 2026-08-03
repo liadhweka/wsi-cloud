@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # sweep-stage3-tissue-detection.sh — Stage 3.0 CLAM tissue detection sweep.
 #
-# Customer story: how fast does WEKA serve the low-resolution thumbnail reads
-# CLAM's tissue detection needs, while CLAM's Otsu + morphology saturate the
-# host's CPUs? Confirms empirically that Stage 3 is compute-bound, completing
-# the "Stages 2+3 paint a complete picture: 2 is metadata-stress, 3 is
-# compute-stress, WEKA never bottlenecks on either" narrative.
+# The question this answers: with CLAM's Otsu + morphology loading the host CPUs,
+# what does the filesystem under test contribute to tissue-detection wallclock?
+# The I/O profile is small BY CONSTRUCTION (header + low-res thumbnail in, small
+# coord file out) — that is a property of the algorithm, not a claim about either
+# filesystem. Whether either becomes visible here is measured, not assumed; the
+# recording is nearly free, and storage being busier than the algorithm implies
+# would be a finding to chase.
+# ⚠ The CPU headline is computed over APPLICATION-AVAILABLE cores, and the excluded
+# core set is a per-filesystem parameter (D15) — WEKA reserves cores, Lustre does not.
 #
 # 2D grid: datasets ∈ {tcga-brca, camelyon16} × concurrency ∈ {1, 8, 64}
 # = 6 cells. Per cell: split the dataset manifest into N round-robin chunks

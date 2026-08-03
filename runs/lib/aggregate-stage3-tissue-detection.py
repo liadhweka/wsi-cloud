@@ -11,7 +11,7 @@ For each matching run dir:
   - reads .run_start/.run_end for the recorded window
   - computes app-level slides/sec and per-slide-mean from app-level totals
   - re-reads weka-stats.csv with per-timestamp summing across the 8 a100
-    wekafs client frontends (per project_a100_state.md pattern)
+    the storage client's own processes (cross-cutting pattern #1)
   - **NEW for Stage 3:** parses sar-cpu.csv and computes %busy on the
     NON-WEKA cores (everything except the wekafs DPDK cores 24-31 on NUMA-0).
     Shows the compute-saturation curve that IS the Stage 3 customer story.
@@ -59,7 +59,9 @@ def _active_window_mean(seq):
         return statistics.fmean(seq)
     return statistics.fmean(seq[idx[0]:idx[-1] + 1])
 
-# Per project_a100_state.md: wekafs DPDK frontend cores are NUMA-0 cores 24-31.
+# Cores reserved by the storage client, excluded from the saturation reading.
+# ⏳ D-9: per-filesystem parameter (STAGES.md D15), indices measurable only on the
+# real client. Placeholder.
 # All other cores (0-23, 32-255) are application cores. For Stage 3 we report
 # the compute saturation on non-WEKA cores specifically.
 WEKA_CORES = set(range(24, 32))

@@ -10,7 +10,7 @@ For each matching run dir:
     per-slide stats (mean, p50, p95, p99, max, success/fail counts)
   - parses cmd.log for the extractor's summary line (slides_per_second, total_seconds)
   - re-reads weka-stats.csv directly with per-timestamp summing across the 8
-    a100 wekafs frontend processes (per the project_a100_state.md pattern from
+    the storage client's own processes (cross-cutting pattern #1, from
     Stages 1.5/1.6) — pulls Ops/s (NEW Stage 2 headline), Read, Reads/s
   - extracts RDMA rcv (read direction) per device, picks the busiest
 
@@ -20,7 +20,7 @@ Outputs:
     weka client Read sum, weka client Ops/s sum, RDMA rcv, cross-source canary
 
 Stdlib only. Reuses the per-timestamp-sum pattern from aggregate-stage1-fpsync.py
-(documented in project_a100_state.md memory).
+(cross-cutting pattern #1 in SCRIPT-TRACKER.md).
 """
 import csv
 import glob

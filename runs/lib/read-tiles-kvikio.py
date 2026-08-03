@@ -48,8 +48,8 @@ WHY compat_mode flag exposed as a sweep axis:
     speedup on WekaFS at every config.
 
 Required environment (caller / wrapper script's responsibility):
-  CONDA_PREFIX=/data/local-nvme/conda-envs/wsi-cucim-2604
-  LD_PRELOAD=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+  CONDA_PREFIX=$CONDA_ENVS_DIR/$CONDA_ENV_MAIN
+  LD_PRELOAD=$LIBCUFILE_PRELOAD          # the SYSTEM libcufile matched to nvidia-fs
   CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}
 
 Usage (4.C.1 faithful):

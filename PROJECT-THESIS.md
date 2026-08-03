@@ -49,10 +49,14 @@ filesystems; only the underlying transport differs, which is the thing under tes
 
 The measurement matrix, per applicable stage:
 
-| | POSIX (native reads) | kvikIO / cuFile |
-|---|---|---|
-| **WEKA** | ✅ | ✅ (compat mode expected — verified per cell) |
-| **Lustre** | ✅ | ✅ (true GDS over EFA) |
+| | POSIX (native reads) | cuFile **compat** | cuFile **GDS** |
+|---|---|---|---|
+| **WEKA** | ✅ | ✅ | ✅ *if achievable — determined empirically* |
+| **Lustre** | ✅ | ✅ | ✅ (over EFA) |
+
+Three cells per filesystem, not two: **compat mode exists on both sides**, and the compat-vs-compat pair is
+what makes the asymmetry analysable rather than confounding. Full decomposition in `runs/STAGES.md` § The
+GPU-direct measurement matrix.
 
 Both filesystems get a plain-POSIX cell as well as a kvikIO cell. This matters in both directions:
 kvikIO-in-compat-mode stacks a bounce buffer and the cuFile layer on top of POSIX and may be *slower

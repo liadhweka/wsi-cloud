@@ -197,8 +197,8 @@ unattended chain this abort is mechanical.
 | `aggregate-stage7-clinical.py` | `lib/` | all 7.x | Wide-format wire-counter parsing; per-timestamp client-summing pattern (per-filesystem filter) |
 | `read-after-write-stage7.py` | `lib/` | 7.4.b | fsync-then-rename write contract |
 
-**All five need the per-filesystem recording adapter work** (open item 11) and mount retargeting to
-`$FS_MOUNT` (open item 13) before they run.
+**All five need the per-filesystem recording adapter work** (deferred item `D-4`) before they run. Mount
+retargeting to `$FS_MOUNT` is already done (`D-1`).
 
 ## Datasets
 

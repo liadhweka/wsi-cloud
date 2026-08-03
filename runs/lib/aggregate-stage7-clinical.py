@@ -28,11 +28,21 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-# Stage 7 run-name regex: <utc>-s7-<cell_name>
-RUN_NAME_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}-\d{6})-s7-(?P<name>.+)$")
-SMOKE_PAT = re.compile(r"-s7-smoke-")
+# Stage 7 run-dir name: <utc>-<fs>-s7[.<sub>]-<cell_name>
+#   - the <fs> segment sits between the timestamp and the stage, so the stage part
+#     must NOT be anchored to the timestamp (it was, and that silently matched
+#     nothing once the filesystem dimension was added);
+#   - the stage may be `s7` (drivers that pre-compute the dir) or `s7.1` … `s7.6`
+#     (dirs that record-run.sh names from --stage), so the sub-stage is optional.
+RUN_NAME_RE = re.compile(r"-s7(?:\.[0-9A-Za-z.]+)?-(?P<name>.+)$")
+TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}-\d{6})-")
+FS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{6}-(?P<fs>[a-z0-9]+)-s7")
+SMOKE_PAT = re.compile(r"-s7(?:\.[0-9A-Za-z.]+)?-smoke-")
 
-# DPDK cores on this host (per project_a100_state memory: NUMA-0 cores 24-31)
+# Cores the storage client reserves for its own data path, excluded from the CPU
+# saturation reading. ⏳ D-9: this set is a PER-FILESYSTEM parameter (STAGES.md D15),
+# not a constant — WEKA reserves DPDK cores, the Lustre client reserves none — and the
+# actual indices are only measurable on the real client. The range below is a placeholder.
 DPDK_CORES = set(range(24, 32))
 
 
@@ -91,7 +101,7 @@ def weka_per_sec_sum(run_dir: Path, col: str, parser=_bps_or_zero):
     """Per-timestamp sum across 8 a100 wekafs client frontends.
 
     The pre-aggregated results.json mean dilutes ~100× from idle backend rows
-    (per project_a100_state finding). We re-read the raw CSV and sum per
+    (cross-cutting pattern #1). We re-read the raw CSV and sum per
     timestamp across the rows where Hostname=a100 + Mode=client.
     """
     p = run_dir / 'raw' / 'weka-stats.csv'
@@ -407,7 +417,7 @@ def aggregate_cell(run_dir: Path) -> dict:
         out['weka_ops_per_sec_max'] = max(weka_ops)
 
     # RDMA mlx5_0 (the data-path device per the mlx5 mystery — verified
-    # empirically 2026-05-04 in project_a100_state memory).
+    # to be re-derived on the real client — ⏳ D-9).
     # Recorder schema: rcv_bytes/xmit_bytes are already in BYTES (cumulative);
     # diff between timestamps recovers bytes/sec.
     rdma_rcv = rdma_per_sec_diff(run_dir, 'mlx5_0', 'rcv_bytes')
@@ -448,7 +458,7 @@ def main():
 
     # Discover Stage 7 cells
     cells = []
-    for p in sorted(runs_root.glob('*-s7-*')):
+    for p in sorted(runs_root.glob('*-s7*-*')):
         if not p.is_dir():
             continue
         if SMOKE_PAT.search(p.name):

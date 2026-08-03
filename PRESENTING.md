@@ -122,8 +122,9 @@ slide — which must land on storage and become immediately available to every d
 plateaus at a few GiB/s under realistic concurrent-stream load, which is what forces labs into a second fast
 tier.
 
-**What we do.** Synthetic ceilings with `fio` across five block sizes and seven concurrency levels, for
-sequential write, sequential read, random write, and random read. Then real-data ingest: bulk copy from local
+**What we do.** Synthetic ceilings with `fio` across seven concurrency levels: five block sizes
+(4K–4M) for the sequential write and read pairs, and three small block sizes (4K/16K/64K) at deeper queue
+depth for the random-write and random-read IOPS pairs. Then real-data ingest: bulk copy from local
 NVMe at varying parallelism, S3-to-filesystem hydration, and a mixed cell running ingest and reads
 simultaneously.
 
@@ -314,9 +315,13 @@ difference.
 
 **WSI context.** This is what 2024-onward production WSI research actually does: run a frozen foundation
 model over every tissue tile of every slide to produce per-slide feature tensors, then train a lightweight
-classifier on those features. We cover the three dominant open-weight models — **UNI2-h**, **Virchow2**, and
+classifier on those features. We cover the three dominant open-weight models — **UNI2-h** `[PENDING-APPROVAL]`, **Virchow2**, and
 **GigaPath**'s tile encoder — because production labs use them interchangeably depending on task and cancer
 type, and because they span a useful range of compute weight, which changes the storage-to-compute balance.
+
+> ⚠ **UNI2-h rows are internal-only** and carry a `[PENDING-APPROVAL-DO-NOT-EXTERNALIZE]` tag in the run
+> notes. **Filter them out before any of this leaves the building.** Virchow2 and GigaPath carry no such
+> restriction, which is also why Virchow2 carries most of the per-model cells.
 
 **Four distinct I/O personalities, in four substages:**
 
@@ -429,6 +434,6 @@ What it will contain, and why in this order:
 | How a cell is run and recorded; both canaries | `runs/README.md` |
 | What each script does | `SCRIPT-TRACKER.md` |
 | Where everything lives | `FILESYSTEM-MAP.md` |
-| Provisioning the environment | `cloud-setup/SPINUP-CHECKLIST.md` |
+| Provisioning the environment | `cloud-setup/NEW-CLOUD-SETUP.md` (walkthrough) + `SPINUP-CHECKLIST.md` (decisions) |
 | Project rules | `CLAUDE.md` |
 | Run history | `runs/INDEX.md` (auto-generated) |

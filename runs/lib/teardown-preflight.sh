@@ -92,14 +92,19 @@ fi
 hdr "Environment contract (what makes the next leg comparable)"
 CONTRACT="$REPO/runs/env-contract-leg-${LEG:-unknown}.json"
 if [ -f "$CONTRACT" ]; then
+  # Import MUST_MATCH from env-contract.py rather than restating it here. The list
+  # WAS duplicated in this script and had already drifted (9 fields against the
+  # contract's 17), so this check could report "complete" for a contract that
+  # env-contract.py's own `write` had rejected. One source of truth, by import.
+  # (importlib, not `import env_contract`: the filename is hyphenated.)
   nulls=$(python3 -c "
-import json,sys
-c=json.load(open('$CONTRACT'))
-import re
-sys.path.insert(0,'$REPO/runs/lib')
-must=['instance_type','aws_region','aws_az','ami_id','kernel','driver_version','cuda_version','script_commit','dataset_manifest_sha']
-print(sum(1 for k in must if not c.get(k)))" 2>/dev/null || echo "?")
+import json, importlib.util
+spec = importlib.util.spec_from_file_location('ec', '$REPO/runs/lib/env-contract.py')
+ec = importlib.util.module_from_spec(spec); spec.loader.exec_module(ec)
+c = json.load(open('$CONTRACT'))
+print(sum(1 for k in ec.MUST_MATCH if not c.get(k)))" 2>/dev/null || echo "?")
   if [ "$nulls" = "0" ]; then ok "contract written and complete: $(basename "$CONTRACT")"
+  elif [ "$nulls" = "?" ]; then bad "could not evaluate $(basename "$CONTRACT") against env-contract.py's MUST_MATCH — treat as incomplete"
   else bad "contract has $nulls unrecorded held-constant field(s) — Leg B cannot verify comparability"; fi
   if aws s3 ls "s3://$S3_BUCKET/env-contracts/$(basename "$CONTRACT")" >/dev/null 2>&1; then
     ok "contract present in S3"
@@ -137,11 +142,17 @@ fi
 
 # ── 6. Anything else living only on ephemeral storage ────────────────────────────
 hdr "Other ephemeral-only artifacts"
-for p in "${SCRATCH_DIR:-/data/local-nvme}/staging" "${SCRATCH_DIR:-/data/local-nvme}/runs"; do
-  if [ -d "$p" ] && [ -n "$(ls -A "$p" 2>/dev/null)" ]; then
-    warn "$p is non-empty ($(du -sh "$p" 2>/dev/null | cut -f1)) — confirm nothing there is needed"
-  fi
-done
+# No default for SCRATCH_DIR: guessing it would check the wrong directory and
+# report "nothing stranded" about a path that is not the scratch disk.
+if [ -z "${SCRATCH_DIR:-}" ]; then
+  warn "SCRATCH_DIR unset — cannot check whether anything is stranded on ephemeral scratch"
+else
+  for p in "$SCRATCH_DIR/staging" "$SCRATCH_DIR/runs"; do
+    if [ -d "$p" ] && [ -n "$(ls -A "$p" 2>/dev/null)" ]; then
+      warn "$p is non-empty ($(du -sh "$p" 2>/dev/null | cut -f1)) — confirm nothing there is needed"
+    fi
+  done
+fi
 if [ -d "$REPO/runs/sweep-logs" ] && [ -n "$(ls -A "$REPO/runs/sweep-logs" 2>/dev/null)" ]; then
   if aws s3 ls "s3://$S3_BUCKET/runs/${LEG:-}/sweep-logs/" >/dev/null 2>&1; then ok "sweep logs in S3"
   else bad "sweep logs exist locally but not in S3 — they are the only record of unattended runs"; fi

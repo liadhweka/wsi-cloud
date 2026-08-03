@@ -6,8 +6,8 @@ its companion **`env.example.sh`** are the single source of truth — every othe
 these names rather than inventing its own.
 
 **Why this exists.** Before this doc, the same value appeared as `<user>`, `<bucket>`, `<repo>`, `<SLUG>`,
-`$FS_MOUNT`, and half a dozen hardcoded literals scattered across 8 docs and 60 scripts. That is the class of
-inconsistency that produces a 2am mistake — and in this project one specific mistake (a wrong mount) makes
+`$FS_MOUNT`, and a scattering of hardcoded literals across the docs and the script library. That is the class
+of inconsistency that produces a 2am mistake — and in this project one specific mistake (a wrong mount) makes
 one leg silently measure the other filesystem while the number still looks correct.
 
 ---
@@ -43,17 +43,24 @@ is unset.** An unset variable must never silently default, because the defaults 
 | `LUSTRE_MOUNT` | **`/mnt/lustre`** | Leg B mount. |
 | `WEKA_FS_NAME` | **`wsibench`** | The WEKA filesystem name. Kept distinct from the mount path deliberately — they need not match, and assuming they do has caused confusion before. |
 | `SCRATCH_DIR` | **`/data/local-nvme`** | Instance-store scratch. **Ephemeral** — dies with the instance, including between legs. |
-| `CONDA_ROOT` | **`$SCRATCH_DIR/miniforge`** | Off the OS disk. |
+| `CONDA_ROOT` | **`$SCRATCH_DIR/miniforge`** | The miniforge **install** root. Off the OS disk. |
+| `CONDA_ENVS_DIR` | **`$SCRATCH_DIR/conda-envs`** | Where the **environments** live — deliberately *not* under `CONDA_ROOT`, so the interpreter path is stable if miniforge is reinstalled. Every sweep driver builds its interpreter as `$CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python`. |
 | `CONDA_ENV_MAIN` | **`wsi-cucim-2604`** | Keep this name — `cloud-setup/env-specs/` files are named after it; renaming means editing the specs. |
-| `CONDA_ENV_ALT` | **`wsi-cucim`** | Second env, same reasoning. |
+| `CONDA_ENV_ALT` | **`wsi-cucim`** | Second env, same reasoning. Used by the two cuCIM-CPU drivers (Stage 4.A, 4.B). |
 | `CLAM_DIR` | **`$PROJECT_HOME/wsi-tools/CLAM`** | The tissue detector used by Stage 3. Cloned during setup; the commit is recorded per run. |
 | `CUFILE_CONFIG_DIR` | **`$PROJECT_HOME/cufile-config`** | Where the generated cuFile config lives. |
 | `CUFILE_ENV_PATH_JSON` | **`$CUFILE_CONFIG_DIR/cufile.json`** | Generated **per instance** from the template — holds this instance's own addresses (deferred item `D-10`). |
+| `LIBCUFILE_PRELOAD` | *(locate on the instance — `D-10`)* | The **path** of the system `libcufile` matched to the loaded `nvidia-fs` module. Every kvikIO sweep driver reads it and **refuses to start without it.** Blank until the env-prep session reports it. |
 | `HF_HOME` | *(default `~/.cache/huggingface`)* | Model weight cache. |
 
-> **`LIBCUFILE_PRELOAD` is deliberately NOT set globally.** It is located on the instance and applied
-> **per cell — on kvikIO cells only**, because cuCIM segfaults when a newer libcufile is preloaded over its
-> bundled one. Exporting it globally would break every cuCIM cell in a mixed sweep.
+> **`LIBCUFILE_PRELOAD` holds a path; `LD_PRELOAD` is what must never be global.** Exporting the *path* is
+> required — the drivers read it. What the drivers then do is set **`LD_PRELOAD` per cell, on kvikIO cells
+> only**, because cuCIM segfaults when a newer libcufile is preloaded over its bundled one. Exporting
+> `LD_PRELOAD` globally would break every cuCIM cell in a mixed sweep.
+>
+> **Why the drivers refuse rather than defaulting:** a libcufile path from another machine makes
+> `LD_PRELOAD` a silent no-op, so the kvikIO cells would run against the conda env's bundled copy and still
+> report plausible numbers — the worst failure mode this project has.
 
 ## Table 2 — RECORD WHEN PROVISIONED (outputs; you don't choose these, you capture them)
 
@@ -80,11 +87,21 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 
 | Variable | How it's derived | Note |
 |---|---|---|
-| `MEMORY_SLUG` | `REPO_DIR` with `/` → `-` | For the chosen names: `-home-ubuntu-wsi-cloud`. **Discover it, don't type it** — `NEW-CLOUD-SETUP.md` § B8 and `backup.sh` both derive it, so a path change needs no edits. |
-| `FS_MOUNT` | `WEKA_MOUNT` or `LUSTRE_MOUNT`, from `--fs` | **The single most important variable in the project.** Every script resolves the mount through it. A hardcoded mount makes one leg measure the other with no failure signal. |
-| `LEG` | `weka` \| `lustre` | Run-dir name segment, `metadata.json` field, S3 prefix. |
-| `LIBCUFILE_PRELOAD` | Located on the instance | The system `libcufile` matched to the kernel module. **Scoped per cell** — set on kvikIO cells only. |
-| `CUFILE_ENV_PATH_JSON` | Generated per instance | Holds this instance's own addresses. |
+| `MEMORY_SLUG` | `REPO_DIR` with `/` → `-` | For the chosen names: `-home-ubuntu-wsi-cloud`. **Discover it, don't type it** — `NEW-CLOUD-SETUP.md` § 4.3 and `backup.sh` both derive it, so a path change needs no edits. |
+| `LEG` | set per leg in `env.sh`; `run-leg.sh --leg` exports it | `weka` \| `lustre`. Feeds `FS_MOUNT`, the run-dir name segment, the `metadata.json` field, and the S3 prefix. **`record-run.sh` derives `--fs` from it** when the flag is not passed, so the sweep drivers stay argument-free — see the `--fs` note below. |
+| `FS_MOUNT` | `WEKA_MOUNT` or `LUSTRE_MOUNT`, from `LEG` | **The single most important variable in the project.** Every script resolves the mount through it. A hardcoded mount makes one leg measure the other with no failure signal. |
+
+> **How a cell gets its filesystem label — `--fs` and `$LEG`.** `record-run.sh` takes
+> `--fs {weka|lustre}`, and **when the flag is absent it falls back to `$LEG`.** That is why the sweep
+> drivers take no arguments (`run-leg.sh` states the same): they inherit `LEG` from the sourced `env.sh`, or
+> from `run-leg.sh --leg`, which exports it. **With neither the flag nor `LEG` set, the wrapper refuses** —
+> the fallback is explicit configuration, not a default. `record-run.sh` additionally cross-checks the label
+> against `FS_MOUNT` and refuses on disagreement, and `run-leg.sh` makes the same check at leg level, where
+> `--leg` (human-supplied) and `FS_MOUNT` (environment-supplied) are genuinely independent.
+>
+> The label matters beyond bookkeeping: the run-dir name **must** contain the `-<leg>-` segment, because
+> `sync-to-s3.sh` and `teardown-preflight.sh` both glob `runs/*-$LEG-s*/`. A run dir without it is never
+> backed up to S3 **and the teardown gate does not notice.**
 
 ---
 

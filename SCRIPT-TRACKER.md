@@ -10,7 +10,8 @@
 > runs). **Read that doc before editing any script** — it is the single source of truth for names, and the
 > reason `$FS_MOUNT` exists.
 >
-> The remaining retargeting and per-filesystem adapter work is listed under **Deferred work** below.
+> The remaining per-filesystem adapter and environment-value work is listed under **Deferred work** below.
+> Retargeting itself is complete — see the two "Done" tables.
 
 For *what* each stage is see `runs/STAGES.md`; for how to run a cell `runs/README.md`; for where things live
 `FILESYSTEM-MAP.md`; for the rules `CLAUDE.md`.
@@ -41,11 +42,32 @@ one.
 
 | # | Work | What was done | Verification |
 |---|---|---|---|
-| **D-1** | Mount retargeting to `$FS_MOUNT` | `/mnt/liad` → `${FS_MOUNT}` in **25 shell files**; the **7 real Python argparse defaults** across 4 files rewritten to derive from `FS_MOUNT` | `grep`: **0 files** retain the old mount path |
+| **D-1** | Mount retargeting to `$FS_MOUNT` | `/mnt/liad` → `${FS_MOUNT}` in **25 shell files**; the **7 real Python argparse defaults** across **4 files** rewritten to derive from `FS_MOUNT`, each with a fail-loud guard | `grep`: **0 files** retain the old mount path; the 4 Python files exit with `FATAL: FS_MOUNT is unset` |
 | **D-2** | Repo-root retargeting | The hardcoded `REPO=` line in **28 shell files** replaced with derivation from the script's own location; 14 further files cleaned of other absolute paths | `grep`: **0 files** retain the old repo path |
-| **D-3** | `--fs` plumbing | `record-run.sh` now **requires** `--fs {weka\|lustre}`, puts it in the run-dir name and as a first-class `metadata.json` field — **and cross-validates it against `FS_MOUNT`**, refusing to record a run whose label might not match the filesystem written to | All four paths tested: missing, invalid, mismatched, agreeing |
+| **D-3** | Filesystem labelling | `record-run.sh` **requires** the filesystem, takes `--fs {weka\|lustre}` and **falls back to `$LEG`** when the flag is absent (so the argument-free sweep drivers work), puts it in the run-dir name and as a first-class `metadata.json` field, and **cross-validates it against `FS_MOUNT`** | All paths tested: neither set, invalid, `--fs` vs `FS_MOUNT` mismatch, `LEG` vs `FS_MOUNT` mismatch, agreeing — each exits 2 with the right message |
 | **D-12** | Environment contract | `env-contract.py` — `write` / `verify` / `show`, with the **held-constant vs expected-to-differ field split** that makes verification meaningful | Round-tripped: 0 violations, unrecorded fields correctly reported as *unverifiable* and failing |
-| **D-14** | Leg orchestrator | `run-leg.sh` — 21 steps in dependency order, with all four unattended guards | `--list`, `--dry-run`, and both refusal paths tested |
+| **D-14** | Leg orchestrator | `run-leg.sh` — 22 steps in dependency order, with all four unattended guards | `--list`, `--dry-run`, and both refusal paths tested |
+
+### ✅ Done during the pre-deployment audit (2026-08-03)
+
+Found by auditing the above against the actual code. Each was a case of the mechanism being right in one
+place and missing in others — the class of defect that produces a plausible-looking wrong number.
+
+| # | Work | What was wrong | What was done |
+|---|---|---|---|
+| **A-1** | Run-dir names lacked the filesystem segment | **9 drivers** pre-computed run-dir names as `<ts>-s<stage>-<name>`, with no `-<leg>-`. `sync-to-s3.sh` and `teardown-preflight.sh` both glob `runs/*-$LEG-s*/`, so **every cell from those sweeps would never reach S3 and the teardown gate would still say GO** | `${LEG}` inserted into all **21** pre-computed names; a `: "${LEG:?…}"` guard added to all 9 drivers |
+| **A-2** | Pre-computed run dir never handed to the wrapper | `sweep-stage4c-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6c.sh` and `sweep-stage6a-extract.sh`'s `smoke()` interpolated `$run_dir/…` into the child's arguments but never set `RECORD_RUN_DIR` — so the child `mkdir -p`'d an **orphan directory** and wrote the cell's app-level primary source there, outside the run dir (cross-cutting pattern **#4**, applied in 6 places and missing in 4) | `RECORD_RUN_DIR="$run_dir"` added to all 4; invariant now checked mechanically |
+| **A-3** | `0_README.md` was always empty | `record-run.sh` referenced `${REPO}`, which D-2 removed. Under `set -u` the heredoc redirection failed, so the file was created at **0 bytes on every run** | Derives `REPO_ROOT` from its own location; title and `INDEX.md` line now carry the `-<fs>-` segment and match the dir exactly |
+| **A-4** | Conda interpreter path hardcoded | `CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604` literal in **16 drivers** — documented nowhere, and it happens to match the *planned* value, so it would work until it silently didn't | New `CONDA_ENVS_DIR` (Table 1) + fail-loud derivation from `$CONDA_ENV_MAIN` / `$CONDA_ENV_ALT` |
+| **A-5** | libcufile path hardcoded to another machine | `LIBCUFILE_117=/usr/local/cuda-13.2/…/libcufile.so.1.17.0` in **8 files**, and **5 of them never checked the file exists** — a missing preload is a silent no-op, so the GPU-direct cells would run on the conda-bundled libcufile and still report numbers | All 8 read the documented `$LIBCUFILE_PRELOAD`, refuse if unset, and verify the file exists |
+| **A-6** | Local-scratch paths hardcoded | `/data/local-nvme/...` literals for the fpsync source and the 4.B pool cache in 5 drivers | Derived from `$SCRATCH_DIR`, fail-loud |
+| **A-7** | Prior-environment results and narrative inside recorded notes | Cell `--note` strings — written into every run's `metadata.json` and `0_README.md` — carried measured figures from another environment, a previous host's NUMA/NIC map, WEKA-only source lists, and pre-assigned conclusions (one asserted an outcome outright). A **D9** violation embedded in the results themselves | All notes rewritten leg-agnostic, with the methodology *why* kept and every prior number and expectation removed |
+| **A-8** | Contract never reached S3 | `sync-to-s3.sh` had no `env-contracts/` path, yet `teardown-preflight.sh` NO-GOes without it and Leg B fetches Leg A's contract from there | Added, with archive (never-delete) semantics |
+| **A-9** | Duplicated held-constant field list had drifted | `teardown-preflight.sh` checked **9** fields against the contract's **17** — it would call a contract "complete" that `env-contract.py write` had itself rejected | Imports `MUST_MATCH` from `env-contract.py`; one source of truth |
+| **A-10** | `runs/.leg-state/` not gitignored | `run-leg.sh`'s done-markers dirtied the tree, and `teardown-preflight.sh` NO-GOes on a dirty tree — so every teardown would block on committing scratch state | Added to `.gitignore` |
+| **A-11** | `run-leg.sh` could not execute 7 of its steps | It invoked each driver bare, but seven dispatch on `$1` and exit 2 with a usage message when given none — the chain would have aborted at step 4.C. `--from`/`--only` were also unvalidated, so a typo silently skipped every step and exited **0** | Each step carries its target with the choice justified inline; the runner word-splits it; both selectors validated against the step-id list. **A missing step surfaced in the process: `sweep-stage6a-extract.sh tier3` existed but nothing ran it**, so 6.A Tier 3 was absent from every leg — now step `6.A.3`. 22 steps |
+| **A-12** | Stage-7 aggregator matched zero cells | Its regex anchored `-s7-` to the timestamp and its glob missed `-s7.N-`. Partly *caused* by `A-1`: it was the only aggregator anchoring on the timestamp, which is why the re-verification pass exists | Stage part unanchored, sub-stage optional, glob widened; 5 naming cases tested |
+| **A-13** | Four smaller confirmed defects | `sweep-stage1-mixed.sh` called `fio` at `/usr/local/bin/fio` while all four siblings use bare `fio` and apt installs `/usr/bin/fio`; `inference-per-slide-stage7.py` silently defaulted to GPU 2 (an index encoding a previous machine's NIC adjacency); `sweep-stage6b-stress.sh` understated `b2c` as 3 cells and `all` as 24 (really 4 and 25); both Tier-2 orchestrators justified `CHUNK_SIZE` with another environment's capacity | Path made bare; the GPU pin now **refuses** rather than defaulting (all four callers pin it explicitly); counts corrected; capacity figures removed and re-derivation tracked as open item **9d** — the *value* still needs the real capacity |
 
 **The safety property common to all of them:** an unset or inconsistent mount now **aborts loudly** instead of
 defaulting. That converts this project's worst failure mode — *silently measures the wrong filesystem while
@@ -61,9 +83,14 @@ the number still looks correct* — into *refuses to run*.
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
 | **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
 | **D-9** | **Core accounting** | Aggregators computing CPU headlines | The reserved-core exclusion set is a **per-filesystem parameter** (**D15**), and the reserved count is only measurable on the real client |
-| **D-10** | **cuFile config + env paths** | **20 files** reference conda/cuFile/CUDA paths — now via variables, but the *values* are unknown | Includes rewriting `GDS-TUNING-CHECKLIST.md` (bannered) and generating `cufile.json` with this instance's own addresses |
+| **D-10** | **cuFile config + env VALUES** | ~20 files reference conda/cuFile/CUDA paths. They now genuinely read documented variables (`$CONDA_ENVS_DIR`, `$LIBCUFILE_PRELOAD`, `$CUFILE_ENV_PATH_JSON`) and refuse if unset — audit items `A-4`/`A-5`; before that they were literals from another machine. What remains is the **values** | Locate the system libcufile and export `LIBCUFILE_PRELOAD`; generate `cufile.json` with this instance's own addresses; rewrite `GDS-TUNING-CHECKLIST.md` (bannered) incl. a Lustre-over-EFA branch |
 | **D-11** | **Lustre tuning** | Stripe layout + client tunables | Needs FSx (Leg B). **Part of "Lustre at maximum" (D7)** — skipping it would understate Lustre and break the fairness basis |
 | **D-13** | **1.7 hydration driver** | New `sweep-stage1-hydrate.sh` | Needs the real bucket. `run-leg.sh` reports this step as **MISSING and aborts** rather than skipping it |
+| **D-15** | **Make step 4.D actually recorded** | `convert-stage4c-rawtiff.sh` | It is `run-leg.sh` step 4.D and its own header calls it a recorded cell, but it **never invokes `record-run.sh`** — no run dir, no telemetry, no `INDEX.md` row, no S3 sync for the 20× conversion the roadmap treats as a measured workload. It also does not fail loud when zero slides resolve from the manifest. Wrapping it changes what a substage produces, so it needs the owner's nod |
+| **D-16** | **Lustre client-side EFA configuration** | `cloud-setup/NEW-CLOUD-SETUP.md` Part 8 | Part 8 enables EFA on the instance and requests it on the file system and installs the generic EC2 EFA software, but never runs AWS's FSx-Lustre EFA client setup — so the client would mount over TCP, forfeiting GDS **and** the per-server-cap escape while still producing numbers. That breaks the "Lustre at maximum" basis (**D7**) invisibly. Needs the current AWS FSx-Lustre client docs, plus a gate that `lnetctl net show` lists an `efa` net |
+| **D-17** | **Leg-B kernel-vs-contract policy** | `cloud-setup/NEW-CLOUD-SETUP.md` Parts 3 and 8.4 | Part 8.4 installs `linux-aws`, which can move the kernel, and `kernel` is a `MUST_MATCH` contract field — so the documented Leg-B procedure can invalidate the comparison the contract exists to protect. `apt-get upgrade -y` in Part 3 can too. Decide: pin the kernel and install the matching `lustre-client-modules-$(uname -r)`, or re-baseline both legs |
+| **D-18** | **Document the per-stage workload parameters** | `NAMING-AND-VARIABLES.md`, `env.example.sh` | 25 `INFER_*` / `EXTRACT_*` / `INGEST_*` / `MIL_*` / `VIEWER_*` variables that the Stage-6.C and Stage-7 orchestrators read are documented in neither file. They all have in-script defaults, so nothing fails — which is the risk: they are the knobs those stages are configured through, and an undocumented knob can silently differ between legs |
+| **D-19** | **Substage 1.8 has no implementation and no marker** | `runs/Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 
 > **Nothing was deleted.** An earlier plan assumed GPUDirect Storage would be dropped, which would have
 > removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**), so
@@ -119,8 +146,9 @@ identically, and per-cell failure is isolated — a bad cell goes `INCOMPLETE` w
 **I/O.** `--stage`, `--run-name`, `--note`, then `--` and the command → a fully populated run dir.
 **Caveats.** Honours `RECORD_RUN_DIR`. Marks `INCOMPLETE` if the command returns non-zero **or** any required
 stream has fewer than two lines.
-**⏳ DEFER:** `--fs` flag (D-3); per-filesystem recorders (D-4); cuFile path accounting (D-6); during-run S3
-sync, per-cell watchdog, canary-abort (D-7).
+**⏳ DEFER:** per-filesystem recorders (D-4) — the current recorder set and the required-stream list are the
+WEKA-over-InfiniBand ones, so on AWS the IB streams are empty and **every run marks `INCOMPLETE` until D-4
+lands**; cuFile path accounting (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
 
 ### `parse-results.py` — raw CSVs → `results.json`
 **What.** Reads a run dir's `raw/` time series and writes aggregate statistics.
@@ -133,7 +161,8 @@ benchmark — which matters when a cell costs hours.
 **What.** Rolls N run dirs into a summary CSV, including block-size × concurrency grids.
 **Why.** The `fio` sweeps share one shape, so one generic aggregator serves all of them.
 **Caveats.** The only aggregator taking an **explicit glob**; the per-stage ones self-locate via `__file__`.
-**⏳ DEFER:** `--fs` pivot (D-3).
+**⏳ DEFER:** the `--fs` pivot. `metadata.json` carries the `fs` field already; teaching the aggregators to
+group on it is part of the per-filesystem adapter work (D-4).
 
 ### `build-tcga-manifest.py` — dataset manifest builder
 **What.** Queries the GDC API and emits a download manifest TSV.
@@ -182,8 +211,11 @@ as **unverifiable → FAILED**, because *an unrecorded fact cannot be shown to h
 non-zero when held-constant fields are missing, so an incomplete contract cannot pass unnoticed.
 
 ### `run-leg.sh` — unattended leg orchestrator ⭐ NEW (`D-14`)
-**What.** Drives one whole leg's sweeps in dependency order: 21 steps, `--dry-run`, `--list`, `--from`,
-`--only`.
+**What.** Drives one whole leg's sweeps in dependency order: **22 steps**, `--dry-run`, `--list`, `--from`,
+`--only`. Each step carries its driver **and that driver's target** where the driver dispatches on `$1`
+(4.C `tier1`, 5 `all`, 6.A `tier1`, 6.A.3 `tier3`, 6.B.3 `all`, 6.B.2 `all`, 6.C `all`, 7 `all`) — the runner
+word-splits the command, and `--from`/`--only` are validated against the step-id list so a typo cannot
+silently skip the whole leg.
 **Why.** A leg is many hours of sweeps that must run in a fixed order because each stage produces inputs the
 next consumes. Driving that by hand overnight invites a missed step or a silently-continued failure.
 **It orchestrates SWEEPS, not cells** — per-cell recording and failure isolation stay with `record-run.sh`.
@@ -225,7 +257,8 @@ mid-block workloads look artificially high or low. They are also the cleanest ap
 project, since `fio` is filesystem-agnostic.
 **I/O.** Host RAM ↔ `$FS_MOUNT/benchmarks/fio-scratch/` → per-cell run dirs.
 **Caveats.** `--unlink=1` cleans per cell. Read sweeps need a layout phase before the timed window.
-**⏳ DEFER:** mount (D-1), repo root (D-2), `--fs` (D-3).
+**⏳ DEFER:** nothing driver-side — mount, repo root and filesystem labelling are all done. The remaining
+work for these cells is in the aggregator: per-filesystem sources (D-4) and the consistency relation (D-5).
 
 ### `chain-stage1-bcd.sh` — sweep chainer
 **What.** Runs several Stage-1 sweeps back to back unattended.
@@ -234,7 +267,9 @@ project, since `fio` is filesystem-agnostic.
 ### `fe-core-fio.sh` · `fe-core-kvikio.sh` — shared cell helpers
 **What.** Single-cell helpers for a `fio` cell and a kvikIO cell, used for baselines and quick checks.
 **Why.** Phase 0 needs the ceiling captured **per block size** without standing up a whole sweep.
-**⏳ DEFER:** `fe-core-kvikio.sh` carries cuFile env paths (D-10) and needs path accounting (D-6).
+**⏳ DEFER:** `fe-core-kvikio.sh` needs cuFile path accounting (D-6) and the GPU pinning order (D-8).
+**⚠ Neither is the Phase-0 ceiling capture** — each runs ONE fixed configuration, while every downstream
+"% of ceiling" divides by the **block-size-matched** Stage 1.0a–d cell. Use the Stage 1.0 sweeps for that.
 
 ### `sweep-stage1-fpsync.sh` + `aggregate-stage1-fpsync.py` — bulk local→filesystem copy
 **What.** Sweeps parallel-copy concurrency over the real corpus from local NVMe.
@@ -289,7 +324,8 @@ visualisation output is not consumed downstream.
 is a per-filesystem parameter** (**D15**) — WEKA reserves cores, Lustre does not. Two slides are expected to
 yield no tissue under default parameters: real tool behaviour, storage- and magnification-independent, and
 therefore a **cross-leg integrity check**.
-**⏳ DEFER:** D-1, D-2, D-3, D-9.
+**⏳ DEFER:** core accounting (D-9) — this stage's headline is the CPU saturation curve, so the
+reserved-core exclusion set must be measured on the real client before the headline means anything.
 
 ---
 
@@ -363,7 +399,8 @@ launcher whose rendezvous binds to a resolved hostname that may not be on a loca
 path (its internal pipelining already provides the parallelism). The cuCIM reader configuration is **re-tuned
 per filesystem, never copied** — the optimum reflects a decode-vs-storage-latency interaction, so imposing
 one side's optimum on the other is a fairness bug that reads as a filesystem difference.
-**⏳ DEFER:** GPU-count range follows the instance (D-8); cuFile env (D-10).
+**⏳ DEFER:** NUMA-aware GPU pinning order (D-8); cuFile env values (D-10). The GPU-count *range* is set:
+N ∈ {1, 2, 4} on both blocks, matching the 4-GPU instance.
 
 ---
 

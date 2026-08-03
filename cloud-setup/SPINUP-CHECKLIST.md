@@ -8,6 +8,11 @@ cheap now and expensive later.
 > 400 Gbps) and `g6e.12xlarge` the budget floor (100 Gbps). Nothing here is locked; see
 > `../runs/STAGES.md` decision log for the revisit trigger.
 
+> **How this file relates to [`NEW-CLOUD-SETUP.md`](NEW-CLOUD-SETUP.md).** This one is **what to decide, and
+> why** — hand it to whoever provisions. That one is **how to do it**, click by click, in order. Where a fact
+> appears in both, **this file is the authority for the reasoning and that file for the procedure**; fix the
+> reason here and the steps there, not the other way round.
+
 ---
 
 ## A. Lead-time items — raise these first, they can block day one
@@ -26,6 +31,15 @@ cheap now and expensive later.
 ---
 
 ## B. The compute instance
+
+2b. ⚠ **The AMI must already carry the GPU stack — and it must be PINNED.** A stock Ubuntu image ships no
+    NVIDIA driver, no CUDA toolkit, no `nvidia-fs` and no `libcufile`, and this project deliberately does not
+    automate installing a GPU driver (it is a reboot-class task). Launching plain Ubuntu therefore stalls the
+    setup before any software work can begin. Use a GPU-bearing image — e.g. the current *AWS Deep Learning
+    Base GPU AMI* on Ubuntu — and **confirm the exact name in the console**, because the variants change.
+    *Then record the AMI ID:* `kernel`, `driver_version` and `cuda_version` are held-constant fields in the
+    cross-leg contract, so **Leg B must rebuild from the same image** or the comparison is invalid. This is
+    still an **open decision** — `C10` in the `cloud-session-open-items` memory.
 
 3. **Instance type: `g6e.24xlarge`** — 96 vCPU, 768 GiB RAM, 4× NVIDIA L40S (178 GiB GPU memory),
    **200 Gbps** network (2 network cards), 2× 1900 GB local NVMe. This is the *client* in both legs; it
@@ -64,7 +78,7 @@ cheap now and expensive later.
     s3://<bucket>/datasets/tcga-brca/         # downloaded once from GDC, reused by both legs
     s3://<bucket>/datasets/camelyon16/        # mirror of the open-data pull
     s3://<bucket>/runs/<leg>/<run-dir>/raw/   # heavy telemetry, synced during and after each run
-    s3://<bucket>/env-contracts/              # leg-a-weka.json, leg-b-lustre.json
+    s3://<bucket>/env-contracts/              # env-contract-leg-{weka,lustre}.json
     ```
 
 ---

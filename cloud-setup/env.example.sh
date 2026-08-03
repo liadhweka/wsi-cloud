@@ -34,7 +34,8 @@ export WEKA_FS_NAME="wsibench"                   # the filesystem NAME (need not
 
 # ── Local scratch & Python (DECIDE NOW) ──────────────────────────────────────────
 export SCRATCH_DIR="/data/local-nvme"            # EPHEMERAL — dies with the instance
-export CONDA_ROOT="${SCRATCH_DIR}/miniforge"
+export CONDA_ROOT="${SCRATCH_DIR}/miniforge"     # the miniforge INSTALL root
+export CONDA_ENVS_DIR="${SCRATCH_DIR}/conda-envs"  # where the ENVS live (not under CONDA_ROOT)
 export CONDA_ENV_MAIN="wsi-cucim-2604"           # matches cloud-setup/env-specs/ filenames
 export CONDA_ENV_ALT="wsi-cucim"
 
@@ -42,8 +43,14 @@ export CONDA_ENV_ALT="wsi-cucim"
 export CLAM_DIR="${PROJECT_HOME}/wsi-tools/CLAM" # tissue detector (Stage 3); cloned during setup
 export CUFILE_CONFIG_DIR="${PROJECT_HOME}/cufile-config"
 export CUFILE_ENV_PATH_JSON="${CUFILE_CONFIG_DIR}/cufile.json"   # generated per instance (D-10)
-# LIBCUFILE_PRELOAD is located on the instance and set PER CELL (kvikIO cells only —
-# cuCIM segfaults under a preloaded newer libcufile). Do not export it globally.
+
+# LIBCUFILE_PRELOAD — the PATH of the system libcufile matched to the loaded
+# nvidia-fs module. Exporting the PATH is safe and required: the kvikIO sweep
+# drivers read it and refuse to start without it. What must NOT be exported
+# globally is LD_PRELOAD itself — the drivers set that per cell, on kvikIO cells
+# only, because cuCIM segfaults under a preloaded newer libcufile.
+# ⏳ D-10: fill in from the real instance (the env-prep session reports it).
+export LIBCUFILE_PRELOAD=""                      # e.g. /usr/local/cuda-<ver>/targets/x86_64-linux/lib/libcufile.so.<ver>
 
 # ── Which leg is running (set per leg) ───────────────────────────────────────────
 export LEG="weka"                                # weka | lustre
@@ -105,6 +112,8 @@ if [ "${1:-}" = "--check" ]; then
   _req FS_MOUNT        "a wrong mount silently measures the other filesystem"
   _req MEMORY_SLUG     "where memories are restored to"
   _req CONDA_ENV_MAIN  "matches the env-specs filenames"
+  _req CONDA_ENVS_DIR  "every sweep driver builds its interpreter path from it"
+  _req SCRATCH_DIR     "the local-scratch source paths derive from it"
 
   echo "── Paths ────────────────────────────────────────────────────────────"
   _dir REPO_DIR
@@ -113,6 +122,7 @@ if [ "${1:-}" = "--check" ]; then
 
   echo "── Recorded at provisioning (blank is OK early) ──────────────────────"
   _rec CLIENT_HOSTNAME        "aggregators filter telemetry by hostname"
+  _rec LIBCUFILE_PRELOAD      "every kvikIO sweep driver refuses to start without it"
   _rec WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12)"
   _rec WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
   _rec AMI_ID                 "Leg B rebuilds from this exact AMI"

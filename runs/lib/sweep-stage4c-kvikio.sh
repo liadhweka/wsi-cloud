@@ -8,30 +8,31 @@
 #   Tier 3 (ceiling stress, conditional)                                            ≈ 6-10 cells
 #
 # WHY this structure:
-#   - Tier 1 isolates the dominant axis (n_buffer = pipelining depth) and answers
-#     the GDS-vs-POSIX question per n_buffer; pre-flight already showed n_buffer
-#     is the strongest knob.
+#   - Tier 1 isolates the pipelining-depth axis (n_buffer) and answers the
+#     GDS-vs-compat question at each depth, so the mode comparison is not read off
+#     a single arbitrary configuration.
 #   - Tier 2 explores secondary axes (task_size, num_threads, preregister) and
-#     introduces the multi-process scaling cells that drive the customer
-#     multi-GPU-DataLoader story.
-#   - Tier 3 is conditional on Tier 1+2 not bottlenecking WEKA. Same pattern as
+#     introduces the multi-process scaling cells, which answer whether the
+#     GPU-direct path scales past a single process for an N-GPU pipeline.
+#   - Tier 3 is conditional on Tier 1+2 not bottlenecking the filesystem. Same pattern as
 #     Stage 4.B's tiered design.
 #
 # WHY BRCA-only for Tier 1:
-#   - Both datasets converged within ~3% in Stage 4.B at peak configs; the
-#     kvikIO+GDS path doesn't care about JPEG-decode cost (it's reading raw
-#     uncompressed bytes); cross-dataset validation deferred to Tier 2 saves
-#     ~50% of Tier 1 wallclock for marginal extra info.
+#   - The kvikIO path reads raw uncompressed bytes, so it is insensitive to the
+#     JPEG-decode cost that distinguishes the two datasets in 4.B; deferring
+#     cross-dataset validation to Tier 2 roughly halves Tier 1 wallclock. Whether
+#     the datasets in fact converge here is measured in Tier 2, not assumed.
 #
 # Every cell measures BOTH GDS-on (compat_mode=off) AND POSIX-compat
 # (compat_mode=on) so the GDS speedup is characterized at every config.
 #
-# Required env (set by this script):
-#   CUFILE_ENV_PATH_JSON → ${CUFILE_ENV_PATH_JSON}
-#   LD_PRELOAD           → /usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-#   CONDA_PREFIX         → /data/local-nvme/conda-envs/wsi-cucim-2604
-#   CUDA_VISIBLE_DEVICES → 2 (single-GPU for Tier 1/2 main sweep; GPU 2 = NUMA-0,
-#                            IB-adjacent per project_a100_state.md)
+# Required env (read by this script; every value is instance-specific — ⏳ D-10):
+#   CUFILE_ENV_PATH_JSON → $CUFILE_ENV_PATH_JSON
+#   LD_PRELOAD           → $LIBCUFILE_PRELOAD (the SYSTEM libcufile matched to nvidia-fs)
+#   CONDA_PREFIX         → $CONDA_ENVS_DIR/$CONDA_ENV_MAIN
+#   CUDA_VISIBLE_DEVICES → single GPU for the Tier 1/2 main sweep. ⏳ D-8: pick the
+#                            NIC-adjacent GPU from the topology map re-derived on
+#                            this instance; the index below is a placeholder.
 #
 # Usage:
 #   ./sweep-stage4c-kvikio.sh tier1               # run all Tier 1 cells
@@ -45,16 +46,25 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
-CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
+: "${LEG:?LEG is unset -- source cloud-setup/env.sh. The run-dir name must carry the filesystem: sync-to-s3.sh and teardown-preflight.sh glob runs/*-$LEG-s*/, so a dir without it is never backed up}"
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source cloud-setup/env.sh}"
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source cloud-setup/env.sh}"
 PY="$CONDA_ENV/bin/python"
 READER="$REPO/runs/lib/read-tiles-kvikio.py"
 RECORD="$REPO/runs/lib/record-run.sh"
 
-LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
+# The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
+# the environment (cloud-setup/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the conda env bundles an older copy, the right path is instance-specific, and a
+# path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
+# quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
+# the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see cloud-setup/NAMING-AND-VARIABLES.md Table 3)}"
+LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
+[ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 # Sanity checks
-[ -f "$LIBCUFILE_117" ] || { echo "missing libcufile 1.17 at $LIBCUFILE_117" >&2; exit 1; }
 [ -f "$CUFILE_JSON" ] || { echo "missing corrected cufile.json at $CUFILE_JSON" >&2; exit 1; }
 [ -f "$READER" ] || { echo "missing reader script at $READER" >&2; exit 1; }
 [ -x "$RECORD" ] || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
@@ -68,10 +78,10 @@ CAM_COORDS=${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches
 
 # Single-GPU pinning for the bulk of Tier 1/2 cells. Multi-process scaling cells
 # override this.
-export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2}"
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"   # ⏳ D-8: NIC-adjacent GPU TBD
 export CONDA_PREFIX="$CONDA_ENV"
 export CUFILE_ENV_PATH_JSON="$CUFILE_JSON"
-export LD_PRELOAD="$LIBCUFILE_117"
+export LD_PRELOAD="$LIBCUFILE_SYSTEM"
 
 # Build a cell name + invoke record-run.sh + reader.
 #   args: mode (faithful|random), dataset (brca|cam16), compat (off|on),
@@ -98,14 +108,14 @@ run_cell() {
   # NOT include "s4.C-" in $run_name (would produce s4.C-s4.C-... double-prefix).
   local run_name="${mode}-${dataset}-nb${n_buffer}-nt${num_threads}-${compat}gds${extra}"
 
-  local note="Stage 4.C ${mode} mode. dataset=${dataset} compat_mode=${compat} n_buffer=${n_buffer} num_threads=${num_threads}. LD_PRELOAD=libcufile-1.17, CUFILE_ENV_PATH_JSON=corrected (6 IPs, allow_compat_mode), single GPU=${CUDA_VISIBLE_DEVICES}. 4096-byte aligned reads via NVIDIA's _get_aligned_read_props. Cold cache via cucim discard_page_cache between slides (faithful) / on first LRU fill (random). Reader: $READER. Extra: $*"
+  local note="Stage 4.C ${mode} mode on fs=${LEG}. dataset=${dataset} compat_mode=${compat} n_buffer=${n_buffer} num_threads=${num_threads}. LD_PRELOAD=${LD_PRELOAD}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}, single GPU=${CUDA_VISIBLE_DEVICES}. 4096-byte aligned reads via NVIDIA's _get_aligned_read_props. Cold cache via cucim discard_page_cache between slides (faithful) / on first LRU fill (random). Reader: $READER. Extra: $*"
 
   # Per-cell summary file inside the run dir is written via the --summary-json
   # arg below; we point it inside the run dir after record-run.sh creates it.
   # record-run.sh's actual dir is $RUNS_ROOT/$TS-s$STAGE-$RUN_NAME.
   local now_utc
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-  local run_dir="$REPO/runs/${now_utc}-s4.C-${run_name}"
+  local run_dir="$REPO/runs/${now_utc}-${LEG}-s4.C-${run_name}"
 
   local reader_args=(
     --mode "$mode"
@@ -128,6 +138,7 @@ run_cell() {
   echo "  reader cmd: $PY $READER ${reader_args[*]}"
   echo "=========================================="
 
+  RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$run_name" \
     --stage 4.C \
@@ -248,7 +259,7 @@ tier2_mp() {
   fi
 
   # GPU assignment per N
-  declare -A GPUS_FOR_N=([1]="2" [2]="2,3" [4]="2,3,6,7")
+  declare -A GPUS_FOR_N=([1]="0" [2]="0,1" [4]="0,1,2,3")   # ⏳ D-8: NUMA/NIC-aware order TBD
 
   for N in 1 2 4; do
     local gpus="${GPUS_FOR_N[$N]}"
@@ -257,11 +268,12 @@ tier2_mp() {
       local note="Stage 4.C Tier 2 (e) multi-process scaling. N=${N} parallel Python processes, each on a different GPU (CUDA_VISIBLE_DEVICES split). GPUs used: ${gpus}. random mode, BRCA, n_buffer=${PEAK_NB}, num_threads=${PEAK_NT}, compat_mode=${compat}. WHY: this is the load-bearing customer-multi-GPU-DataLoader cell — answers 'can the kvikIO+GDS+raw-TIFF path scale past single-process for an N-GPU training pipeline?' Wrapper: $WRAPPER."
       local now_utc
       now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-      local run_dir="$REPO/runs/${now_utc}-s4.C-${run_name}"
+      local run_dir="$REPO/runs/${now_utc}-${LEG}-s4.C-${run_name}"
       echo ""
       echo "=========================================="
       echo "[$now_utc] mp cell: $run_name  (gpus=$gpus)"
       echo "=========================================="
+      RECORD_RUN_DIR="$run_dir" \
       "$RECORD" \
         --run-name "$run_name" --stage 4.C --note "$note" \
         -- "$WRAPPER" "$N" "$gpus" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
@@ -271,9 +283,13 @@ tier2_mp() {
 
 tier3() {
   echo "=== Stage 4.C Tier 3 — ceiling stress + cross-dataset multi-process ==="
-  # Tier 2 found WEKA saturates around 5.36 GB/s at N=2-4 (BRCA random GDS-on).
-  # Tier 3 confirms with N=8 across all 8 GPUs (full NUMA spread), and adds
-  # CAM16 N=4 cells for cross-dataset multi-process validation.
+  # Tier 3 is the CONDITIONAL ceiling-stress tier (Stage-4-Patching.md § 4.C): push
+  # process count past Tier 2's peak until the filesystem-side read plateaus. The
+  # instance has 4 GPUs, so "more processes" means OVERSUBSCRIBING them (8 procs
+  # across 4 GPUs), not more GPUs. Plus CAM16 at the full GPU count for a
+  # cross-dataset multi-process cross-check.
+  # ⏳ D-8: the process→GPU mapping below is round-robin over 0-3; substitute the
+  # NUMA/NIC-aware order once the topology map is derived on this instance.
 
   local PEAK_NB=256
   local PEAK_NT=16
@@ -281,32 +297,34 @@ tier3() {
 
   # ---- N=8 BRCA full NUMA spread (definitive ceiling stress) ----
   for compat in off on; do
-    local run_name="random-brca-N8-nb${PEAK_NB}-nt${PEAK_NT}-${compat}gds-mp"
-    local note="Stage 4.C Tier 3 — N=8 multi-process scaling, BRCA, all 8 GPUs spread NUMA-aware. WHY: Tier 2 found N=4 hits WEKA ceiling (~5.36 GB/s, matching Stage 1.0d synthetic 5.25 GB/s); N=8 confirms multi-process+multi-NUMA doesn't extract more from the single client."
+    local run_name="random-brca-N8over4-nb${PEAK_NB}-nt${PEAK_NT}-${compat}gds-mp"
+    local note="Stage 4.C Tier 3 on fs=${LEG} — ceiling stress: 8 reader processes oversubscribed across the instance's 4 GPUs, BRCA, compat_mode=${compat}. WHY: Tier 2 sweeps multi-process scaling up to one process per GPU; this cell asks whether adding processes beyond that extracts any more from a single client, or whether the plateau is the client rather than the filesystem. Compare against the block-size-matched Stage 1.0 ceiling for this leg. ⏳ D-8: process→GPU pinning order to be re-derived."
     local now_utc
     now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-    local run_dir="$REPO/runs/${now_utc}-s4.C-${run_name}"
+    local run_dir="$REPO/runs/${now_utc}-${LEG}-s4.C-${run_name}"
     echo ""
     echo "=========================================="
-    echo "[$now_utc] tier3 cell: $run_name (gpus=0,1,2,3,4,5,6,7)"
+    echo "[$now_utc] tier3 cell: $run_name (8 procs over gpus 0,1,2,3)"
     echo "=========================================="
+    RECORD_RUN_DIR="$run_dir" \
     "$RECORD" \
       --run-name "$run_name" --stage 4.C --note "$note" \
-      -- "$WRAPPER" 8 "0,1,2,3,4,5,6,7" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
+      -- "$WRAPPER" 8 "0,1,2,3,0,1,2,3" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
   done
 
   # ---- N=4 CAM16 (cross-dataset multi-process) ----
   for compat in off on; do
     local run_name="random-cam16-N4-nb${PEAK_NB}-nt${PEAK_NT}-${compat}gds-mp"
-    local note="Stage 4.C Tier 3 — N=4 multi-process scaling, CAMELYON16, NUMA-aware GPU spread (2,3,6,7). Cross-dataset cross-check of Tier 2 (e) BRCA results."
+    local note="Stage 4.C Tier 3 on fs=${LEG} — N=4 multi-process scaling, CAMELYON16, one process per GPU, compat_mode=${compat}. WHY: cross-dataset cross-check of the Tier 2 multi-process BRCA cells — a scanner-vendor difference in tile layout would show up here. ⏳ D-8: GPU pinning order to be re-derived."
     local now_utc
     now_utc=$(date -u +%Y-%m-%d-%H%M%S)
-    local run_dir="$REPO/runs/${now_utc}-s4.C-${run_name}"
+    local run_dir="$REPO/runs/${now_utc}-${LEG}-s4.C-${run_name}"
     # NOTE: the wrapper currently hardcodes BRCA paths. We need a CAM16 variant
     # or to parameterize it. For now we'll write a CAM16 wrapper inline.
+    RECORD_RUN_DIR="$run_dir" \
     "$RECORD" \
       --run-name "$run_name" --stage 4.C --note "$note" \
-      -- env DATASET=cam16 "$WRAPPER" 4 "2,3,6,7" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
+      -- env DATASET=cam16 "$WRAPPER" 4 "0,1,2,3" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
   done
 }
 

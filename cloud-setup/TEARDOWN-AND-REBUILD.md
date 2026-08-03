@@ -102,8 +102,9 @@ Same `INSTANCE_TYPE`, same `AWS_REGION`/`AWS_AZ`, **the pinned `AMI_ID`**, EFA-c
 security-group rule and the **IAM instance profile** attached at launch.
 
 ### 2. Bootstrap
-Follow [`NEW-CLOUD-SETUP.md`](NEW-CLOUD-SETUP.md) **B2–B6** — user, base tools, SSH↔GitHub, Claude, clone.
-Skip B0/B1 (names and provisioning are already decided).
+Follow [`NEW-CLOUD-SETUP.md`](NEW-CLOUD-SETUP.md) **Part 3 and Part 4** — tmux, base tools, AWS CLI,
+SSH↔GitHub, Claude Code, clone, `env.sh`, restore memories. Skip **Part 0 and Part 1** (names and the AWS
+foundations are already decided and provisioned); Part 2 is covered by step 1 above.
 
 ### 3. Restore the memories — before anything else
 Nothing downstream makes sense without them.
@@ -117,20 +118,38 @@ ls ~/.claude/projects/$SLUG/memory/        # expect the full set, incl. MEMORY.m
 
 ### 4. Re-create the configuration
 ```bash
+aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-<previous-leg>.json" /tmp/
+runs/lib/env-contract.py show --file /tmp/env-contract-leg-<previous-leg>.json   # read the values back
 cp cloud-setup/env.example.sh cloud-setup/env.sh   # env.sh is gitignored, so it did NOT survive
-$EDITOR cloud-setup/env.sh                          # restore values from the contract in S3
+$EDITOR cloud-setup/env.sh                          # restore from the contract you just printed
 source cloud-setup/env.sh
 ./cloud-setup/env.sh --check                        # must pass before anything else
 ```
 > `env.sh` is deliberately gitignored, so **it is always lost.** The contract in S3 is where you recover the
 > values from — another reason step 4 of teardown is not optional.
+>
+> **Two values `--check` will only warn about, and both are needed before a cell runs:** `LIBCUFILE_PRELOAD`
+> (the env-prep session in step 5 reports the new path — the old one is almost certainly wrong on a rebuilt
+> instance) and, for Leg B, `LUSTRE_STRIPE_LAYOUT` (step 6). `AMI_ID`, `INSTANCE_TYPE`, `AWS_REGION` and
+> `AWS_AZ` must match the contract exactly — that is what step 7 verifies.
 
 ### 5. Re-do the ephemeral setup
 Scratch (`$SCRATCH_DIR`) and the Python environments died with the instance. Paste the env-prep prompt:
 > Read the file `cloud-setup/prompt-env-prep-cloud.md` and do everything it says, then report back.
 
-Then rebuild the conda environments from `cloud-setup/env-specs/`, and regenerate the cuFile config for
-**this** instance (its addresses are new).
+Then rebuild the conda environments and regenerate the cuFile config for **this** instance (its addresses
+are new).
+
+> **On a rebuild, use the pinned `*.conda-explicit.txt` files, not the loose recipe.** `conda_env_main` and
+> `python_version` are `MUST_MATCH` contract fields, so the environment is a held-constant input: the point is
+> to reproduce the previous leg's environment **bit-identically**, not to re-solve it. The full route table —
+> which of the four `env-specs/` file types to use when, and why — is in
+> [`handoff-cloud.md`](handoff-cloud.md) § 4.1. If the explicit file will not solve on this instance, that is a
+> **finding to surface**, not something to work around silently: it means the two legs cannot share an
+> environment.
+
+Then do the **Hugging Face login** again (`NEW-CLOUD-SETUP.md` § 7.2) — the token lives in the home directory,
+which did not survive either.
 
 ### 6. Mount the filesystem for this leg
 WEKA at `$WEKA_MOUNT`, or FSx at `$LUSTRE_MOUNT` **over EFA** (EFA is required both for GPUDirect Storage and
@@ -151,9 +170,12 @@ built to avoid.
 ### 8. Re-hydrate the datasets
 From S3, not from the original sources — that's what makes them a byte-identical held-constant input across
 legs. This is also measured cell **1.7**, so run it through `record-run.sh`.
-```bash
-runs/lib/sync-to-s3.sh --mode datasets --src ...    # (or the 1.7 driver, once built — D-13)
-```
+
+⏳ **The hydration driver does not exist yet (`D-13`)** — `run-leg.sh` reports step 1.7 as MISSING and
+aborts rather than skipping it. Note the direction: `sync-to-s3.sh --mode datasets` pushes local → S3, so it
+is **not** the hydration command. Hydration is S3 → `$FS_MOUNT`, and building it is part of the cloud
+session's work.
+
 Then **byte-verify against the manifests** and fail loud on any mismatch.
 
 ### 9. Prove the recording pipeline before spending wallclock

@@ -55,11 +55,24 @@ done
 die() { echo "run-leg.sh: $*" >&2; exit 1; }
 log() { echo "[$(date -u +%FT%TZ)] run-leg: $*"; }
 
-# ── The plan: dependency order from runs/STAGES.md. Sweep drivers are self-contained
-#    (they take no arguments and run their full grid), so a step is just a command.
-#    Format: "<step-id>|<description>|<command>"
+# ── The plan: dependency order from runs/STAGES.md.
+#    Format: "<step-id>|<description>|<command> [args...]"
+#
 #    A command of NOT_YET_BUILT is reported and aborts, rather than being skipped —
 #    a silently-skipped step is how you get a leg with a hole in it.
+#
+#    SEVEN of these drivers dispatch on $1 and exit 2 with a usage message when
+#    invoked bare, so the target is part of the command and the runner word-splits
+#    it. Which target, and why:
+#      4.C   tier1  — Tier 2 is "adaptive from Tier 1 knees" and Tier 3 is
+#                     conditional (Stage-4-Patching.md § 4.C), so neither can be
+#                     pre-scheduled; run them by hand after reading Tier 1.
+#      5     all    — both blocks are full sweeps over N ∈ {1,2,4}.
+#      6.A   tier1  — Tier 3 gets its own step below; Tier 2 is step 6.A.2.
+#      6.B.3 all    — the three num_workers cells against the model's features.
+#      6.B.2 all    — b2a + b2b + b2c. Does NOT include `prep`; corpus generation
+#                     is step 6.B.1, still blocked on the corpus-size decision.
+#      6.C   all     · 7 all — every tier, ascending.
 STEPS=(
   "1.0a|Synthetic ceiling: sequential write|$LIB/sweep-stage1-seqw.sh"
   "1.0b|Synthetic ceiling: sequential read|$LIB/sweep-stage1-seqr.sh"
@@ -68,18 +81,19 @@ STEPS=(
   "1.7|S3 -> filesystem hydration (head-to-head ingest)|NOT_YET_BUILT:D-13 sweep-stage1-hydrate.sh"
   "3.0|Tissue detection -- generates the 20x coords that gate 4/5/6/7|$LIB/sweep-stage3-tissue-detection.sh"
   "4.D|20x raw-TIFF conversion -- gates every kvikIO cell|$LIB/convert-stage4c-rawtiff.sh"
-  "4.C|kvikIO/cuFile from raw-TIFF (both cuFile modes)|$LIB/sweep-stage4c-kvikio.sh"
+  "4.C|kvikIO/cuFile from raw-TIFF, Tier 1 (both cuFile modes)|$LIB/sweep-stage4c-kvikio.sh tier1"
   "4.B|On-the-fly tile reads (OpenSlide + cuCIM CPU)|$LIB/sweep-stage4b-tilesread.sh"
   "4.A|Pre-extract tiles to HDF5|$LIB/sweep-stage4a-patches.sh"
-  "5|ResNet-50 DDP scaling, both backends|$LIB/sweep-stage5-training.sh"
-  "6.A|Foundation-model extraction, Tier 1|$LIB/sweep-stage6a-extract.sh"
+  "5|ResNet-50 DDP scaling, both backends, N in {1,2,4}|$LIB/sweep-stage5-training.sh all"
+  "6.A|Foundation-model extraction, Tier 1 (GPU-count scaling)|$LIB/sweep-stage6a-extract.sh tier1"
+  "6.A.3|Foundation-model extraction, Tier 3 (CAMELYON16 cross-dataset)|$LIB/sweep-stage6a-extract.sh tier3"
   "6.A.2|Foundation-model extraction, Tier 2 (full cohort, chunked)|$LIB/run-stage6a-tier2-chunked-multimodel.sh"
-  "6.B.3|Attention-MIL on real features|$LIB/sweep-stage6b-mil.sh"
+  "6.B.3|Attention-MIL on real features|$LIB/sweep-stage6b-mil.sh all"
   "6.B.1|Synthetic feature corpus generation|NOT_YET_BUILT:needs corpus size decided (open item 5b)"
-  "6.B.2|Small-file / metadata stress sweep|$LIB/sweep-stage6b-stress.sh"
-  "6.C|Concurrent multi-workload + endurance|$LIB/sweep-stage6c.sh"
+  "6.B.2|Small-file / metadata stress sweep|$LIB/sweep-stage6b-stress.sh all"
+  "6.C|Concurrent multi-workload + endurance|$LIB/sweep-stage6c.sh all"
   "2.0|Cataloging / metadata sweep|$LIB/sweep-stage2-properties.sh"
-  "7|Clinical inference deployment (7.1-7.6)|$LIB/sweep-stage7-clinical.sh"
+  "7|Clinical inference deployment (7.1-7.6)|$LIB/sweep-stage7-clinical.sh all"
   "1.5|Bulk local->filesystem copy|$LIB/sweep-stage1-fpsync.sh"
   "1.6|Mixed concurrent ingest + read|$LIB/sweep-stage1-mixed.sh"
 )
@@ -117,6 +131,20 @@ esac
 [ -d "$FS_MOUNT" ] || die "FS_MOUNT='$FS_MOUNT' is not a mounted directory"
 [ -n "${S3_BUCKET:-}" ] || die "S3_BUCKET is unset -- telemetry would not survive teardown"
 
+# --from / --only must name a real step. Without this check a typo (a missing dot,
+# the wrong case) silently matches nothing: every step is skipped and the script
+# exits 0 reporting "0 step(s) run" — which reads as success on an overnight run.
+_step_ids() { for s in "${STEPS[@]}"; do step_id "$s"; done; }
+for _v in FROM ONLY; do
+  _val="${!_v}"
+  [ -n "$_val" ] || continue
+  if ! _step_ids | grep -qxF "$_val"; then
+    echo "run-leg.sh: --${_v,,}='$_val' matches no step. Valid step ids:" >&2
+    _step_ids | tr '\n' ' ' >&2; echo >&2
+    exit 2
+  fi
+done
+
 mkdir -p "$STATE/$LEG" "$LOGDIR"
 MASTER_LOG="$LOGDIR/$(date -u +%F-%H%M)-${LEG}-leg.log"
 
@@ -146,13 +174,17 @@ for s in "${STEPS[@]}"; do
     exit 1
   fi
 
-  [ -x "$cmd" ] || die "step $id: driver not executable: $cmd"
+  # The command may carry a target (e.g. "…/sweep-stage5-training.sh all"), so split
+  # it into an argv array. Quoting the whole string would look for a file named
+  # "<script> all"; leaving it unquoted would also glob.
+  read -r -a argv <<< "$cmd"
+  [ -x "${argv[0]}" ] || die "step $id: driver not executable: ${argv[0]}"
 
   if [ "$DRY" -eq 1 ]; then log "WOULD RUN $id  $desc  ->  $cmd"; continue; fi
 
   log "START $id  $desc"
   step_log="$LOGDIR/$(date -u +%F-%H%M)-${LEG}-s${id}.log"
-  if ! "$cmd" 2>&1 | tee -a "$step_log" "$MASTER_LOG"; then
+  if ! "${argv[@]}" 2>&1 | tee -a "$step_log" "$MASTER_LOG"; then
     log "FAILED $id — aborting the chain (see $step_log)"
     echo "run-leg.sh: step $id failed. NOT continuing: later steps consume this one's" >&2
     echo "            outputs, so proceeding would build cells on missing inputs." >&2

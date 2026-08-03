@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
 # fe-core-fio.sh <label>
-# Frontend-core scaling experiment. Runs the SAME fio random-read at whatever the
-# wekafs client's current frontend-core count is, fully recorded (weka stats +
-# RDMA + fio app-level). Run once per core count -> throughput-vs-cores curve.
+# ONE fully-recorded fio random-read cell at a FIXED block size. A single-cell spot
+# check for varying one client-side knob while holding the cell byte-identical.
 #
-#   ./fe-core-fio.sh fe8      # baseline at current cores
-#   <colleague adds cores; client container restarts>
-#   ./fe-core-fio.sh fe12
-#   ./fe-core-fio.sh fe16 ...
-#   ./fe-core-fio.sh fe8b     # re-run baseline at the end = drift control
+#   ./fe-core-fio.sh <label>        # <label> names the client config under test
+#   ./fe-core-fio.sh <label>-again  # repeat the first label at the end = drift control
 #
-# The ONLY thing that changes between runs is the frontend-core count. Same fio
-# config every time, sized to saturate a high core count so a flat point means a
-# real cap (not an under-driven client). direct=1 = cold (no page cache).
+# The ONLY thing that may change between runs is the knob the label names; the fio
+# config is identical every time, sized to keep the client well driven so that a
+# flat point means a real cap rather than an under-driven client. direct=1 bypasses
+# the page cache, so each cell reads cold from the filesystem.
+#
+# NOTE: varying the *storage client's* reserved core count is a WEKA-leg-only axis —
+# the Lustre client reserves none (D15). Do not read a cross-leg comparison out of a
+# label sequence.
+#
+# ⚠ Not the Phase-0 ceiling capture. This runs ONE block size, and every downstream
+# "% of ceiling" must divide by the *block-size-matched* Stage 1.0a-d cell
+# (sweep-stage1-{seqw,seqr,randw,randr}.sh sweep 5 block sizes × 7 concurrencies).
 set -uo pipefail
 LABEL="${1:?usage: $0 <label, e.g. fe8 = current frontend-core count>}"
 
@@ -21,10 +26,11 @@ LABEL="${1:?usage: $0 <label, e.g. fe8 = current frontend-core count>}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
+: "${LEG:?LEG is unset -- source cloud-setup/env.sh. The run-dir name must carry the filesystem: sync-to-s3.sh and teardown-preflight.sh glob runs/*-$LEG-s*/, so a dir without it is never backed up}"
 RECORD="$REPO/runs/lib/record-run.sh"
 SCRATCH=${FS_MOUNT}/fio-fe-scratch
 STAGE="4.C"
-RUN_NAME="frontend-core-${LABEL}-randr-bs64k"
+RUN_NAME="clientcfg-${LABEL}-randr-bs64k"
 NJOBS=64; IODEPTH=16; BS=64k; SIZE=2G    # 128 GB working set, direct=1
 
 mkdir -p "$SCRATCH"
@@ -38,10 +44,10 @@ if [ ! -e "$SCRATCH/randr.0.0" ]; then
 fi
 
 TS=$(date -u +%Y-%m-%d-%H%M%S)
-export RECORD_RUN_DIR="$REPO/runs/${TS}-s${STAGE}-${RUN_NAME}"
+export RECORD_RUN_DIR="$REPO/runs/${TS}-${LEG}-s${STAGE}-${RUN_NAME}"
 mkdir -p "$RECORD_RUN_DIR"
 
-NOTE="Frontend-core scaling. fio randread bs=${BS} numjobs=${NJOBS} iodepth=${IODEPTH} direct=1 on ${SCRATCH} (reused files). LABEL=${LABEL} = current wekafs client FRONTEND core count (confirm live: sudo weka local resources). Same config at every core count -> throughput-vs-cores curve. PRIMARY metric = WEKA-side Read (weka stats) + RDMA rcv; fio app-level is the cross-check."
+NOTE="Single-cell fio spot check on fs=${LEG}: randread bs=${BS} numjobs=${NJOBS} iodepth=${IODEPTH} direct=1 on ${SCRATCH} (reused files, so this is a pure read cell). LABEL=${LABEL} = the client configuration being varied across successive runs; record what it means in this note when you use it. Identical config at every label -> a throughput-vs-knob curve. PRIMARY = this leg's filesystem-side source per runs/README.md's per-leg source table (never quote a bypassed source); fio app-level is the cross-check. NOT a %-of-ceiling denominator: one block size only — those come from the block-size-matched Stage 1.0 cells."
 
 "$RECORD" --stage "$STAGE" --run-name "$RUN_NAME" --note "$NOTE" -- \
   fio --name=randr --directory="$SCRATCH" --rw=randread --bs="$BS" \
@@ -57,4 +63,5 @@ p99=r["clat_ns"]["percentile"]["99.000000"]/1e3
 print(f"\n  fio app-level: {gbs:.2f} GB/s  ({gibs:.2f} GiB/s)  {r['iops']:.0f} IOPS  p99 {p99:.0f} us")
 PY
 echo "  Run dir: $RECORD_RUN_DIR"
-echo "  WEKA-side read (the primary number): $RECORD_RUN_DIR/raw/weka-stats.csv"
+echo "  The primary number is the filesystem-side read for THIS leg — see"
+echo "  runs/README.md § What gets recorded for which source that is."

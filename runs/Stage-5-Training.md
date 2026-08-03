@@ -108,7 +108,7 @@ curve is what makes the cross-leg comparison meaningful.
 
 **GPU count sweep: N ∈ {1, 2, 4}** — the instance has 4 GPUs *(subject to change; `g6e.48xlarge` would
 extend this to {1,2,4,8})*. **NUMA-aware GPU assignment**, with the topology map re-derived on the real
-instance rather than assumed (**D15**, open item 14).
+instance rather than assumed (**D15**; deferred item `D-9`).
 
 ### cuFile mode scoping for 5.A — a deliberate reduction
 
