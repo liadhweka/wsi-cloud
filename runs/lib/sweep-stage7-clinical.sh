@@ -21,11 +21,15 @@
 #   - Per-process inference batch size scales DOWN as N rises (Q8 revision 2026-05-26).
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 RECORD="$REPO/runs/lib/record-run.sh"
 INFER_WORKER="$REPO/runs/lib/inference-per-slide-stage7.py"
@@ -40,12 +44,12 @@ RAW_HELPER="$REPO/runs/lib/read-after-write-stage7.py"
 [ -f "$RAW_HELPER" ] || { echo "missing $RAW_HELPER" >&2; exit 1; }
 
 # Common paths
-BRCA_SVS=/mnt/liad/data/tcga-brca
-BRCA_RAWTIFF=/mnt/liad/data/tcga-brca-rawtiff
-BRCA_COORDS=/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
-CAM16_SVS=/mnt/liad/data/camelyon16/images
-CAM16_RAWTIFF=/mnt/liad/data/camelyon16-rawtiff
-CAM16_COORDS=/mnt/liad/tissue-detection/3.0/camelyon16/n64/patches
+BRCA_SVS=${FS_MOUNT}/data/tcga-brca
+BRCA_RAWTIFF=${FS_MOUNT}/data/tcga-brca-rawtiff
+BRCA_COORDS=${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
+CAM16_SVS=${FS_MOUNT}/data/camelyon16/images
+CAM16_RAWTIFF=${FS_MOUNT}/data/camelyon16-rawtiff
+CAM16_COORDS=${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches
 BRCA_SUBSET_MANIFEST="$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv"
 CAM16_SUBSET_MANIFEST="$REPO/runs/manifests/camelyon16-stage4a-subset.tsv"
 
@@ -81,7 +85,7 @@ run_single_inference_cell() {
   local preload=""
   [ "$backend" = "kvikio" ] && preload="$LIBCUFILE_117"
 
-  local heatmap_dir="/mnt/liad/heatmaps/stage7/${cell_name}"
+  local heatmap_dir="${FS_MOUNT}/heatmaps/stage7/${cell_name}"
   mkdir -p "$heatmap_dir"
 
   local stage_tag="7.1"
@@ -247,7 +251,7 @@ tier4_streaming() {
   "$RECORD" --run-name "7.4.b-read-after-write" --stage 7.4 \
     --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: WekaFS strong-consistency story — 'just-written file visible to other clients within Y ms'. Customer-decisive single number." \
     -- "$PY" "$RAW_HELPER" \
-       --output-dir "/mnt/liad/heatmaps/stage7/7.4b" \
+       --output-dir "${FS_MOUNT}/heatmaps/stage7/7.4b" \
        --n-slides 20 --bytes-per-write 50000000 \
        --poll-interval-s 0.01 \
        --per-slide-csv "$run_dir/read-after-write-latencies.csv" \

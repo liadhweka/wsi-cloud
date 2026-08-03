@@ -22,7 +22,7 @@ memories, and S3 do. That is exactly why the doc and memory discipline is as hea
 session reads the memories plus the docs and continues without the user re-explaining anything.
 
 So: persist state to disk continuously, sync raw telemetry to S3 *during* runs rather than at the end,
-and treat the teardown checklist (`cloud-setup/SPINUP-CHECKLIST.md` § E) as mandatory, not advisory.
+and treat the teardown & rebuild checklist (`cloud-setup/TEARDOWN-AND-REBUILD.md`, gated by `runs/lib/teardown-preflight.sh`) as mandatory, not advisory.
 
 **`backup.sh` is the single durability entry point** — memories → mirror, then S3 sync, with two
 deliberately different semantics (mirror-with-delete for docs/memories where git is the real backup;
@@ -30,7 +30,8 @@ add-and-update-never-delete for raw telemetry and datasets, so reclaiming local 
 only copy). Canonical rule text and the git-vs-S3 authority split are in `CLAUDE.md` → Recording →
 Durability & backup.
 
-⚠ **The S3 half of `backup.sh` is NOT built yet** — only the memory-mirror half exists. It needs the real
+⚠ **The S3 half exists (`runs/lib/sync-to-s3.sh`) but is UNVERIFIED against a real bucket** — run the
+7-step first-run procedure in its header before trusting it. Formerly not built at all; — only the memory-mirror half exists. It needs the real
 bucket name, region, and instance-profile role, so it is the **cloud session's job**, alongside the
 `record-run.sh` during-run sync. Don't assume a run's telemetry is durable until that exists and has been
 verified once.

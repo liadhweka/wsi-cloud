@@ -40,7 +40,7 @@ Per-worker behavior:
 
 Usage (typically invoked by sweep-stage6b-stress.sh):
   read-feature-files-stage6b.py \\
-    --corpus-dir /mnt/liad/features-6.B-synthetic/syn-N10000-sz50MB-fp32 \\
+    --corpus-dir $FS_MOUNT/features-6.B-synthetic/syn-N10000-sz50MB-fp32 \\
     --pattern random \\
     --n-processes 64 \\
     --runtime 600 --ramp 300 \\

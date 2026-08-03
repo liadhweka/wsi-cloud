@@ -24,11 +24,15 @@
 #       [--n-slides 10] [--cadence-s 60] [--model virchow2] [--backend kvikio]
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 INFER_WORKER="$REPO/runs/lib/inference-per-slide-stage7.py"
 
 # Defaults
@@ -36,9 +40,9 @@ N_SLIDES=10
 CADENCE_S=60
 MODEL="virchow2"
 BACKEND="kvikio"
-COORDS_DIR="/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches"
-RAWTIFF_DIR="/mnt/liad/data/tcga-brca-rawtiff"
-SVS_DIR="/mnt/liad/data/tcga-brca"
+COORDS_DIR="${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches"
+RAWTIFF_DIR="${FS_MOUNT}/data/tcga-brca-rawtiff"
+SVS_DIR="${FS_MOUNT}/data/tcga-brca"
 MANIFEST="$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv"
 RUN_DIR=""
 INFERENCE_BATCH_SIZE=256

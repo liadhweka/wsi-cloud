@@ -44,17 +44,25 @@ file-server cache RAM per TiB (~680 GiB at 25 TiB — comparable to the instance
 cell risks measuring cache rather than storage. Cache state is recorded per cell.
 
 **Current state (2026-07-31): the repo build is COMPLETE; the cloud environment does not exist yet.**
-`~/weka-vs-lustre-cloud/` holds the full doc set (thesis, CLAUDE.md, seven stage roadmaps, STAGES.md with
-decision log **D1–D15**, PRESENTING, SCRIPT-TRACKER, FILESYSTEM-MAP, runbook), the **59-script library
-(syntax-clean, copied intact — nothing deleted, since GDS is retained)**, 7 manifests, 20 memories, the
+`~/wsi-cloud/` holds the full doc set (thesis, CLAUDE.md, seven stage roadmaps, STAGES.md with
+decision log **D1–D15**, PRESENTING, SCRIPT-TRACKER, FILESYSTEM-MAP, runbook), the **63-script library** (syntax-clean;
+59 carried over intact — nothing deleted, since GDS is retained — plus `sync-to-s3.sh`, `env-contract.py`,
+`run-leg.sh`, `teardown-preflight.sh` written here), 7 manifests, 20 memories, the
 cloud provisioning + handoff docs, and the supporting artifacts (`.gitignore`, `.claude/settings.json`,
 conda env specs, `backup.sh`). **Nothing has been benchmarked; every number is `[PENDING]`.**
 
-**What is deliberately NOT done:** every script still targets a different environment and a single
-filesystem. The 14-item deferred-work list (mount retargeting across 36 files, `--fs` plumbing,
-per-filesystem recording adapters across 13 aggregators, S3 sync, cuFile path accounting, Lustre tuning, the
-environment contract, the leg orchestrator) is **the cloud session's job** and is tracked in
-`[[cloud-session-open-items]]`. It is a hard prerequisite for a valid cell, not cleanup.
+**What was done on the build machine (2026-08-03):** mount + repo retargeting (every script resolves the
+mount through `$FS_MOUNT` and **aborts loudly if unset** rather than defaulting — the guard that turns
+"silently measures the wrong filesystem" into "refuses to run"), `--fs` plumbing with label-vs-mount
+cross-validation, the environment contract (`env-contract.py`), the leg orchestrator (`run-leg.sh`), the S3
+sync layer (`sync-to-s3.sh`), the teardown pre-flight verifier, and the naming layer
+(`cloud-setup/NAMING-AND-VARIABLES.md` + `env.example.sh --check`).
+
+**What is deliberately NOT done — 9 items, all genuinely environment-dependent:** per-filesystem recording
+adapters across 13 aggregators, the per-filesystem consistency relations, cuFile path accounting, per-cell
+sync/watchdog/canary-abort, GPU-NUMA re-derivation, core accounting, cuFile config values, Lustre tuning, and
+the 1.7 hydration driver. Tracked in `[[cloud-session-open-items]]` section B. A hard prerequisite for a valid
+cell, not cleanup.
 
 **Next step:** the human provisions per `cloud-setup/SPINUP-CHECKLIST.md`, bootstraps per
 `cloud-setup/NEW-CLOUD-SETUP.md`, and hands off with `cloud-setup/handoff-cloud.md`. The human creates the

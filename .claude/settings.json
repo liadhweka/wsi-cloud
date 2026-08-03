@@ -108,6 +108,8 @@
       "Bash(bash:*)",
       "Bash(sh:*)",
 
+      "Edit(/home/ubuntu/wsi-cloud/**)",
+      "Write(/home/ubuntu/wsi-cloud/**)",
       "Edit(/home/liadhermelin/weka-vs-lustre-cloud/**)",
       "Write(/home/liadhermelin/weka-vs-lustre-cloud/**)",
 

@@ -31,7 +31,7 @@ WEKA run and a Lustre run is which mount `$FS_MOUNT` points at.
 ## Repo layout (in git)
 
 ```
-~/weka-vs-lustre-cloud/
+~/wsi-cloud/
 ├── CLAUDE.md                  # project rules: 11 Rules, recording philosophy, durability,
 │                              #   docs cadence, framing, memory hygiene
 ├── PROJECT-THESIS.md          # the question, held-constant contract, both asymmetries, scope
@@ -185,7 +185,7 @@ Live: `~/.claude/projects/<slug>/memory/`, where `<slug>` is the repo path with 
 script does). To restore on a fresh instance:
 
 ```bash
-SLUG=$(ls ~/.claude/projects/ | grep weka-vs-lustre | head -1)
+SLUG=$(printf '%s' "$PWD" | sed 's#^/#-#; s#/#-#g')   # derived from the repo path
 mkdir -p ~/.claude/projects/$SLUG/memory
 rsync -a claude-memory-mirror/ ~/.claude/projects/$SLUG/memory/
 ```

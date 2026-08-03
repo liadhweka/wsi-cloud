@@ -25,7 +25,11 @@
 #   (Tier 2/3 invocations TBD after Tier 1)
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim
 PYTHON=$CONDA_ENV/bin/python
 READER=$REPO/runs/lib/read-tiles-onthefly.py
@@ -52,8 +56,8 @@ fi
 
 # Dataset entries: name:svs_dir:coords_dir
 DATASETS=(
-  "tcga-brca:/mnt/liad/data/tcga-brca:/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches"
-  "camelyon16:/mnt/liad/data/camelyon16/images:/mnt/liad/tissue-detection/3.0/camelyon16/n64/patches"
+  "tcga-brca:${FS_MOUNT}/data/tcga-brca:${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches"
+  "camelyon16:${FS_MOUNT}/data/camelyon16/images:${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches"
 )
 
 # Cell definitions per tier

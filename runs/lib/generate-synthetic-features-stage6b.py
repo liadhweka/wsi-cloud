@@ -45,7 +45,7 @@ WHY parallel generation via multiprocessing.Pool:
   Parallel generation across 16+ processes saturates wekafs write bandwidth.
 
 Output path convention:
-  /mnt/liad/features-6.B-synthetic/N${count}-sz${size_MB}MB-${dtype}/
+  $FS_MOUNT/features-6.B-synthetic/N${count}-sz${size_MB}MB-${dtype}/
     └── syn-N${count}-sz${size_MB}MB-${dtype}-00000.pt
     └── syn-N${count}-sz${size_MB}MB-${dtype}-00001.pt
     └── ... (count files total)
@@ -54,12 +54,12 @@ Usage:
   # Generate one corpus
   generate-synthetic-features-stage6b.py \\
     --count 10000 --file-size-mb 50 --dtype fp32 \\
-    --output-base /mnt/liad/features-6.B-synthetic \\
+    --output-base $FS_MOUNT/features-6.B-synthetic \\
     --n-workers 16
 
   # Generate the standard 6.B corpus matrix (see "STANDARD_CORPORA" below)
   generate-synthetic-features-stage6b.py --standard-suite \\
-    --output-base /mnt/liad/features-6.B-synthetic
+    --output-base $FS_MOUNT/features-6.B-synthetic
 """
 import argparse
 import json
@@ -69,8 +69,18 @@ import time
 from multiprocessing import Pool
 from pathlib import Path
 
+import os as _os, sys as _sys
+# The mount is a DIMENSION, never a constant: this project runs the identical code
+# against two filesystems. Refuse to guess -- a wrong mount silently measures the
+# other filesystem and the number still looks correct.
+FS_MOUNT = _os.environ.get("FS_MOUNT")
+if not FS_MOUNT:
+    _sys.exit("FATAL: FS_MOUNT is unset -- source cloud-setup/env.sh "
+              "(see cloud-setup/NAMING-AND-VARIABLES.md).")
+
 import numpy as np
 import torch
+
 
 
 EMBED_DIM = 1280  # Virchow2-class; production-typical
@@ -221,7 +231,7 @@ def generate_corpus(count: int, file_size_mb: int, dtype: str,
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--output-base", default="/mnt/liad/features-6.B-synthetic",
+    ap.add_argument("--output-base", default=FS_MOUNT + "/features-6.B-synthetic",
                     help="Root directory for synthetic corpora")
     ap.add_argument("--standard-suite", action="store_true",
                     help="Generate the standard 6.B corpus matrix (see STANDARD_CORPORA in script)")

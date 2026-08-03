@@ -1,8 +1,16 @@
 # Script tracker — per-script reference for `runs/lib/`
 
-> **59 files, all syntax-clean, copied intact.** Nothing has run. **Every script still targets the previous
-> environment's paths and a single filesystem** — the retargeting and per-filesystem adapter work is listed
-> under **Deferred work** below and belongs to the cloud session, which can see the real environment.
+> **63 files** (59 copied intact + `sync-to-s3.sh`, `env-contract.py`, `run-leg.sh`,
+> `teardown-preflight.sh` — new), all
+> syntax-clean. Nothing has run.
+>
+> **Configuration comes from the environment, never from hardcoded literals.** Every variable is enumerated
+> in **`cloud-setup/NAMING-AND-VARIABLES.md`** with its recommended value, and set via
+> **`cloud-setup/env.example.sh`** → `env.sh` (which has a `--check` mode that validates before anything
+> runs). **Read that doc before editing any script** — it is the single source of truth for names, and the
+> reason `$FS_MOUNT` exists.
+>
+> The remaining retargeting and per-filesystem adapter work is listed under **Deferred work** below.
 
 For *what* each stage is see `runs/STAGES.md`; for how to run a cell `runs/README.md`; for where things live
 `FILESYSTEM-MAP.md`; for the rules `CLAUDE.md`.
@@ -25,22 +33,37 @@ cannot be lost by living only here.
 None of this could be done meaningfully before the environment exists. All of it is a **hard prerequisite**
 for a valid cell.
 
-| # | Work | Scope | Why it can't be done now |
+### ✅ Done before leaving the build machine (2026-08-03)
+
+These were mechanical rather than environment-dependent, so they were completed here to shorten the cloud
+session's critical path — and because each has a **silent** failure mode that a guard can convert into a loud
+one.
+
+| # | Work | What was done | Verification |
 |---|---|---|---|
-| **D-1** | **Mount retargeting to `$FS_MOUNT`** | **36 files** hardcode the previous single mount path | The filesystem must become a *dimension*, not a constant. A hardcoded mount silently makes a Lustre cell measure WEKA — the worst possible failure because the number looks fine |
-| **D-2** | **Repo-root retargeting** | **32 files** reference the previous repo/tree path | New repo, new path. Prefer deriving from script location (as `record-run.sh` already does) over a new hardcoded constant |
-| **D-3** | **`--fs {weka\|lustre}` plumbing** | `record-run.sh`, every `sweep-*.sh`, every `aggregate-*.py` | Needs to reach the run-dir name, `metadata.json`, and the aggregator pivot so head-to-head CSVs fall out directly (**D11**) |
-| **D-4** | **Per-filesystem recording adapters** | `record-run.sh`, `parse-results.py`, **13 aggregators** — 13 files currently assume one filesystem's telemetry | Each filesystem exposes different primary sources with different schemas (**D12**). Requires the real stats output to write against |
-| **D-5** | **Per-filesystem consistency relation** | The canary logic in the aggregators | Must be derived from the actual EC scheme (WEKA) and the actual stripe layout (Lustre) — neither exists yet (**D12**) |
-| **D-6** | **cuFile path accounting as a recorded source** | `record-run.sh` + the kvikIO readers | Every kvikIO cell must record GPU-direct-vs-bounced bytes, or it is incomplete (**D8**) |
-| **D-7** | **S3 sync + watchdog + canary-abort** | `record-run.sh`, `backup.sh` | Needs the real bucket, region, and IAM role. Prerequisite for trusting an unattended chain (**D14**) |
-| **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow the instance's GPU count |
-| **D-9** | **Core accounting** | Aggregators computing CPU headlines | The reserved-core exclusion set is a **per-filesystem parameter**, not a constant (**D15**) |
-| **D-10** | **cuFile config + env paths** | **20 files** reference conda/cuFile/CUDA absolute paths | All environment-specific; re-derive, never copy |
-| **D-11** | **Lustre tuning** | New: stripe layout + client tunables | Part of "Lustre at maximum" (**D7**) — skipping it would understate Lustre and break the fairness basis |
-| **D-12** | **Environment-contract writer + verifier** | New script | Leg A writes it, Leg B verifies before its first cell (**D6**) |
-| **D-13** | **1.7 hydration driver** | New `sweep-stage1-hydrate.sh` | Needs the real bucket |
-| **D-14** | **Leg-level orchestrator** | New | Chains a whole leg unattended with checkpoint/resume |
+| **D-1** | Mount retargeting to `$FS_MOUNT` | `/mnt/liad` → `${FS_MOUNT}` in **25 shell files**; the **7 real Python argparse defaults** across 4 files rewritten to derive from `FS_MOUNT` | `grep`: **0 files** retain the old mount path |
+| **D-2** | Repo-root retargeting | The hardcoded `REPO=` line in **28 shell files** replaced with derivation from the script's own location; 14 further files cleaned of other absolute paths | `grep`: **0 files** retain the old repo path |
+| **D-3** | `--fs` plumbing | `record-run.sh` now **requires** `--fs {weka\|lustre}`, puts it in the run-dir name and as a first-class `metadata.json` field — **and cross-validates it against `FS_MOUNT`**, refusing to record a run whose label might not match the filesystem written to | All four paths tested: missing, invalid, mismatched, agreeing |
+| **D-12** | Environment contract | `env-contract.py` — `write` / `verify` / `show`, with the **held-constant vs expected-to-differ field split** that makes verification meaningful | Round-tripped: 0 violations, unrecorded fields correctly reported as *unverifiable* and failing |
+| **D-14** | Leg orchestrator | `run-leg.sh` — 21 steps in dependency order, with all four unattended guards | `--list`, `--dry-run`, and both refusal paths tested |
+
+**The safety property common to all of them:** an unset or inconsistent mount now **aborts loudly** instead of
+defaulting. That converts this project's worst failure mode — *silently measures the wrong filesystem while
+the number still looks correct* — into *refuses to run*.
+
+### ⏳ Still deferred — genuinely needs the real environment
+
+| # | Work | Scope | Why it can't be done yet |
+|---|---|---|---|
+| **D-4** | **Per-filesystem recording adapters** | `record-run.sh`, `parse-results.py`, **13 aggregators** that assume one filesystem's telemetry | Each filesystem exposes different primary sources with different **schemas** (**D12**). Requires the real stats output to write against |
+| **D-5** | **Per-filesystem consistency relation** | The canary logic in the aggregators | Must be derived from the actual EC scheme (WEKA) and the actual stripe layout (Lustre) — neither exists yet |
+| **D-6** | **cuFile path accounting as a recorded source** | `record-run.sh` + the kvikIO readers | Needs the real cuFile/nvidia-fs stats format. Every kvikIO cell must record GPU-direct-vs-bounced bytes or it is incomplete (**D8**) |
+| **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
+| **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
+| **D-9** | **Core accounting** | Aggregators computing CPU headlines | The reserved-core exclusion set is a **per-filesystem parameter** (**D15**), and the reserved count is only measurable on the real client |
+| **D-10** | **cuFile config + env paths** | **20 files** reference conda/cuFile/CUDA paths — now via variables, but the *values* are unknown | Includes rewriting `GDS-TUNING-CHECKLIST.md` (bannered) and generating `cufile.json` with this instance's own addresses |
+| **D-11** | **Lustre tuning** | Stripe layout + client tunables | Needs FSx (Leg B). **Part of "Lustre at maximum" (D7)** — skipping it would understate Lustre and break the fairness basis |
+| **D-13** | **1.7 hydration driver** | New `sweep-stage1-hydrate.sh` | Needs the real bucket. `run-leg.sh` reports this step as **MISSING and aborts** rather than skipping it |
 
 > **Nothing was deleted.** An earlier plan assumed GPUDirect Storage would be dropped, which would have
 > removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**), so
@@ -116,6 +139,78 @@ benchmark — which matters when a cell costs hours.
 **What.** Queries the GDC API and emits a download manifest TSV.
 **Why.** Makes the dataset selection reproducible and auditable rather than an undocumented download.
 **Caveats.** Used once during pre-leg staging into S3, not per leg.
+
+### `sync-to-s3.sh` — the durability layer ⭐ NEW
+**What.** Pushes everything teardown-critical to S3. Three modes: `--mode full` (called by `backup.sh`),
+`--mode run --run-dir <path>` (one run's raw telemetry), `--mode datasets --src <path>`. Plus `--dry-run`.
+**Why.** Instance-local scratch and **both filesystem mounts are ephemeral** — they die with the instance and
+the cluster, and the instance is rebuilt between legs. Without this, a teardown destroys every run's raw time
+series. git covers all the small text; S3 covers the heavy write-once data git cannot hold.
+**Why two sync semantics — the whole point of the script.** **MIRROR** (`--delete`) for docs and the memory
+mirror, where local is genuinely authoritative and git backs it independently, so an exact reflection is
+safe. **ARCHIVE** (never `--delete`) for telemetry and datasets, because we will want to reclaim local disk
+by pruning old telemetry and a delete-sync would then **destroy the only remaining copy**.
+**Why NOT `--no-overwrite` for the archive group,** even though it sounds safer: telemetry CSVs **grow**
+while a run is in flight, and that flag only transfers files absent at the destination — so the first sync
+would upload a partial CSV and no later sync would ever fix it. Default comparison (size differs *or* source
+newer) is what handles growing files. Documented in the script header so it isn't "improved" back.
+**I/O.** Config entirely from the environment (`S3_BUCKET`, `LEG`, `AWS_REGION`) — nothing hardcoded.
+**Caveats.** Fails early and loudly on missing credentials or an unreachable bucket, so a sweep does not
+discover at 4am that hours of telemetry had nowhere to land. **Every guard path exits non-zero**, which is
+what lets a sweep chain abort on a failed sync. Verifies object count after syncing rather than assuming
+success (Rule 11).
+**⏳ `UNVERIFIED AGAINST A REAL BUCKET`** — written before the environment existed. Its header carries a
+**7-step FIRST-RUN PROCEDURE**; run it before trusting the script and then remove the banner. **Step 6 is the
+one that matters:** create a throwaway file under an *archive* path, sync, delete it locally, sync again, and
+confirm it does **not** disappear from S3. Also tracked as open item `D-7`.
+
+### `env-contract.py` — cross-leg comparability enforcement ⭐ NEW (`D-12`)
+**What.** `write` collects every environment fact into JSON at the end of a leg; `verify` compares the current
+environment against a reference contract before the next leg's first cell; `show` prints one readably.
+**Why.** The two legs run at **different times on a rebuilt instance**. Anything that drifts — AMI, driver,
+dataset bytes, script commit — is **indistinguishable from a filesystem difference** once the numbers exist.
+This makes comparability a mechanical check rather than a judgement call.
+**The load-bearing design decision:** fields are split into **`MUST_MATCH`** (instance type, region/AZ, AMI,
+kernel, driver/CUDA/cuFile versions, GPU/CPU/memory, script commit, dataset manifest hash, env name, Python)
+and **`MAY_DIFFER`** (everything filesystem-specific — mount, backend config, EC scheme, FSx tier, stripe
+layout, client cores/NICs). *Why it matters:* a verifier that ignored the distinction would either fail on
+everything or catch nothing, since the filesystem fields are **supposed** to differ — they are the variable
+under test.
+**Caveats.** Facts are collected automatically where possible and read from the environment otherwise;
+anything unavailable is recorded as **null, never guessed**. `verify` treats a null on a held-constant field
+as **unverifiable → FAILED**, because *an unrecorded fact cannot be shown to have matched*. `write` also exits
+non-zero when held-constant fields are missing, so an incomplete contract cannot pass unnoticed.
+
+### `run-leg.sh` — unattended leg orchestrator ⭐ NEW (`D-14`)
+**What.** Drives one whole leg's sweeps in dependency order: 21 steps, `--dry-run`, `--list`, `--from`,
+`--only`.
+**Why.** A leg is many hours of sweeps that must run in a fixed order because each stage produces inputs the
+next consumes. Driving that by hand overnight invites a missed step or a silently-continued failure.
+**It orchestrates SWEEPS, not cells** — per-cell recording and failure isolation stay with `record-run.sh`.
+**The four guards, each with its reason:** (1) **abort the chain on any step failure** — later steps consume
+earlier outputs, so continuing would build cells on missing inputs; (2) **checkpoint + resume** via per-step
+done-markers, so a crash re-runs only what is missing; (3) **S3 sync after every step**, because both mounts
+and local scratch are ephemeral; (4) **tee everything** — on an overnight run the log is the only forensic
+record.
+**Caveats.** Refuses to start without `FS_MOUNT`/`S3_BUCKET`, and **refuses if `--leg` disagrees with
+`FS_MOUNT`**. A step whose driver does not exist yet is reported **MISSING and aborts** rather than being
+skipped — *a leg with a hole in it looks complete in `INDEX.md`*, which is the failure this prevents. Two
+steps are currently MISSING by design: 1.7 (`D-13`) and 6.B.1 (needs the corpus-size decision, open item 5b).
+
+### `teardown-preflight.sh` — prove nothing is lost, before tearing down ⭐ NEW
+**What.** Checks seven things and prints **GO / NO-GO**: nothing in flight · live memories mirrored · git clean
+**and pushed** · environment contract complete **and in S3** · **every local run dir's raw telemetry present in
+S3** · nothing else stranded on ephemeral storage · rebuild inputs (AMI, type, region/AZ) recorded.
+**Why it VERIFIES rather than tears down.** Terminating the instance and deleting filesystems is irreversible,
+so it stays a human action. The part worth automating is not the destruction — it is **proving** nothing is
+lost, because that is the part a person does badly: it is easy to assume a sync worked, and impossible to
+eyeball whether some run dir exists only on a disk about to disappear. A script that destroyed *and* had a bug
+in its own verification would be the worst possible tool.
+**The check that matters** is the per-run S3 comparison: `raw/` is gitignored, so S3 is its only home, and a
+silently-failed sync is invisible until you look for data that no longer exists. `--quick` skips exactly that
+check, so **never use it before a real teardown**.
+**Caveats.** Exits non-zero on NO-GO, deliberately — never wire it into an automated teardown that ignores the
+exit code. Companion checklist: `cloud-setup/TEARDOWN-AND-REBUILD.md`.
 
 ---
 

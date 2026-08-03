@@ -27,7 +27,7 @@
 # (compat_mode=on) so the GDS speedup is characterized at every config.
 #
 # Required env (set by this script):
-#   CUFILE_ENV_PATH_JSON → /home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+#   CUFILE_ENV_PATH_JSON → ${CUFILE_ENV_PATH_JSON}
 #   LD_PRELOAD           → /usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
 #   CONDA_PREFIX         → /data/local-nvme/conda-envs/wsi-cucim-2604
 #   CUDA_VISIBLE_DEVICES → 2 (single-GPU for Tier 1/2 main sweep; GPU 2 = NUMA-0,
@@ -40,14 +40,18 @@
 #   ./sweep-stage4c-kvikio.sh tier3               # Tier 3 conditional
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 READER="$REPO/runs/lib/read-tiles-kvikio.py"
 RECORD="$REPO/runs/lib/record-run.sh"
 
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 # Sanity checks
 [ -f "$LIBCUFILE_117" ] || { echo "missing libcufile 1.17 at $LIBCUFILE_117" >&2; exit 1; }
@@ -55,12 +59,12 @@ CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
 [ -f "$READER" ] || { echo "missing reader script at $READER" >&2; exit 1; }
 [ -x "$RECORD" ] || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
 
-BRCA_RAWTIFF=/mnt/liad/data/tcga-brca-rawtiff
-CAM_RAWTIFF=/mnt/liad/data/camelyon16-rawtiff
+BRCA_RAWTIFF=${FS_MOUNT}/data/tcga-brca-rawtiff
+CAM_RAWTIFF=${FS_MOUNT}/data/camelyon16-rawtiff
 BRCA_MANIFEST=$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv
 CAM_MANIFEST=$REPO/runs/manifests/camelyon16-stage4a-subset.tsv
-BRCA_COORDS=/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
-CAM_COORDS=/mnt/liad/tissue-detection/3.0/camelyon16/n64/patches
+BRCA_COORDS=${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
+CAM_COORDS=${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches
 
 # Single-GPU pinning for the bulk of Tier 1/2 cells. Multi-process scaling cells
 # override this.

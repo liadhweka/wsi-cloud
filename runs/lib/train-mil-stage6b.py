@@ -41,7 +41,7 @@ Per-step CSV columns (mirrors Stage 5):
 
 Usage (typically invoked by sweep-stage6b-mil.sh):
   train-mil-stage6b.py \\
-    --features-dir /mnt/liad/features/6.A/virchow2/brca_full \\
+    --features-dir $FS_MOUNT/features/6.A/virchow2/brca_full \\
     --num-workers 4 \\
     --ramp 300 --runtime 900 \\
     --embedding-dim 1280 \\

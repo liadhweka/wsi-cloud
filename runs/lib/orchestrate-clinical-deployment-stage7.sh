@@ -43,11 +43,15 @@
 #     --inference-batch-size 256 --runtime 1500 --ramp 300 --run-dir <run-dir>
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 INFER_WORKER="$REPO/runs/lib/inference-per-slide-stage7.py"
 
 # Defaults (override via env or CLI)
@@ -56,17 +60,17 @@ INFER_BACKEND="${INFER_BACKEND:-kvikio}"
 INFER_CACHE_POLICY="${INFER_CACHE_POLICY:-warm}"
 INFER_HEATMAP_FORMAT="${INFER_HEATMAP_FORMAT:-tiff5x}"
 INFER_MANIFEST="${INFER_MANIFEST:-$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv}"
-INFER_COORDS_DIR="${INFER_COORDS_DIR:-/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches}"
-INFER_RAWTIFF_DIR="${INFER_RAWTIFF_DIR:-/mnt/liad/data/tcga-brca-rawtiff}"
-INFER_SVS_DIR="${INFER_SVS_DIR:-/mnt/liad/data/tcga-brca}"
+INFER_COORDS_DIR="${INFER_COORDS_DIR:-${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches}"
+INFER_RAWTIFF_DIR="${INFER_RAWTIFF_DIR:-${FS_MOUNT}/data/tcga-brca-rawtiff}"
+INFER_SVS_DIR="${INFER_SVS_DIR:-${FS_MOUNT}/data/tcga-brca}"
 
 INGEST_N="${INGEST_N:-4}"
 INGEST_SRC="${INGEST_SRC:-/data/local-nvme/fpsync-source/tcga-brca}"
-INGEST_DST="${INGEST_DST:-/mnt/liad/runs-stage7-ingest-target}"
+INGEST_DST="${INGEST_DST:-${FS_MOUNT}/runs-stage7-ingest-target}"
 VIEWER_N="${VIEWER_N:-4}"
-VIEWER_SCRATCH="${VIEWER_SCRATCH:-/mnt/liad/benchmarks/fio-scratch-7-viewer}"
+VIEWER_SCRATCH="${VIEWER_SCRATCH:-${FS_MOUNT}/benchmarks/fio-scratch-7-viewer}"
 HEATMAP_VIEWER_N="${HEATMAP_VIEWER_N:-4}"
-HEATMAP_VIEWER_DIR="${HEATMAP_VIEWER_DIR:-/mnt/liad/heatmaps/7.5/viewer-scratch}"
+HEATMAP_VIEWER_DIR="${HEATMAP_VIEWER_DIR:-${FS_MOUNT}/heatmaps/7.5/viewer-scratch}"
 
 # Args
 WORKLOADS=""

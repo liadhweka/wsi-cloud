@@ -1,0 +1,2 @@
+192.168.1.1/default /mnt/default wekafs rw,relatime,writecache,inode_bits=auto,readahead_kb=32768,dentry_max_age_positive=1000,dentry_max_age_negative=0,container_name=client 0 0
+192.168.1.1/liadfs /mnt/liad wekafs rw,relatime,writecache,inode_bits=auto,readahead_kb=32768,dentry_max_age_positive=1000,dentry_max_age_negative=0,container_name=client 0 0

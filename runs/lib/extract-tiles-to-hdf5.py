@@ -15,9 +15,9 @@ the /dev/shm chmod fix from Stage 2 pre-flight).
 Usage:
     extract-tiles-to-hdf5.py \
         --concurrency N \
-        --svs-dir /mnt/liad/data/<dataset>/ \
-        --coords-dir /mnt/liad/tissue-detection/3.0/<dataset>/n64/patches/ \
-        --output-dir /mnt/liad/patches/4.A/<dataset>/n<N>/ \
+        --svs-dir $FS_MOUNT/data/<dataset>/ \
+        --coords-dir $FS_MOUNT/tissue-detection/3.0/<dataset>/n64/patches/ \
+        --output-dir $FS_MOUNT/patches/4.A/<dataset>/n<N>/ \
         --latency-csv /tmp/.../<dataset>-n<N>-latencies.csv
 
 Per-slide failures recorded in the latency CSV's `error` column but don't abort

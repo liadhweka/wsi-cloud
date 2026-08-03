@@ -67,6 +67,10 @@ runs/sweep-logs/
 credentials*
 .aws/
 
+# The filled-in configuration. env.example.sh IS tracked (it's the template and the
+# documented list of every variable); env.sh holds real values and stays local.
+cloud-setup/env.sh
+
 # ── Local scratch (mounted outside the repo; defensive) ────────────────────────
 /data/
 

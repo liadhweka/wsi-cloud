@@ -53,7 +53,8 @@ Two rules that follow, and that you will be tempted to bend:
 - **All memories, end to end.** `MEMORY.md` first, then every file. Load-bearing:
   - **`cloud-session-open-items`** — **your work list.** Section A must be resolved before the first
     measured cell; section B is what you build; section C is what you watch. **Add to it in the same edit
-    that surfaces something new; move finished items to Resolved with the date.**
+    that surfaces something new; DELETE an item when it is done** — that file holds only open items, and
+    completions are recorded in the relevant doc instead.
   - **`weka-vs-lustre-cloud-project`** — what the project is and why.
   - **`weka-vs-lustre-cloud-open-decisions`** — what is still *assumed*, with an index of every place each
     assumption is referenced. Keep the index current.
@@ -71,14 +72,22 @@ Two rules that follow, and that you will be tempted to bend:
 - **`runs/README.md`** — the runbook, **both canaries**, the silent-skip hazards, the cross-leg integrity
   gates.
 - **`SCRIPT-TRACKER.md`** — per-script reference, the **cross-cutting patterns** (eight hard-won ones; each
-  exists because its absence caused a real failure), and the **`D-1` … `D-14` deferred-work table** that is
-  most of your build job.
+  exists because its absence caused a real failure), and the **deferred-work table** (`D-4`…`D-13`, nine items) that is
+  most of your build job — plus the table above it recording what was already completed and how it was
+  verified.
+- **`cloud-setup/NAMING-AND-VARIABLES.md`** — **read this before touching any script.** Every path, name, and
+  identifier that varies between environments, with a recommended value, split into *decide now* / *record at
+  provisioning* / *derived*. Its companion `env.example.sh` → `env.sh` is how configuration reaches the
+  scripts, and `./cloud-setup/env.sh --check` validates the whole set before anything runs. **Nothing is
+  hardcoded; nothing silently defaults.**
 - **`FILESYSTEM-MAP.md`** and **`PRESENTING.md`**.
 
 ## STEP 3 — Where things stand
 
-- **Docs and methodology: complete.** Scripts: **59 files, syntax-clean, copied intact — and still targeting
-  a different environment and a single filesystem.**
+- **Docs and methodology: complete.** Scripts: **63 files, syntax-clean.** Mount/repo retargeting, `--fs`
+  plumbing, the environment contract, the leg orchestrator, and the S3 sync layer were **already done on the
+  build machine** — every script now resolves the mount through `$FS_MOUNT` and **aborts loudly if it is
+  unset**, rather than defaulting.
 - **What is missing is exactly the deferred work in `SCRIPT-TRACKER.md`'s table and section B of the
   open-items memory.** That is not incidental cleanup; **it is a hard prerequisite for a valid cell.**
 - **Leg A is WEKA.** Leg B is FSx for Lustre, provisioned later. The instance is the same in both.
@@ -138,7 +147,7 @@ while they run.
 
 ### 4.3 — The deferred script work (the core build task)
 
-Work `D-1` … `D-14` from `SCRIPT-TRACKER.md` / open-items section B. **This is where the comparison's
+Work `D-4` … `D-13` (nine items) from `SCRIPT-TRACKER.md` / open-items section B. **This is where the comparison's
 validity is won or lost.** Priorities and traps:
 
 - **`D-1` mount retargeting to `$FS_MOUNT` (36 files) is the highest-severity item.** A hardcoded mount makes
@@ -154,6 +163,11 @@ validity is won or lost.** Priorities and traps:
   cell. Either answer is usable — the Stage 4 matrix is built for both — but it must be *measured*.
 - **`D-7` S3 sync + per-cell watchdog + canary-aborts-the-chain** before any unattended run. A 3am canary
   failure that waits to be noticed produces hours of contaminated cells that look fine.
+  **`runs/lib/sync-to-s3.sh` already exists** and implements both sync semantics — but it carries an
+  **`UNVERIFIED AGAINST A REAL BUCKET`** banner. **Run the 7-step FIRST-RUN PROCEDURE in its header before
+  trusting it, then remove the banner.** Step 6 is the one that matters: prove that a file deleted locally
+  under an *archive* path does **not** disappear from S3. What is still missing is wiring `--mode run` into
+  `record-run.sh`, the per-cell watchdog, and the canary abort.
 - **`D-8`/`D-9` re-derive the GPU/NUMA map, the GPU-count ranges, and the core accounting** — including how
   many cores the storage client reserves, which is a per-filesystem parameter and part of that filesystem's
   reported cost (**D15**).
@@ -192,6 +206,10 @@ both canaries every sweep; fill numbers into the roadmaps as they land — **num
 narrative.**
 
 ### 4.7 — Close out Leg A
+
+**Follow `cloud-setup/TEARDOWN-AND-REBUILD.md` § Teardown** — it is the do-every-time checklist, and
+`runs/lib/teardown-preflight.sh` is the GO/NO-GO gate that proves nothing is lost. The steps below are its
+project-specific parts.
 
 1. Fill in the roadmaps and `PRESENTING.md` — **still scoped as half an unfinished comparison.**
 2. **Write the environment contract** to S3: instance type, region/AZ, AMI, kernel, driver/CUDA versions,

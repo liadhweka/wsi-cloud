@@ -34,14 +34,18 @@
 #
 # Output:
 #   - one runs/<TS>-s4.A-patches-<dataset>-n<N>/ per cell
-#   - per-slide tile HDF5s at /mnt/liad/patches/4.A/<dataset>/n<N>/<slide-id>.h5
+#   - per-slide tile HDF5s at ${FS_MOUNT}/patches/4.A/<dataset>/n<N>/<slide-id>.h5
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim
 PYTHON=$CONDA_ENV/bin/python
 EXTRACTOR=$REPO/runs/lib/extract-tiles-to-hdf5.py
-PATCHES_OUT=/mnt/liad/patches/4.A
+PATCHES_OUT=${FS_MOUNT}/patches/4.A
 LATENCY_DIR=/tmp/stage4a-latencies
 LOG_DIR=$REPO/runs/sweep-logs
 MANIFEST_DIR=$REPO/runs/manifests
@@ -68,8 +72,8 @@ else
 fi
 
 DATASETS=(
-  "tcga-brca:/mnt/liad/data/tcga-brca:/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches:$MANIFEST_DIR/tcga-brca-stage4a-subset.tsv"
-  "camelyon16:/mnt/liad/data/camelyon16/images:/mnt/liad/tissue-detection/3.0/camelyon16/n64/patches:$MANIFEST_DIR/camelyon16-stage4a-subset.tsv"
+  "tcga-brca:${FS_MOUNT}/data/tcga-brca:${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches:$MANIFEST_DIR/tcga-brca-stage4a-subset.tsv"
+  "camelyon16:${FS_MOUNT}/data/camelyon16/images:${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches:$MANIFEST_DIR/camelyon16-stage4a-subset.tsv"
 )
 TOTAL=$(( ${#DATASETS[@]} * ${#CONCURRENCIES[@]} ))
 

@@ -4,7 +4,7 @@
 # Full TCGA-BRCA (1131 slides with non-empty CLAM coords) raw-TIFF conversion +
 # feature extraction in 6 chunks (200 + 200 + 200 + 200 + 200 + 131 slides per
 # chunk by default). Each chunk:
-#   1. Convert that chunk's SVS files → raw-TIFF on /mnt/liad (transient)
+#   1. Convert that chunk's SVS files → raw-TIFF on ${FS_MOUNT} (transient)
 #   2. Run the Stage 6.A extractor against that chunk (writes per-slide .pt to
 #      the persistent --output-dir; raw-TIFF is the transient input only)
 #   3. Delete that chunk's raw-TIFF dir to reclaim disk
@@ -30,7 +30,7 @@
 # Usage (typically invoked by sweep-stage6a-extract.sh tier2):
 #   ./run-stage6a-tier2-chunked.sh \\
 #       --model virchow2 --n-gpus 4 --gpu-csv 2,3,6,7 \\
-#       --output-dir /mnt/liad/features/6.A/virchow2/brca_full \\
+#       --output-dir ${FS_MOUNT}/features/6.A/virchow2/brca_full \\
 #       --extraction-steps-csv <run-dir>/extraction-steps.csv \\
 #       --per-slide-csv <run-dir>/per-slide.csv \\
 #       --summary-json <run-dir>/extraction-summary.json \\
@@ -38,15 +38,19 @@
 #       [--chunk-size 200] [--keep-rawtiff]
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 CONVERTER="$REPO/runs/lib/convert-rawtiff-20x.py"
 EXTRACTOR="$REPO/runs/lib/extract-features-foundation-stage6.py"
 
 # Fixed paths
-BRCA_SVS=/mnt/liad/data/tcga-brca
-BRCA_COORDS=/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
+BRCA_SVS=${FS_MOUNT}/data/tcga-brca
+BRCA_COORDS=${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
 BRCA_FULL_MANIFEST=$REPO/runs/manifests/tcga-brca-full40x-stage4a-format.tsv
 
 # Conversion: TRUE 20× raw-TIFF via convert-rawtiff-20x.py (see CONVERTER above).
@@ -121,7 +125,7 @@ echo "[chunked] $N_CHUNKS chunks total"
 T_ORCH_START=$(date +%s.%N)
 
 # Working state
-CHUNK_BASE=/mnt/liad/data/tcga-brca-rawtiff-chunk
+CHUNK_BASE=${FS_MOUNT}/data/tcga-brca-rawtiff-chunk
 TMP_BASE=$(mktemp -d /tmp/stage6a-tier2-chunked-XXXXXX)
 trap 'echo "[chunked] cleanup tmp"; rm -rf "$TMP_BASE"' EXIT
 

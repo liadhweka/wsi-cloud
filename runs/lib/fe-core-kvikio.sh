@@ -10,7 +10,9 @@
 set -uo pipefail
 LABEL="${1:?usage: $0 <label, e.g. fe8 = current frontend-core count>}"
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RECORD="$REPO/runs/lib/record-run.sh"
 MULTI="$REPO/runs/lib/run-multiproc-kvikio.sh"
 STAGE="4.C"

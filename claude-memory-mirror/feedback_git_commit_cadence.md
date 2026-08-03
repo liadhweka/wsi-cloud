@@ -26,4 +26,4 @@ user commits and pushes**; do not do it autonomously.
 
 **Cloud addition:** git push is also a **teardown prerequisite**. The repo is the only thing that
 survives an instance rebuild, so the full teardown order is: handoff prompt → `./backup.sh` →
-`git push` → verified S3 sync → environment contract written. See `cloud-setup/SPINUP-CHECKLIST.md` § E.
+`git push` → verified S3 sync → environment contract written. See `cloud-setup/TEARDOWN-AND-REBUILD.md` (and `runs/lib/teardown-preflight.sh`, which gates it).

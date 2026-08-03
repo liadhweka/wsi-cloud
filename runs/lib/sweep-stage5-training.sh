@@ -20,14 +20,18 @@
 #   ./sweep-stage5-training.sh 5.A.1      # run a specific cell only
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 TRAINER="$REPO/runs/lib/train-resnet50-stage5.py"
 RECORD="$REPO/runs/lib/record-run.sh"
 
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 # Sanity checks
 [ -f "$LIBCUFILE_117" ] || { echo "missing libcufile 1.17 at $LIBCUFILE_117" >&2; exit 1; }
@@ -36,10 +40,10 @@ CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
 [ -x "$RECORD" ]        || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
 [ -x "$PY" ]            || { echo "missing python at $PY" >&2; exit 1; }
 
-BRCA_RAWTIFF=/mnt/liad/data/tcga-brca-rawtiff
-BRCA_SVS=/mnt/liad/data/tcga-brca
+BRCA_RAWTIFF=${FS_MOUNT}/data/tcga-brca-rawtiff
+BRCA_SVS=${FS_MOUNT}/data/tcga-brca
 BRCA_MANIFEST=$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv
-BRCA_COORDS=/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
+BRCA_COORDS=${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
 
 export CONDA_PREFIX="$CONDA_ENV"
 export CUFILE_ENV_PATH_JSON="$CUFILE_JSON"

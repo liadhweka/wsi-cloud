@@ -1,6 +1,6 @@
 ---
 name: cloud-session-open-items
-description: "THE running tracker of everything that must be resolved, built, or watched before/during cloud benchmarking. Discoveries made during the doc build live here so they are not buried in a roadmap and forgotten until a later audit. Add to this in the SAME edit that surfaces an item; strike items when done."
+description: "THE running work list of everything still to resolve, build, or watch before/during cloud benchmarking. Discoveries live here so they are not buried in a roadmap. Add in the SAME edit that surfaces an item; DELETE the item when it is done — completions belong in the relevant doc, not here."
 metadata:
   node_type: memory
   type: project
@@ -8,8 +8,12 @@ metadata:
 
 **Purpose:** unresolved items surfaced while building this repo (and later, while benchmarking) collect
 **here**, not only in whichever doc surfaced them. A memory is loaded every session automatically; a doc has
-to be found. **When an audit or exchange surfaces an unresolved item, add it here in the same edit** — and
-strike it (with the resolution + date) when it's done, rather than deleting it silently.
+to be found. **When an audit or exchange surfaces an unresolved item, add it here in the same edit.**
+
+**This file holds ONLY open items.** When something is done, **delete it from here** — the completion record
+belongs in the relevant doc (`SCRIPT-TRACKER.md`'s done table, a stage change log), and git history preserves
+this file's prior state. *Why:* a fresh session loads this to know what to **do**; a completed-items list
+grows without bound and — worse — an item left listed after completion gets redone.
 
 Nothing here is a decision awaiting the user's ratification unless marked **[USER]**. Assumed *environment
 values* live separately in `[[weka-vs-lustre-cloud-open-decisions]]`.
@@ -79,54 +83,47 @@ These change what the numbers mean, so resolving them after cells have run means
 
 ## B. BUILD in the cloud session (deferred engineering — needs the real environment)
 
-**This is the authoritative list.** Each item carries its `D-n` id from the table at the top of
-`SCRIPT-TRACKER.md`, which holds the per-script detail. **File counts are measured**, not estimated —
-they are what makes the scope concrete. Nothing here could be done before the environment exists, and
-**all of it is a hard prerequisite for a valid cell.**
+Each item carries its `D-n` id from the table in `SCRIPT-TRACKER.md`, which holds the per-script detail.
+**File counts are measured.** All of it is a hard prerequisite for a valid cell, not cleanup.
 
-9. **`D-1` — Mount retargeting to `$FS_MOUNT`** (`/mnt/weka`, `/mnt/lustre`). **36 files** hardcode the
-   previous single mount path. *Highest-severity item on this list:* a hardcoded mount silently makes a
-   Lustre cell measure WEKA, and the number still looks fine — there is no failure signal.
-10. **`D-2` — Repo-root retargeting.** **32 files** reference the previous repo/tree path. Prefer deriving
-    from script location (as `record-run.sh` already does) over introducing a new hardcoded constant.
-11. **`D-3` — `--fs {weka|lustre}` plumbing** through `record-run.sh`, every `sweep-*.sh`, and every
-    `aggregate-*.py`: run-dir name segment, `metadata.json` field, aggregator pivot — so head-to-head CSVs
-    fall out directly. Detail: `STAGES.md` **D11**.
-12. **`D-4` — Per-filesystem recording adapters** in `record-run.sh`, `parse-results.py`, and the
-    **13 aggregators** that currently assume one filesystem's telemetry. Includes the per-timestamp
-    client-summing filter, whose *pattern* generalises across legs but whose *filter* is schema-specific.
-13. **`D-5` — Per-filesystem consistency relation** in the canary logic — derived from the actual EC scheme
-    (WEKA) and the actual stripe layout (Lustre). See also item 3.
-14. **`D-6` — cuFile path accounting as a first-class recorded source** in `record-run.sh` and the kvikIO
-    readers. A kvikIO cell without recorded GPU-direct-vs-bounced bytes is **incomplete** (**D8**).
-15. **`D-7` — `record-run.sh` + `backup.sh`: during-run S3 sync, per-cell watchdog timeout, and
-    canary-aborts-the-chain.** All three are prerequisites for trusting an unattended overnight run. Only
-    the memory-mirror half of `backup.sh` exists today; the S3 half needs the real bucket/region/role, with
-    the two sync semantics (mirror-with-delete for docs and memories; **add-and-update-never-delete** for
-    telemetry and datasets). Detail: `CLAUDE.md` → Durability & backup.
-16. **`D-8` — Re-derive the GPU/NUMA/NIC map and the DDP GPU-count ranges** for the actual instance
+> `D-1`, `D-2`, `D-3`, `D-12`, `D-14` were completed on the build machine (2026-08-03) and are **no longer
+> listed here.** What they were and how they were verified is in `SCRIPT-TRACKER.md` § "Done before leaving
+> the build machine"; the prior state of this file is in git.
+
+9. **`D-4` — Per-filesystem recording adapters** in `record-run.sh`, `parse-results.py`, and the
+   **13 aggregators** that assume one filesystem's telemetry. Includes the per-timestamp client-summing
+   filter, whose *pattern* generalises across legs but whose *filter* is schema-specific. Needs the real
+   stats output to write against.
+10. **`D-5` — Per-filesystem consistency relation** in the canary logic — derived from the actual EC scheme
+    (WEKA) and the actual stripe layout (Lustre). **Never ported across.** See also item 3.
+11. **`D-6` — cuFile path accounting as a first-class recorded source** in `record-run.sh` and the kvikIO
+    readers. A kvikIO cell without recorded GPU-direct-vs-bounced bytes is **incomplete** (**D8**). Needs the
+    real cuFile/nvidia-fs stats format.
+12. **`D-7` — per-cell sync, watchdog, canary-abort.** **Partly done:** `sync-to-s3.sh` exists (with an
+    `UNVERIFIED AGAINST A REAL BUCKET` banner and a 7-step first-run procedure in its header — **step 6 is
+    the one that matters**), and `run-leg.sh` syncs after every step. **Still needed:** per-**cell** sync
+    inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain.
+13. **`D-8` — Re-derive the GPU/NUMA/NIC map and the DDP GPU-count ranges** for the actual instance
     (`run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`,
     `sweep-stage7-clinical.sh`).
-17. **`D-9` — Core accounting in the aggregators** computing CPU headlines: the reserved-core exclusion set
-    is a **per-filesystem parameter**, not a constant (**D15**). See also item 7.
-18. **`D-10` — cuFile config and environment paths.** **20 files** reference conda / cuFile / CUDA absolute
-    paths, all environment-specific — re-derive, never copy. **Includes rewriting
-    `runs/lib/GDS-TUNING-CHECKLIST.md`**, which currently carries a `⏳ PENDING RETARGET — DO NOT FOLLOW AS
-    WRITTEN` banner listing the four things its rewrite must do (re-derive all values; **add a
-    Lustre-over-EFA branch**, since the kvikIO path runs on both filesystems; treat "is GDS active?" as
-    empirical per cell; keep `LD_PRELOAD` scoped per cell).
-19. **`D-11` — Lustre tuning:** stripe layout (`lfs setstripe` / progressive layout) plus the client
-    tunables AWS recommends for high-core, high-memory clients. **Tuning is part of "Lustre at maximum"
-    (D7)** — skipping it would understate Lustre and break the fairness basis.
-20. **`D-12` — Environment-contract writer** (end of Leg A) **+ verifier** (start of Leg B), fail-loud on
-    mismatch (**D6**).
-21. **`D-13` — Hydration driver for 1.7** (S3 → filesystem) — needs the real bucket, region, and IAM role.
-22. **`D-14` — Leg-level orchestrator** with checkpoint/resume, so a crash re-runs only what is missing.
+14. **`D-9` — Core accounting in the aggregators** computing CPU headlines: the reserved-core exclusion set is
+    a **per-filesystem parameter**, not a constant (**D15**), and the reserved count is only measurable on the
+    real client. See also item 7.
+15. **`D-10` — cuFile config and environment values.** **20 files** reference conda / cuFile / CUDA paths —
+    now via variables, but the *values* are unknown. Includes generating `cufile.json` with this instance's
+    own addresses, and **rewriting `runs/lib/GDS-TUNING-CHECKLIST.md`**, which carries a `⏳ PENDING RETARGET
+    — DO NOT FOLLOW AS WRITTEN` banner listing the four things its rewrite must do (re-derive all values;
+    **add a Lustre-over-EFA branch**; treat "is GDS active?" as empirical per cell; keep `LD_PRELOAD` scoped
+    per cell).
+16. **`D-11` — Lustre tuning:** stripe layout (`lfs setstripe` / progressive layout) plus the client tunables
+    AWS recommends for high-core, high-memory clients. **Tuning is part of "Lustre at maximum" (D7)** —
+    skipping it would understate Lustre and break the fairness basis. Leg B.
+17. **`D-13` — Hydration driver for 1.7** (S3 → filesystem) — needs the real bucket, region, and IAM role.
+    `run-leg.sh` reports this step as **MISSING and aborts** rather than skipping it.
 
-> **Nothing was deleted from the script library.** An earlier plan assumed GDS would be dropped, which
-> would have removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design**
-> (**D8**), so all 59 files carry forward. Phase-5 "prune" work is therefore **zero**; the deferred list
-> above is where that effort went instead.
+> **Nothing was deleted from the script library.** An earlier plan assumed GDS would be dropped, which would
+> have removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**),
+> so all 62 files carry forward. Phase-5 "prune" work is therefore **zero**.
 
 ## C. WATCH during benchmarking
 
@@ -164,11 +161,3 @@ they are what makes the scope concrete. Nothing here could be done before the en
     comparison is likelier to be externalised. Detail: `[[uni2h-conditional-use-status]]`.
 
 ---
-
-## Resolved
-
-*(none yet — move items here with the resolution and date rather than deleting them, so a later reader can
-see the question was asked and answered.)*
-
-Related: `[[weka-vs-lustre-cloud-open-decisions]]`, `[[weka-vs-lustre-cloud-project]]`,
-`[[feedback_cloud_session_workflow]]`, `[[feedback_complete_implied_work]]`.

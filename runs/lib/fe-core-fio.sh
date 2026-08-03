@@ -16,9 +16,13 @@
 set -uo pipefail
 LABEL="${1:?usage: $0 <label, e.g. fe8 = current frontend-core count>}"
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 RECORD="$REPO/runs/lib/record-run.sh"
-SCRATCH=/mnt/liad/fio-fe-scratch
+SCRATCH=${FS_MOUNT}/fio-fe-scratch
 STAGE="4.C"
 RUN_NAME="frontend-core-${LABEL}-randr-bs64k"
 NJOBS=64; IODEPTH=16; BS=64k; SIZE=2G    # 128 GB working set, direct=1

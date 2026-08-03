@@ -25,6 +25,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --run-name) RUN_NAME="$2"; shift 2 ;;
     --stage)    STAGE="$2";    shift 2 ;;
+    --fs)       FS="$2";       shift 2 ;;
     --note)     NOTE="$2";     shift 2 ;;
     --)         shift; break ;;
     -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
@@ -34,6 +35,23 @@ done
 
 [[ -z "$RUN_NAME" ]] && { echo "missing --run-name" >&2; exit 2; }
 [[ -z "$STAGE" ]]    && { echo "missing --stage"    >&2; exit 2; }
+if [[ -z "${FS:-}" ]]; then
+  echo "missing --fs (weka|lustre)" >&2
+  echo "  Every run must be attributable to a filesystem, or the head-to-head" >&2
+  echo "  comparison cannot be assembled. See runs/STAGES.md D11." >&2
+  exit 2
+fi
+case "$FS" in weka|lustre) ;; *) echo "--fs must be weka|lustre, got '$FS'" >&2; exit 2 ;; esac
+# The LABEL must match the MOUNT actually in use. A mismatch here is the one error
+# that would silently mis-attribute a whole cell to the wrong filesystem.
+if [[ -n "${FS_MOUNT:-}" ]]; then
+  case "$FS_MOUNT" in
+    *"$FS"*) ;;
+    *) echo "FATAL: --fs='$FS' disagrees with FS_MOUNT='$FS_MOUNT'." >&2
+       echo "       Refusing to record a run whose label may not match the filesystem." >&2
+       exit 2 ;;
+  esac
+fi
 [[ $# -eq 0 ]]       && { echo "missing command after --" >&2; exit 2; }
 
 CMD=("$@")
@@ -54,7 +72,7 @@ else
   TS=$(date -u +%Y-%m-%d-%H%M%S)
   # Run dir name: <UTC-timestamp>-s<stage>-<run-name>. Stage prefix makes the
   # stage immediately visible in `ls runs/` without needing to read metadata.
-  RUN_DIR="$RUNS_ROOT/${TS}-s${STAGE}-${RUN_NAME}"
+  RUN_DIR="$RUNS_ROOT/${TS}-${FS}-s${STAGE}-${RUN_NAME}"
 fi
 
 mkdir -p "$RUN_DIR/pre" "$RUN_DIR/post" "$RUN_DIR/raw/.pids" "$RUN_DIR/plots"
@@ -139,6 +157,8 @@ cat > "$RUN_DIR/metadata.json" <<EOF
 {
   "run_name": "$RUN_NAME",
   "stage": "$STAGE",
+  "fs": "$FS",
+  "fs_mount": "${FS_MOUNT:-unset}",
   "timestamp_utc": "$META_TS",
   "hostname": "$HN",
   "user": "${USER:-unknown}",
@@ -186,9 +206,9 @@ ${NOTE:-(no note provided)}
 ## Project context
 
 This run is part of the WEKA WSI benchmarking project.
-- \`/home/liadhermelin/wsi/CLAUDE.md\` — project rules (docs citation, memory hygiene, recording philosophy).
-- \`/home/liadhermelin/wsi/rerun_new_TRUERESULTS/runs/STAGES.md\` — stage breakdown (1.0 = synthetic upper bound, 1.1 = TCGA pilot, etc.).
-- \`/home/liadhermelin/wsi/rerun_new_TRUERESULTS/runs/README.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
+- \`CLAUDE.md\` — project rules (docs citation, memory hygiene, recording philosophy).
+- \`${REPO}/runs/STAGES.md\` — stage breakdown (1.0 = synthetic upper bound, 1.1 = TCGA pilot, etc.).
+- \`${REPO}/runs/README.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
 EOF
 
 # ---------- start recorders ----------

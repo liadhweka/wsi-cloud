@@ -50,12 +50,12 @@ WHY compat_mode flag exposed as a sweep axis:
 Required environment (caller / wrapper script's responsibility):
   CONDA_PREFIX=/data/local-nvme/conda-envs/wsi-cucim-2604
   LD_PRELOAD=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-  CUFILE_ENV_PATH_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+  CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}
 
 Usage (4.C.1 faithful):
   $0 \
     --mode faithful \
-    --rawtiff-dir /mnt/liad/data/tcga-brca-rawtiff \
+    --rawtiff-dir $FS_MOUNT/data/tcga-brca-rawtiff \
     --manifest runs/manifests/tcga-brca-stage4a-subset.tsv \
     --compat-mode off --n-buffer 256 --num-threads 16 \
     --level 0 \
@@ -64,8 +64,8 @@ Usage (4.C.1 faithful):
 Usage (4.C.2 random):
   $0 \
     --mode random \
-    --rawtiff-dir /mnt/liad/data/tcga-brca-rawtiff \
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \
+    --rawtiff-dir $FS_MOUNT/data/tcga-brca-rawtiff \
+    --coords-dir $FS_MOUNT/tissue-detection/3.0/tcga-brca/n64/patches \
     --manifest runs/manifests/tcga-brca-stage4a-subset.tsv \
     --compat-mode off --n-buffer 256 --num-threads 16 \
     --runtime 60 --ramp 10 \

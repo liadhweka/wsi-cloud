@@ -23,7 +23,9 @@
 #   ./sweep-stage6c.sh smoke     # very short single-cell validation
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ORCH="$REPO/runs/lib/orchestrate-concurrent-stage6c.sh"
 RECORD="$REPO/runs/lib/record-run.sh"
 

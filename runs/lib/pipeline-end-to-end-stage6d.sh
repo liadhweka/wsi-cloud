@@ -3,7 +3,7 @@
 #
 # Sequentially runs the four phases of the modern WSI research pipeline:
 #   Phase 1: Stage 3 — CLAM tissue detection (reuses runs/lib/sweep-stage3-tissue-detection.sh logic
-#            at n=64; outputs tile coords to /mnt/liad/tissue-detection/3.0/.../patches/)
+#            at n=64; outputs tile coords to ${FS_MOUNT}/tissue-detection/3.0/.../patches/)
 #   Phase 2: Stage 4 prep (optional, kvikio path only) — raw-TIFF conversion (chunked if needed)
 #   Phase 3: Stage 6.A — foundation-model feature extraction
 #   Phase 4: Stage 6.B.3 — attention-MIL classifier training (one epoch over full extracted features)
@@ -24,11 +24,15 @@
 #   ./pipeline-end-to-end-stage6d.sh --backend kvikio --run-dir <run-dir>
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 BACKEND=""
 RUN_DIR=""
@@ -56,7 +60,7 @@ EMBED_DIM=1280
 PENDING_APPROVAL_TAG=""
 [ "$MODEL" = "uni2-h" ] && PENDING_APPROVAL_TAG="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
 
-FEATURES_OUT="/mnt/liad/features/6.A/${MODEL}/6d-pipeline-${BACKEND}"
+FEATURES_OUT="${FS_MOUNT}/features/6.A/${MODEL}/6d-pipeline-${BACKEND}"
 mkdir -p "$FEATURES_OUT"
 
 T_ORCH=$(date +%s.%N)
@@ -65,9 +69,9 @@ log() { echo "[6.D-$(date -u +%FT%TZ)] $*"; }
 # ---------- Phase 1: tissue detection ----------
 PHASE_T0=$(date +%s.%N)
 log "Phase 1: CLAM tissue detection (Stage 3 path)"
-# Stage 3 outputs already exist at /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
+# Stage 3 outputs already exist at ${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
 # for our pipeline purposes; if not, this re-runs CLAM. Idempotent.
-TISSUE_DIR="/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches"
+TISSUE_DIR="${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches"
 N_EXIST=$(ls "$TISSUE_DIR"/*.h5 2>/dev/null | wc -l)
 if [ "$N_EXIST" -ge 1131 ]; then
   log "Phase 1: skipping — Stage 3 output already present ($N_EXIST .h5 files)"
@@ -123,8 +127,8 @@ elif [ "$BACKEND" = "cucim" ]; then
   OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 \
   "$PY" "$REPO/runs/lib/extract-features-foundation-stage6.py" \
     --backend cucim_batched_cpu --world-size 4 --model "$MODEL" \
-    --svs-dir /mnt/liad/data/tcga-brca \
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \
+    --svs-dir ${FS_MOUNT}/data/tcga-brca \
+    --coords-dir ${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches \
     --manifest "$MANIFEST" \
     --output-dir "$FEATURES_OUT" \
     --batch-size 256 \

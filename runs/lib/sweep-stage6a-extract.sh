@@ -35,14 +35,18 @@
 #   ./sweep-stage6a-extract.sh all                # tier1 + tier3 (skips tier2)
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 EXTRACTOR="$REPO/runs/lib/extract-features-foundation-stage6.py"
 RECORD="$REPO/runs/lib/record-run.sh"
 
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 # Sanity
 [ -f "$LIBCUFILE_117" ] || { echo "missing libcufile 1.17 at $LIBCUFILE_117" >&2; exit 1; }
@@ -51,14 +55,14 @@ CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
 [ -x "$RECORD" ]        || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
 
 # Dataset paths (matches FILESYSTEM-MAP)
-BRCA_RAWTIFF_50=/mnt/liad/data/tcga-brca-rawtiff
-BRCA_SVS=/mnt/liad/data/tcga-brca
-BRCA_COORDS=/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
+BRCA_RAWTIFF_50=${FS_MOUNT}/data/tcga-brca-rawtiff
+BRCA_SVS=${FS_MOUNT}/data/tcga-brca
+BRCA_COORDS=${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
 BRCA_50_MANIFEST=$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv
 BRCA_FULL_MANIFEST=$REPO/runs/manifests/tcga-brca-full40x-stage4a-format.tsv
 
-CAM_RAWTIFF_50=/mnt/liad/data/camelyon16-rawtiff
-CAM_COORDS=/mnt/liad/tissue-detection/3.0/camelyon16/n64/patches
+CAM_RAWTIFF_50=${FS_MOUNT}/data/camelyon16-rawtiff
+CAM_COORDS=${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches
 CAM_50_MANIFEST=$REPO/runs/manifests/camelyon16-stage4a-subset.tsv
 
 # Standard env (overridden per cell for LD_PRELOAD)
@@ -128,7 +132,7 @@ run_cell() {
   local run_dir="$REPO/runs/${now_utc}-s6.A-${cell_name}"
 
   # Per-slide .pt output dir.
-  local features_out="/mnt/liad/features/6.A/${model}/${dataset_tag}"
+  local features_out="${FS_MOUNT}/features/6.A/${model}/${dataset_tag}"
   mkdir -p "$features_out"
 
   # Cleanup .pt before each cell. The extractor's skip-on-existing logic (a real
@@ -284,7 +288,7 @@ run_tier2_kvikio_chunked() {
   local cell_name="extract-${model}-kvikio-brca_full-N${n_gpus}"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-s6.A-${cell_name}"
-  local features_out="/mnt/liad/features/6.A/${model}/brca_full"
+  local features_out="${FS_MOUNT}/features/6.A/${model}/brca_full"
   local orchestrator="$REPO/runs/lib/run-stage6a-tier2-chunked.sh"
 
   [ -x "$orchestrator" ] || { echo "missing orchestrator $orchestrator" >&2; return 1; }
@@ -356,7 +360,7 @@ run_tier2_kvikio_chunked_multimodel() {
   # the cleanup pattern in run_cell + run_tier2_kvikio_chunked.
   IFS=',' read -ra MODELS_ARR <<< "$models_csv"
   for model in "${MODELS_ARR[@]}"; do
-    local mdir="/mnt/liad/features/6.A/${model}/brca_full"
+    local mdir="${FS_MOUNT}/features/6.A/${model}/brca_full"
     mkdir -p "$mdir"
     local n_pt_before
     n_pt_before=$(find "$mdir" -maxdepth 1 -name '*.pt' 2>/dev/null | wc -l)
@@ -389,7 +393,7 @@ run_tier2_kvikio_chunked_multimodel() {
     --note "$note" \
     -- "$orchestrator" \
        --models "$models_csv" --n-gpus "$n_gpus" --gpu-csv "$gpu_csv" \
-       --output-dir-base "/mnt/liad/features/6.A" \
+       --output-dir-base "${FS_MOUNT}/features/6.A" \
        --run-dir "$run_dir" \
        --chunk-size "$chunk_size"
 }
@@ -430,7 +434,7 @@ tier2_production_n8() {
 
 tier2_resume_post_virchow2_cucim() {
   # Resume target for Stage 6.A Tier 2 after Virchow2 cuCIM has completed
-  # (1131 .pt files in /mnt/liad/features/6.A/virchow2/brca_full/ retained).
+  # (1131 .pt files in ${FS_MOUNT}/features/6.A/virchow2/brca_full/ retained).
   # Skips Virchow2 cuCIM; runs GigaPath + UNI2-h cuCIM then kvikIO multi-model.
   # Used 2026-05-21 after the first Tier 2 sweep hit a record-run.sh timestamp
   # race condition that broke GigaPath cuCIM; killed sweep to apply
@@ -467,7 +471,7 @@ tier2_kvikio_multimodel_smoke() {
     --note "$note" \
     -- "$orchestrator" \
        --models "virchow2,gigapath,uni2-h" --n-gpus 4 --gpu-csv "2,3,6,7" \
-       --output-dir-base "/mnt/liad/features/6.A-smoke" \
+       --output-dir-base "${FS_MOUNT}/features/6.A-smoke" \
        --run-dir "$run_dir" \
        --chunk-size 5 --max-slides 10
 }
@@ -479,7 +483,7 @@ smoke() {
   local now_utc
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-s6.A-${cell_name}"
-  local features_out="/mnt/liad/features/6.A/virchow2/brca50-smoke"
+  local features_out="${FS_MOUNT}/features/6.A/virchow2/brca50-smoke"
   mkdir -p "$features_out"
 
   CUDA_VISIBLE_DEVICES="2" \

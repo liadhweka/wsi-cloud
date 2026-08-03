@@ -206,7 +206,7 @@ artifacts at end-of-run and periodically during long runs, and `backup.sh` does 
 before a commit, and **always before any teardown.** The sync is **verified, not assumed** (Rule 11:
 "backed up" is wrong if three files errored and you didn't say so).
 
-**Teardown checklist** (`cloud-setup/SPINUP-CHECKLIST.md` § E) — in order, skipping any one loses work
+**Teardown & rebuild checklist** (`cloud-setup/TEARDOWN-AND-REBUILD.md`, with `runs/lib/teardown-preflight.sh` as the GO/NO-GO gate) — in order, skipping any one loses work
 permanently: handoff prompt written → `./backup.sh` → `git push` → **verified S3 sync** → **environment
 contract written**.
 
@@ -234,7 +234,7 @@ After any exchange that shifts the picture durably, update every doc whose caden
 
 **Where decisions live:** a decision scoped to **one stage** → that stage's `runs/Stage-<N>-*.md` decision log; a **cross-stage / project-wide** methodology decision (the fairness basis, the 20× contract, the dataset cohort, the GPU-direct matrix, a framing rule) → the decision log in `runs/STAGES.md`. Record what / when / why / official sources; don't split one decision across both. Any decision touching an **assumed** environment value must also update the reference index in the `weka-vs-lustre-cloud-open-decisions` memory.
 
-**Where UNRESOLVED items live — non-negotiable, because burial is the real failure mode.** An open question recorded only inside the roadmap that surfaced it will not be seen again until someone re-audits that roadmap. So whenever an exchange or audit surfaces something that must be **resolved before the first measured cell, built in the cloud session, or watched during benchmarking**, add it to the **`cloud-session-open-items` memory in the same edit** — a one-or-two-line entry plus a pointer to the doc holding the detail. Memory loads every session automatically; a doc has to be found. When an item is done, **move it to that memory's "Resolved" section with the resolution and date** rather than deleting it, so a later reader can see the question was asked and answered.
+**Where UNRESOLVED items live — non-negotiable, because burial is the real failure mode.** An open question recorded only inside the roadmap that surfaced it will not be seen again until someone re-audits that roadmap. So whenever an exchange or audit surfaces something that must be **resolved before the first measured cell, built in the cloud session, or watched during benchmarking**, add it to the **`cloud-session-open-items` memory in the same edit** — a one-or-two-line entry plus a pointer to the doc holding the detail. Memory loads every session automatically; a doc has to be found. **That memory holds ONLY open items: when something is done, delete the entry.** The completion record belongs in the relevant doc (`SCRIPT-TRACKER.md`'s done table, a stage change log, a decision-log entry), and git history preserves the memory's prior state. *Why deletion rather than a resolved list:* a fresh session loads that file to know what to **do**, so a completed-items section grows without bound and — worse — an entry left in place after completion gets redone.
 
 **Record the WHY everywhere** (`feedback_methodology_why` memory): every methodology choice (in any doc) needs its rationale, not just the choice — numbers without it aren't presentable, and in a competitive comparison every choice is a place a skeptical reader looks for bias. A choice recorded without its why is a bug to fix in the same edit.
 

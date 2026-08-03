@@ -52,6 +52,8 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Know what a script does | **`SCRIPT-TRACKER.md`** |
 | Find where something lives | **`FILESYSTEM-MAP.md`** |
 | Provision the environment | **`cloud-setup/NEW-CLOUD-SETUP.md`** + **`SPINUP-CHECKLIST.md`** |
+| Know what every path / name / variable should be | **`cloud-setup/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
+| Tear down or rebuild the instance | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** (+ `runs/lib/teardown-preflight.sh`) |
 
 **A fresh Claude session continuing this work** starts with the memories — `cloud-session-open-items` (the
 work list), `weka-vs-lustre-cloud-project` (what this is), `weka-vs-lustre-cloud-open-decisions` (what is
@@ -74,7 +76,7 @@ runs/
   STAGES.md            stage map, per-leg plan, decision log D1–D15
   README.md            operational runbook + both canaries
   Stage-{1..7}-*.md    per-stage roadmaps (the audit trail)
-  lib/                 59-script library
+  lib/                 63-script library
   manifests/           dataset manifests, incl. the 1073-slide cohort
 ```
 

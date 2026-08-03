@@ -38,7 +38,7 @@ computed.
 
 Usage:
   python read-after-write-stage7.py \\
-    --output-dir /mnt/liad/heatmaps/7.4b \\
+    --output-dir $FS_MOUNT/heatmaps/7.4b \\
     --n-slides 20 \\
     --bytes-per-write 50000000 \\
     --poll-interval-s 0.01 \\

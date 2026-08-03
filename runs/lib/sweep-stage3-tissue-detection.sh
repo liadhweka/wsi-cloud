@@ -26,18 +26,22 @@
 # Output:
 #   - one runs/<TS>-s3.0-tissue-<dataset>-n<N>/ per cell
 #   - one consolidated log at runs/sweep-logs/<TS>-stage3-tissue.log
-#   - per-cell HDF5 + masks at /mnt/liad/tissue-detection/3.0/<dataset>/n<N>/
+#   - per-cell HDF5 + masks at ${FS_MOUNT}/tissue-detection/3.0/<dataset>/n<N>/
 #
 # Prerequisites:
 #   - Python deps: numpy, pandas, tqdm, opencv-python, matplotlib, h5py, openslide-python (Stage 2 / 3 pre-flight)
-#   - CLAM cloned at /home/liadhermelin/wsi-tools/CLAM (Stage 3 pre-flight)
-#   - Datasets at /mnt/liad/data/{tcga-brca,camelyon16}/ (Stage 1.2 / 1.3)
+#   - CLAM cloned at ${CLAM_DIR:-${PROJECT_HOME:-$HOME}/wsi-tools/CLAM} (Stage 3 pre-flight)
+#   - Datasets at ${FS_MOUNT}/data/{tcga-brca,camelyon16}/ (Stage 1.2 / 1.3)
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
-CLAM=/home/liadhermelin/wsi-tools/CLAM
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
+CLAM=${CLAM_DIR:-${PROJECT_HOME:-$HOME}/wsi-tools/CLAM}
 EXTRACTOR_SCRIPT=$CLAM/create_patches_fp.py
-TISSUE_OUT=/mnt/liad/tissue-detection/3.0
+TISSUE_OUT=${FS_MOUNT}/tissue-detection/3.0
 CHUNK_ROOT=/tmp/stage3-chunks
 MANIFEST_DIR=/tmp/stage3-manifests
 LOG_DIR=$REPO/runs/sweep-logs
@@ -50,7 +54,7 @@ log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 # Sanity checks
 if [[ ! -f "$EXTRACTOR_SCRIPT" ]]; then
   log "FATAL: CLAM not found at $EXTRACTOR_SCRIPT"
-  log "  Clone via: git clone https://github.com/mahmoodlab/CLAM /home/liadhermelin/wsi-tools/CLAM"
+  log "  Clone via: git clone https://github.com/mahmoodlab/CLAM ${CLAM_DIR:-${PROJECT_HOME:-$HOME}/wsi-tools/CLAM}"
   exit 2
 fi
 if ! python3 -c "import openslide, cv2, h5py, numpy, pandas, matplotlib" 2>/dev/null; then
@@ -62,14 +66,14 @@ fi
 log "=== building manifests ==="
 BRCA_MANIFEST=$MANIFEST_DIR/tcga-brca.txt
 CAM_MANIFEST=$MANIFEST_DIR/camelyon16.txt
-find /mnt/liad/data/tcga-brca/ -name '*.svs' 2>/dev/null | sort > "$BRCA_MANIFEST"
-find /mnt/liad/data/camelyon16/images/ -name '*.tif' 2>/dev/null | sort > "$CAM_MANIFEST"
+find ${FS_MOUNT}/data/tcga-brca/ -name '*.svs' 2>/dev/null | sort > "$BRCA_MANIFEST"
+find ${FS_MOUNT}/data/camelyon16/images/ -name '*.tif' 2>/dev/null | sort > "$CAM_MANIFEST"
 BRCA_COUNT=$(wc -l < "$BRCA_MANIFEST")
 CAM_COUNT=$(wc -l < "$CAM_MANIFEST")
 log "  TCGA-BRCA:  $BRCA_COUNT slides"
 log "  CAMELYON16: $CAM_COUNT slides"
 if [[ $BRCA_COUNT -eq 0 || $CAM_COUNT -eq 0 ]]; then
-  log "FATAL: empty manifest. Verify datasets at /mnt/liad/data/."
+  log "FATAL: empty manifest. Verify datasets at ${FS_MOUNT}/data/."
   exit 2
 fi
 

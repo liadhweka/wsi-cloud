@@ -24,9 +24,13 @@
 #   - one app-level bytes/duration record per cell at <run-dir>/notes.md
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 SRC=/data/local-nvme/fpsync-source/tcga-brca/
-TARGET_ROOT=/mnt/liad/data/fpsync-target
+TARGET_ROOT=${FS_MOUNT}/data/fpsync-target
 SHDIR_ROOT=/tmp/fpsync-stage1.5
 LOG_DIR=$REPO/runs/sweep-logs
 mkdir -p "$LOG_DIR" "$TARGET_ROOT"
@@ -41,7 +45,7 @@ log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 if [[ ! -d "$SRC" ]]; then
   log "FATAL: source dir missing: $SRC"
   log "  Run the recorded re-stage first:"
-  log "  runs/lib/record-run.sh --run-name restage-tcga-brca-for-1.5-prep-n16 --stage 1.5 --note '...' -- /usr/bin/fpsync -v -n 16 -d /tmp/fpsync-prep /mnt/liad/data/tcga-brca/ \$SRC"
+  log "  runs/lib/record-run.sh --run-name restage-tcga-brca-for-1.5-prep-n16 --stage 1.5 --note '...' -- /usr/bin/fpsync -v -n 16 -d /tmp/fpsync-prep ${FS_MOUNT}/data/tcga-brca/ \$SRC"
   exit 2
 fi
 SRC_BYTES=$(du -sb "$SRC" | awk '{print $1}')

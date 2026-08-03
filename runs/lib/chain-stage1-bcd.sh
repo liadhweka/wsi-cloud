@@ -7,7 +7,9 @@
 # Total estimated wall clock: ~14 hours.
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOG_DIR=$REPO/runs/sweep-logs
 mkdir -p "$LOG_DIR"
 CHAIN_LOG="$LOG_DIR/$(date -u +%F-%H%M)-chain-stage1-bcd.log"

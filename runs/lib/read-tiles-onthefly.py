@@ -22,8 +22,8 @@ Usage:
   read-tiles-onthefly.py \
     --backend openslide \
     --n-processes 16 \
-    --svs-dir /mnt/liad/data/tcga-brca \
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \
+    --svs-dir $FS_MOUNT/data/tcga-brca \
+    --coords-dir $FS_MOUNT/tissue-detection/3.0/tcga-brca/n64/patches \
     --runtime 60 --ramp 10 \
     --latency-csv /tmp/stage4b-tcga-brca-openslide-N16-latencies.csv \
     --seed 42

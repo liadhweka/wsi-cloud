@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Stage 4.C prep — convert Stage 4.A subset slides (50 BRCA + 50 CAMELYON16) to
-# uncompressed raw TIFF on /mnt/liad for the kvikIO+GDS sweep.
+# uncompressed raw TIFF on ${FS_MOUNT} for the kvikIO+GDS sweep.
 #
 # WHY this is a recorded "Stage 4.C-convert" cell rather than a flat tee'd log:
 #   - 100 slides × ~30-80 GB raw output each = ~6-10 TB sustained writes to wekafs.
@@ -32,7 +32,11 @@
 
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PYTHON="$CONDA_ENV/bin/python3"
 CONVERTER="$REPO/runs/lib/convert-rawtiff-20x.py"
@@ -46,11 +50,11 @@ PARALLEL="${PARALLEL:-4}"
 BRCA_MANIFEST="$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv"
 CAM_MANIFEST="$REPO/runs/manifests/camelyon16-stage4a-subset.tsv"
 
-BRCA_SRC_DIR=/mnt/liad/data/tcga-brca
-CAM_SRC_DIR=/mnt/liad/data/camelyon16/images
+BRCA_SRC_DIR=${FS_MOUNT}/data/tcga-brca
+CAM_SRC_DIR=${FS_MOUNT}/data/camelyon16/images
 
-BRCA_DST_DIR=/mnt/liad/data/tcga-brca-rawtiff
-CAM_DST_DIR=/mnt/liad/data/camelyon16-rawtiff
+BRCA_DST_DIR=${FS_MOUNT}/data/tcga-brca-rawtiff
+CAM_DST_DIR=${FS_MOUNT}/data/camelyon16-rawtiff
 
 mkdir -p "$BRCA_DST_DIR" "$CAM_DST_DIR"
 

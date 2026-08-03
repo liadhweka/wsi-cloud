@@ -1,0 +1,171 @@
+Module                  Size  Used by
+tcp_diag               12288  0
+nvidia_fs             274432  0
+nvidia_peermem         16384  0
+nvidia_uvm           2072576  8
+nvidia_drm            139264  0
+nvidia_modeset       1744896  1 nvidia_drm
+nvidia              14798848  242 nvidia_uvm,nvidia_peermem,nvidia_fs,nvidia_modeset
+ipt_REJECT             12288  0
+nf_reject_ipv4         16384  1 ipt_REJECT
+xt_multiport           16384  1
+udp_diag               12288  0
+inet_diag              28672  2 tcp_diag,udp_diag
+cls_bpf                24576  2
+vxlan                 143360  0
+ip6_udp_tunnel         12288  1 vxlan
+udp_tunnel             28672  1 vxlan
+xt_TPROXY              12288  0
+nf_tproxy_ipv6         16384  1 xt_TPROXY
+nf_tproxy_ipv4         16384  1 xt_TPROXY
+xt_CT                  12288  0
+xt_mark                12288  0
+xt_socket              16384  0
+nf_socket_ipv4         12288  1 xt_socket
+nf_socket_ipv6         16384  1 xt_socket
+ip6table_filter        12288  0
+ip6table_raw           12288  0
+ip6table_mangle        12288  0
+ip6_tables             36864  3 ip6table_filter,ip6table_raw,ip6table_mangle
+iptable_raw            12288  0
+iptable_mangle         12288  0
+ip_set                 61440  0
+xt_comment             12288  0
+iptable_filter         12288  0
+iptable_nat            12288  0
+sch_ingress            16384  3
+wekafsio            70385664  9
+wekafsgw               53248  4 wekafsio
+mpin_user              16384  0
+igb_uio                24576  0
+uio                    28672  1 igb_uio
+nf_conntrack_netlink    57344  0
+xt_nat                 12288  1
+xt_tcpudp              16384  3
+veth                   45056  0
+xt_conntrack           12288  2
+nft_chain_nat          12288  8
+xt_MASQUERADE          16384  3
+nf_nat                 61440  4 xt_nat,nft_chain_nat,iptable_nat,xt_MASQUERADE
+xfrm_user              61440  1
+xfrm_algo              20480  1 xfrm_user
+xt_addrtype            12288  2
+nft_compat             20480  12
+nf_tables             372736  152 nft_compat,nft_chain_nat
+nfnetlink              20480  5 nft_compat,nf_conntrack_netlink,nf_tables,ip_set
+nvme_fabrics           36864  0
+vfio_pci               16384  0
+vfio_pci_core          90112  1 vfio_pci
+vfio_iommu_type1       49152  0
+vfio                   65536  3 vfio_pci_core,vfio_iommu_type1,vfio_pci
+iommufd                81920  1 vfio
+cuse                   16384  0
+overlay               196608  1
+rdma_ucm               32768  0
+rdma_cm               147456  1 rdma_ucm
+iw_cm                  61440  1 rdma_cm
+ib_ipoib              155648  0
+ib_cm                 147456  2 rdma_cm,ib_ipoib
+ib_umad                40960  0
+mlx5_ib               528384  0
+ib_uverbs             167936  98 rdma_ucm,mlx5_ib
+xfs                  2338816  3
+kvm_amd               208896  0
+kvm                  1409024  1 kvm_amd
+irqbypass              12288  2 vfio_pci_core,kvm
+ipmi_ssif              45056  0
+binfmt_misc            24576  1
+nls_iso8859_1          12288  1
+mlx5_core            2740224  1 mlx5_ib
+joydev                 32768  0
+pci_hyperv_intf        12288  1 mlx5_core
+mlxdevm               184320  1 mlx5_core
+input_leds             12288  0
+tls                   151552  6 mlx5_core
+mlxfw                  36864  1 mlx5_core
+ccp                   135168  1 kvm_amd
+psample                20480  1 mlx5_core
+acpi_ipmi              20480  0
+ipmi_si                86016  3
+sch_fq_codel           24576  761
+ib_core               557056  25 rdma_cm,ib_ipoib,nvidia_peermem,iw_cm,ib_umad,rdma_ucm,ib_uverbs,mlx5_ib,ib_cm
+mlx_compat             20480  11 rdma_cm,ib_ipoib,mlxdevm,iw_cm,ib_umad,ib_core,rdma_ucm,ib_uverbs,mlx5_ib,ib_cm,mlx5_core
+knem                   49152  0
+ipmi_devintf           16384  4
+ipmi_msghandler        94208  4 ipmi_devintf,ipmi_si,acpi_ipmi,ipmi_ssif
+br_netfilter           32768  0
+bridge                413696  1 br_netfilter
+stp                    12288  1 bridge
+llc                    16384  2 bridge,stp
+ip_vs_wrr              12288  0
+ip_vs_wlc              12288  0
+dm_multipath           45056  0
+ip_vs_sh               12288  0
+ip_vs_rr               12288  0
+scsi_dh_rdac           16384  0
+ip_vs_lc               12288  0
+scsi_dh_emc            12288  0
+scsi_dh_alua           20480  0
+ip_vs                 221184  10 ip_vs_wlc,ip_vs_rr,ip_vs_sh,ip_vs_wrr,ip_vs_lc
+nfsd                  839680  5
+nf_conntrack          208896  7 xt_conntrack,nf_nat,xt_nat,nf_conntrack_netlink,xt_CT,xt_MASQUERADE,ip_vs
+nf_defrag_ipv6         24576  4 nf_conntrack,xt_socket,xt_TPROXY,ip_vs
+nf_defrag_ipv4         12288  3 nf_conntrack,xt_socket,xt_TPROXY
+auth_rpcgss           184320  1 nfsd
+nfs_acl                12288  1 nfsd
+lockd                 143360  1 nfsd
+grace                  12288  2 nfsd,lockd
+msr                    12288  0
+efi_pstore             12288  0
+sunrpc                811008  17 nfsd,auth_rpcgss,lockd,nfs_acl
+ip_tables              36864  4 iptable_filter,iptable_raw,iptable_nat,iptable_mangle
+x_tables               69632  22 ip6table_filter,xt_conntrack,ip6table_raw,iptable_filter,nft_compat,xt_multiport,xt_socket,xt_tcpudp,xt_addrtype,xt_nat,xt_comment,ip6_tables,xt_TPROXY,ipt_REJECT,xt_CT,iptable_raw,ip_tables,iptable_nat,ip6table_mangle,xt_MASQUERADE,iptable_mangle,xt_mark
+autofs4                57344  2
+btrfs                1949696  0
+blake2b_generic        24576  0
+raid10                 77824  0
+raid456               196608  0
+async_raid6_recov      20480  1 raid456
+async_memcpy           16384  2 raid456,async_raid6_recov
+async_pq               20480  2 raid456,async_raid6_recov
+async_xor              16384  3 async_pq,raid456,async_raid6_recov
+async_tx               16384  5 async_pq,async_memcpy,async_xor,raid456,async_raid6_recov
+xor                    20480  2 async_xor,btrfs
+raid6_pq              126976  4 async_pq,btrfs,raid456,async_raid6_recov
+libcrc32c              12288  7 nf_conntrack,nf_nat,btrfs,nf_tables,xfs,raid456,ip_vs
+raid1                  57344  1
+multipath              16384  0
+linear                 16384  0
+video                  73728  1 nvidia_modeset
+wmi                    40960  1 video
+hid_generic            12288  0
+crct10dif_pclmul       12288  1
+usbhid                 77824  0
+crc32_pclmul           12288  0
+polyval_clmulni        12288  0
+hid                   180224  2 usbhid,hid_generic
+polyval_generic        12288  1 polyval_clmulni
+uas                    28672  0
+ghash_clmulni_intel    16384  0
+sha256_ssse3           32768  1
+sha1_ssse3             32768  0
+usb_storage            86016  1 uas
+raid0                  24576  1
+aesni_intel           356352  0
+crypto_simd            16384  1 aesni_intel
+cryptd                 24576  2 crypto_simd,ghash_clmulni_intel
+mpt3sas               397312  0
+igb                   319488  0
+drm_shmem_helper       24576  0
+raid_class             12288  1 mpt3sas
+drm_kms_helper        274432  9 nvidia_drm
+dca                    16384  1 igb
+i2c_algo_bit           16384  1 igb
+nvme                   57344  3
+scsi_transport_sas     57344  1 mpt3sas
+xhci_pci               24576  0
+drm                   765952  5 drm_kms_helper,drm_shmem_helper,nvidia,nvidia_drm
+xhci_pci_renesas       20480  1 xhci_pci
+nvme_core             212992  9 nvme,nvme_fabrics
+ecc                    45056  1 nvidia
+nvme_common            28672  1 nvme_core

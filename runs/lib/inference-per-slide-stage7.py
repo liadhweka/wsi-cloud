@@ -83,10 +83,10 @@ Typically invoked by `orchestrate-clinical-deployment-stage7.sh` or
   /data/local-nvme/conda-envs/wsi-cucim-2604/bin/python \\
   inference-per-slide-stage7.py \\
     --backend kvikio --model virchow2 \\
-    --rawtiff-dir /mnt/liad/data/tcga-brca-rawtiff \\
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \\
+    --rawtiff-dir $FS_MOUNT/data/tcga-brca-rawtiff \\
+    --coords-dir $FS_MOUNT/tissue-detection/3.0/tcga-brca/n64/patches \\
     --manifest runs/manifests/tcga-brca-stage4a-subset.tsv \\
-    --heatmap-dir /mnt/liad/heatmaps/7.1/virchow2-kvikio-cold \\
+    --heatmap-dir $FS_MOUNT/heatmaps/7.1/virchow2-kvikio-cold \\
     --heatmap-format tiff5x \\
     --inference-batch-size 256 \\
     --cache-policy cold \\
@@ -105,15 +105,25 @@ import time
 from pathlib import Path
 from typing import List, Optional, Tuple
 
+import os as _os, sys as _sys
+# The mount is a DIMENSION, never a constant: this project runs the identical code
+# against two filesystems. Refuse to guess -- a wrong mount silently measures the
+# other filesystem and the number still looks correct.
+FS_MOUNT = _os.environ.get("FS_MOUNT")
+if not FS_MOUNT:
+    _sys.exit("FATAL: FS_MOUNT is unset -- source cloud-setup/env.sh "
+              "(see cloud-setup/NAMING-AND-VARIABLES.md).")
+
 import numpy as np
 import torch
 from torch.cuda.amp import autocast
+
 
 # -----------------------------------------------------------------------------
 # Reuse classes from Stage 6 scripts — files have hyphenated names so we load
 # them by file path via importlib rather than `import` (which can't see hyphens).
 # -----------------------------------------------------------------------------
-_RUNS_LIB = Path(__file__).resolve().parent  # /home/liadhermelin/wsi/runs/lib
+_RUNS_LIB = Path(__file__).resolve().parent  # ${REPO}/runs/lib
 
 def _load_module(name: str, filename: str):
     path = _RUNS_LIB / filename
@@ -522,8 +532,8 @@ def main():
     )
     ap.add_argument('--backend', choices=['kvikio', 'cucim_batched_cpu'], required=True)
     ap.add_argument('--model', choices=list(MODEL_REGISTRY.keys()), required=True)
-    ap.add_argument('--rawtiff-dir', default='/mnt/liad/data/tcga-brca-rawtiff')
-    ap.add_argument('--svs-dir', default='/mnt/liad/data/tcga-brca')
+    ap.add_argument('--rawtiff-dir', default=FS_MOUNT + "/data/tcga-brca-rawtiff")
+    ap.add_argument('--svs-dir', default=FS_MOUNT + "/data/tcga-brca")
     ap.add_argument('--coords-dir', required=True)
     ap.add_argument('--manifest', required=True)
     ap.add_argument('--heatmap-dir', required=True,

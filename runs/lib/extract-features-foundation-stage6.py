@@ -63,10 +63,10 @@ Per-slide CSV columns (each rank appends; main-process post-merge sorts):
 Usage (launched by sweep driver per cell):
   python extract-features-foundation-stage6.py \\
     --backend kvikio --world-size 4 --model virchow2 \\
-    --rawtiff-dir /mnt/liad/data/tcga-brca-rawtiff \\
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \\
+    --rawtiff-dir $FS_MOUNT/data/tcga-brca-rawtiff \\
+    --coords-dir $FS_MOUNT/tissue-detection/3.0/tcga-brca/n64/patches \\
     --manifest runs/manifests/tcga-brca-stage4a-subset.tsv \\
-    --output-dir /mnt/liad/features/6.A/virchow2/tcga-brca-subset \\
+    --output-dir $FS_MOUNT/features/6.A/virchow2/tcga-brca-subset \\
     --batch-size 256 \\
     --extraction-steps-csv <run-dir>/extraction-steps.csv \\
     --per-slide-csv <run-dir>/per-slide.csv \\
@@ -85,6 +85,15 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import os as _os, sys as _sys
+# The mount is a DIMENSION, never a constant: this project runs the identical code
+# against two filesystems. Refuse to guess -- a wrong mount silently measures the
+# other filesystem and the number still looks correct.
+FS_MOUNT = _os.environ.get("FS_MOUNT")
+if not FS_MOUNT:
+    _sys.exit("FATAL: FS_MOUNT is unset -- source cloud-setup/env.sh "
+              "(see cloud-setup/NAMING-AND-VARIABLES.md).")
+
 import cupy as cp
 import h5py
 import numpy as np
@@ -92,6 +101,7 @@ import torch
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.cuda.amp import autocast
+
 
 TILE_SIZE = 256       # CLAM coord tile size, matches Stage 4/5 convention
 INPUT_SIZE = 224      # All three foundation models are 224x224 input
@@ -912,8 +922,8 @@ def main():
     ap.add_argument("--model", choices=list(MODEL_REGISTRY.keys()), required=True)
     ap.add_argument("--world-size", type=int, default=1,
                     help="DDP rank count (= GPU count). Trainer self-launches via mp.spawn.")
-    ap.add_argument("--rawtiff-dir", default="/mnt/liad/data/tcga-brca-rawtiff")
-    ap.add_argument("--svs-dir", default="/mnt/liad/data/tcga-brca")
+    ap.add_argument("--rawtiff-dir", default=FS_MOUNT + "/data/tcga-brca-rawtiff")
+    ap.add_argument("--svs-dir", default=FS_MOUNT + "/data/tcga-brca")
     ap.add_argument("--coords-dir", required=True)
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--output-dir", required=True,

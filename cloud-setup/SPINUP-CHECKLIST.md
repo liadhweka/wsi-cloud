@@ -99,14 +99,11 @@ These five are decided at creation time and are expensive to change, so capture 
 
 ---
 
-## E. Before any teardown — the checklist
+## E. Before any teardown
 
-Run these in order; skipping any one of them loses work permanently.
+**See [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md)** — the do-every-time checklist for both halves
+(teardown *and* rebuild), plus `runs/lib/teardown-preflight.sh`, which verifies nothing is lost and prints
+**GO / NO-GO** before you destroy anything.
 
-1. Write the handoff prompt for the next session.
-2. `./backup.sh` — mirrors live Claude memories into `claude-memory-mirror/` in the repo.
-3. `git push` — the repo is the migration vehicle.
-4. **Final S3 sync, verified** — confirm the raw telemetry actually landed, don't assume.
-5. **Write the environment contract** (`env-contracts/leg-a-weka.json`) — instance type, region/AZ, AMI ID,
-   kernel, driver/CUDA versions, dataset byte-manifest, script commit. Leg B verifies against this file
-   before its first cell; without it, "were these two legs even comparable?" becomes unanswerable.
+*The steps used to be duplicated here. They are not any more, deliberately — a teardown checklist that exists
+in two places will drift, and the half you follow will be the stale one.*

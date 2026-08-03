@@ -9,7 +9,7 @@
 #   ingest   : Stage 1.5 fpsync pattern at fixed n=4 (the "scanner pace" baseline)
 #   extract  : Stage 6.A pattern — Virchow2 (or other model) at N=4 kvikIO+GDS+raw-TIFF
 #   mil      : Stage 6.B.3 pattern — attention-MIL training on 6.A features
-#   viewer   : Stage 1.6 viewer pattern — fio bs=4K n=4 random reads on /mnt/liad
+#   viewer   : Stage 1.6 viewer pattern — fio bs=4K n=4 random reads on ${FS_MOUNT}
 #
 # Per-workload telemetry CSV (one per workload, in run dir):
 #   workload-<name>.csv — time-series of that workload's app-level throughput
@@ -28,11 +28,15 @@
 #   ingest, extract, mil, viewer
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 LIBCUFILE_117=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0
-CUFILE_JSON=/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json
+CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 
 # Default config (override via env)
 EXTRACT_MODEL="${EXTRACT_MODEL:-virchow2}"
@@ -42,9 +46,9 @@ EXTRACT_N_GPUS="${EXTRACT_N_GPUS:-4}"
 MIL_FEATURES_TAG="${MIL_FEATURES_TAG:-brca_full}"
 INGEST_N="${INGEST_N:-4}"
 INGEST_SRC="${INGEST_SRC:-/data/local-nvme/fpsync-source/tcga-brca}"
-INGEST_DST="${INGEST_DST:-/mnt/liad/runs-stage6c-ingest-target}"
+INGEST_DST="${INGEST_DST:-${FS_MOUNT}/runs-stage6c-ingest-target}"
 VIEWER_N="${VIEWER_N:-4}"
-VIEWER_SCRATCH="${VIEWER_SCRATCH:-/mnt/liad/benchmarks/fio-scratch-6c-viewer}"
+VIEWER_SCRATCH="${VIEWER_SCRATCH:-${FS_MOUNT}/benchmarks/fio-scratch-6c-viewer}"
 
 # Args
 WORKLOADS=""
@@ -121,7 +125,7 @@ workload_extract() {
   local log="$RUN_DIR/workload-extract.log"
   local csv="$RUN_DIR/workload-extract.csv"
   echo "[extract] init" >> "$log"
-  local features_out="/mnt/liad/features/6.A/${EXTRACT_MODEL}/${EXTRACT_DATASET_TAG}-6c-concurrent"
+  local features_out="${FS_MOUNT}/features/6.A/${EXTRACT_MODEL}/${EXTRACT_DATASET_TAG}-6c-concurrent"
   mkdir -p "$features_out"
   touch "$READY_DIR/.extract-ready"
   while [ ! -f "$BARRIER" ]; do sleep 0.1; done
@@ -140,8 +144,8 @@ workload_extract() {
   OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 \
   setsid "$PY" "$REPO/runs/lib/extract-features-foundation-stage6.py" \
     --backend kvikio --world-size "$EXTRACT_N_GPUS" --model "$EXTRACT_MODEL" \
-    --rawtiff-dir /mnt/liad/data/tcga-brca-rawtiff \
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \
+    --rawtiff-dir ${FS_MOUNT}/data/tcga-brca-rawtiff \
+    --coords-dir ${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches \
     --manifest "$manifest" \
     --output-dir "$features_out" \
     --batch-size 256 \
@@ -185,11 +189,11 @@ workload_mil() {
   local log="$RUN_DIR/workload-mil.log"
   local csv="$RUN_DIR/workload-mil.csv"
   echo "[mil] init" >> "$log"
-  local features_dir="/mnt/liad/features/6.A/${EXTRACT_MODEL}/${MIL_FEATURES_TAG}"
+  local features_dir="${FS_MOUNT}/features/6.A/${EXTRACT_MODEL}/${MIL_FEATURES_TAG}"
   if [ ! -d "$features_dir" ] || [ "$(ls "$features_dir"/*.pt 2>/dev/null | wc -l)" -lt 10 ]; then
     echo "[mil] ERR: features dir $features_dir empty or missing — falling back to smoke test mode" >> "$log"
     # Try the 50-slide subset features instead
-    features_dir="/mnt/liad/features/6.A/${EXTRACT_MODEL}/brca50"
+    features_dir="${FS_MOUNT}/features/6.A/${EXTRACT_MODEL}/brca50"
     if [ ! -d "$features_dir" ] || [ "$(ls "$features_dir"/*.pt 2>/dev/null | wc -l)" -lt 10 ]; then
       echo "[mil] ERR: no usable features dir; skipping" >> "$log"
       touch "$READY_DIR/.mil-skipped"

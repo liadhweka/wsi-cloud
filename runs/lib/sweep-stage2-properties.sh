@@ -26,17 +26,21 @@
 #   - one runs/<TS>-s2.0-properties-<dataset>-n<N>/ per cell
 #   - one consolidated log at runs/sweep-logs/<TS>-stage2-properties.log
 #   - per-run per-slide-latencies.csv archived inside each run dir
-#   - JSON sidecars at /mnt/liad/cataloging/2.0/<dataset>/n<N>/
+#   - JSON sidecars at ${FS_MOUNT}/cataloging/2.0/<dataset>/n<N>/
 #
 # Prerequisites:
 #   - openslide-tools + libopenslide0 installed (apt)
 #   - openslide-python installed (pip --user) — verified at module import time
-#   - /mnt/liad/data/{tcga-brca,camelyon16}/ populated (Stages 1.2, 1.3)
+#   - ${FS_MOUNT}/data/{tcga-brca,camelyon16}/ populated (Stages 1.2, 1.3)
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 EXTRACTOR=$REPO/runs/lib/extract-slide-properties.py
-CATALOG_OUT=/mnt/liad/cataloging/2.0
+CATALOG_OUT=${FS_MOUNT}/cataloging/2.0
 MANIFEST_DIR=/tmp/stage2-manifests
 LOG_DIR=$REPO/runs/sweep-logs
 
@@ -56,15 +60,15 @@ fi
 log "=== building manifests ==="
 BRCA_MANIFEST=$MANIFEST_DIR/tcga-brca.txt
 CAM_MANIFEST=$MANIFEST_DIR/camelyon16.txt
-find /mnt/liad/data/tcga-brca/ -name '*.svs' 2>/dev/null | sort > "$BRCA_MANIFEST"
-find /mnt/liad/data/camelyon16/images/ -name '*.tif' 2>/dev/null | sort > "$CAM_MANIFEST"
+find ${FS_MOUNT}/data/tcga-brca/ -name '*.svs' 2>/dev/null | sort > "$BRCA_MANIFEST"
+find ${FS_MOUNT}/data/camelyon16/images/ -name '*.tif' 2>/dev/null | sort > "$CAM_MANIFEST"
 BRCA_COUNT=$(wc -l < "$BRCA_MANIFEST")
 CAM_COUNT=$(wc -l < "$CAM_MANIFEST")
 log "  TCGA-BRCA:  $BRCA_COUNT slides → $BRCA_MANIFEST"
 log "  CAMELYON16: $CAM_COUNT slides → $CAM_MANIFEST"
 
 if [[ $BRCA_COUNT -eq 0 || $CAM_COUNT -eq 0 ]]; then
-  log "FATAL: one or both manifests empty. Verify /mnt/liad/data/ contains the datasets."
+  log "FATAL: one or both manifests empty. Verify ${FS_MOUNT}/data/ contains the datasets."
   exit 2
 fi
 

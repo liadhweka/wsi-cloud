@@ -26,14 +26,18 @@
 #
 # Prerequisites:
 #   - /data/local-nvme/fpsync-source/tcga-brca/ populated (Stage 1.5 prep already did this)
-#   - /mnt/liad/benchmarks/fio-scratch-mixed/ populated with 64×4G fio files
+#   - ${FS_MOUNT}/benchmarks/fio-scratch-mixed/ populated with 64×4G fio files
 #     (run the Stage 1.6 prep first; see comment block at end of file)
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 SRC=/data/local-nvme/fpsync-source/tcga-brca/
-WRITE_TARGET=/mnt/liad/data/fpsync-target/mixed
-READ_SCRATCH=/mnt/liad/benchmarks/fio-scratch-mixed
+WRITE_TARGET=${FS_MOUNT}/data/fpsync-target/mixed
+READ_SCRATCH=${FS_MOUNT}/benchmarks/fio-scratch-mixed
 SHDIR_ROOT=/tmp/fpsync-stage1.6
 LOG_DIR=$REPO/runs/sweep-logs
 mkdir -p "$LOG_DIR" "$WRITE_TARGET" "$SHDIR_ROOT"
@@ -210,7 +214,7 @@ log "         rm -rf $SHDIR_ROOT/* (fpsync shared dirs, small)"
 #     --run-name fio-scratch-layout-prep \
 #     --stage 1.6 \
 #     --note "Stage 1.6 PREP (not a sweep cell): pre-stage 64×4G fio scratch
-#             files at /mnt/liad/benchmarks/fio-scratch-mixed/ for the read
+#             files at ${FS_MOUNT}/benchmarks/fio-scratch-mixed/ for the read
 #             side of the mixed sweep. Created once, reused across all 8 cells
 #             (avoids per-cell layout phase). Same fio --rw=write recipe as
 #             1.0a's bs=1M/jobs=N to verify wekafs absorbs the layout cleanly.
@@ -218,7 +222,7 @@ log "         rm -rf $SHDIR_ROOT/* (fpsync shared dirs, small)"
 #             concurrency, useful as a 1.0a cross-check on real-world write." \
 #     -- /usr/local/bin/fio \
 #         --name=fio-scratch-layout \
-#         --directory=/mnt/liad/benchmarks/fio-scratch-mixed \
+#         --directory=${FS_MOUNT}/benchmarks/fio-scratch-mixed \
 #         --rw=write --bs=1M --size=4G --numjobs=64 --iodepth=1 \
 #         --ioengine=libaio --direct=1 \
 #         --create_only=1 \

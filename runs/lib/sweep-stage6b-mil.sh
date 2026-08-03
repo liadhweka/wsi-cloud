@@ -27,7 +27,11 @@
 #   FEATURES_TAG=brca_full ./sweep-stage6b-mil.sh all  # features dataset (default brca_full)
 set -uo pipefail
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 TRAINER="$REPO/runs/lib/train-mil-stage6b.py"
@@ -38,7 +42,7 @@ RECORD="$REPO/runs/lib/record-run.sh"
 
 MODEL="${MODEL:-virchow2}"
 FEATURES_TAG="${FEATURES_TAG:-brca_full}"
-FEATURES_DIR="/mnt/liad/features/6.A/${MODEL}/${FEATURES_TAG}"
+FEATURES_DIR="${FS_MOUNT}/features/6.A/${MODEL}/${FEATURES_TAG}"
 
 case "$MODEL" in
   virchow2)        EMBED_DIM=1280 ;;

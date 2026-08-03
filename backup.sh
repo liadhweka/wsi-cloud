@@ -19,7 +19,7 @@
 #
 # Restore after a teardown / rebuild (discover the slug rather than typing it,
 # since it is derived from the repo path):
-#     SLUG=$(ls ~/.claude/projects/ | grep weka-vs-lustre | head -1)
+#     SLUG=$(printf '%s' "$PWD" | sed 's#^/#-#; s#/#-#g')   # derived from the repo path
 #     mkdir -p ~/.claude/projects/$SLUG/memory
 #     rsync -a claude-memory-mirror/ ~/.claude/projects/$SLUG/memory/
 #
@@ -51,3 +51,21 @@ fi
 mkdir -p "$DST"
 rsync -a --delete "$SRC" "$DST"
 echo "backup.sh: mirrored $(find "$DST" -type f | wc -l | tr -d ' ') memory files ($(du -sh "$DST" | cut -f1)) -> $DST"
+
+# ---- Second half: push everything teardown-critical to S3 ---------------------
+# git covers all the small text; S3 covers the heavy write-once telemetry and the
+# datasets. Delegated to runs/lib/sync-to-s3.sh, which implements the two distinct
+# sync semantics (mirror-with-delete vs archive-never-delete) — see its header.
+#
+# Degrades gracefully: if S3_BUCKET isn't set we've still done the memory mirror,
+# which is all that's needed on a machine with no bucket (e.g. the initial
+# bootstrap). But say so loudly rather than exiting 0 as if fully backed up.
+if [ -z "${S3_BUCKET:-}" ]; then
+  echo "backup.sh: S3_BUCKET not set — memory mirror done, S3 sync SKIPPED." >&2
+  echo "backup.sh: that is correct pre-cloud; in the cloud it means telemetry is NOT backed up." >&2
+  exit 0
+fi
+
+echo "backup.sh: syncing to s3://$S3_BUCKET/ (leg: ${LEG:-unset}) ..."
+./runs/lib/sync-to-s3.sh --mode full "$@"
+echo "backup.sh: memory mirror + S3 sync both complete."

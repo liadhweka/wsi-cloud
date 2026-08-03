@@ -1,0 +1,21 @@
+WekaIO v5.1.24.6-aidp (CLI build 5.1.24.6-aidp)
+
+             cluster: aidp (3dae30ef-6533-4baf-94b9-92855ea0649c)
+      leader process: 0 (container 0, uptime 17 days)
+leadership processes: 20, 40, 700, 0, 60
+     deployment mode: dedicated
+              status: OK (15 backend containers UP, 26 drives UP)
+          protection: 3+2 (fully protected)
+           hot spare: 1 failure domain(s) (13.82 TiB)
+       drive storage: 30.17 TiB total, 2.84 TiB unprovisioned
+               cloud: connected
+             license: OK, valid thru 2026-09-17T06:35:02Z
+
+           io status: STARTED 40 days ago (95 io-nodes UP, 540 buckets UP)
+          link layer: InfiniBand
+             clients: 5 connected
+               reads: 0 B/s (0 IO/s)
+              writes: 0 B/s (0 IO/s)
+          operations: 7 ops/s
+              alerts: 7 active alerts, use `weka alerts` to list them
+

@@ -32,7 +32,11 @@ N_BUFFER="$4"
 NUM_THREADS="$5"
 RUN_DIR="$6"
 
-REPO=/home/liadhermelin/wsi/rerun_new_TRUERESULTS
+# Repo root derived from this script's own location (runs/lib -> runs -> root),
+# so the tree is wherever the script physically lives. No hardcoded path.
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+: "${FS_MOUNT:?FS_MOUNT is unset -- source cloud-setup/env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604
 PY="$CONDA_ENV/bin/python"
 READER="$REPO/runs/lib/read-tiles-kvikio.py"
@@ -48,7 +52,7 @@ fi
 # direct child of record-run.sh).
 export CONDA_PREFIX="${CONDA_PREFIX:-$CONDA_ENV}"
 export LD_PRELOAD="${LD_PRELOAD:-/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0}"
-export CUFILE_ENV_PATH_JSON="${CUFILE_ENV_PATH_JSON:-/home/liadhermelin/wsi-debug/p1-gdsio/cufile-full-rdma.json}"
+export CUFILE_ENV_PATH_JSON="${CUFILE_ENV_PATH_JSON:-${CUFILE_ENV_PATH_JSON}}"
 
 mkdir -p "$RUN_DIR"
 
@@ -56,14 +60,14 @@ mkdir -p "$RUN_DIR"
 DATASET="${DATASET:-brca}"
 case "$DATASET" in
   brca)
-    RAWTIFF_DIR=/mnt/liad/data/tcga-brca-rawtiff
+    RAWTIFF_DIR=${FS_MOUNT}/data/tcga-brca-rawtiff
     MANIFEST=$REPO/runs/manifests/tcga-brca-stage4a-subset.tsv
-    COORDS_DIR=/mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches
+    COORDS_DIR=${FS_MOUNT}/tissue-detection/3.0/tcga-brca/n64/patches
     ;;
   cam16)
-    RAWTIFF_DIR=/mnt/liad/data/camelyon16-rawtiff
+    RAWTIFF_DIR=${FS_MOUNT}/data/camelyon16-rawtiff
     MANIFEST=$REPO/runs/manifests/camelyon16-stage4a-subset.tsv
-    COORDS_DIR=/mnt/liad/tissue-detection/3.0/camelyon16/n64/patches
+    COORDS_DIR=${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches
     ;;
   *) echo "unknown DATASET=$DATASET" >&2; exit 2;;
 esac

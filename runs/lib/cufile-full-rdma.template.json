@@ -15,7 +15,7 @@
   // the // CANDIDATE knobs ONLY if a measured gdsio / fe-core-kvikio run is below
   // the healthy per-client ceiling — procedure in GDS-TUNING-CHECKLIST.md.
   // ===========================================================================
-  "logging": { "level": "INFO", "dir": "/home/liadhermelin/wsi-debug/p1-gdsio" },   // "ERROR" trims logging overhead for perf runs (optional)
+  "logging": { "level": "INFO", "dir": "${CUFILE_CONFIG_DIR:-$HOME/cufile-config}" },   // "ERROR" trims logging overhead for perf runs (optional)
   "profile": { "nvtx": false, "cufile_stats": 0 },
 
   "execution": {

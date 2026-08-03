@@ -40,8 +40,8 @@ weka-stats.csv / RDMA / nvidia-smi / sar-cpu for cross-source validation.
 Usage (launched by sweep driver via torchrun --nproc_per_node=$N):
   torchrun --nproc_per_node=$N $0 \\
     --backend kvikio \\
-    --rawtiff-dir /mnt/liad/data/tcga-brca-rawtiff \\
-    --coords-dir /mnt/liad/tissue-detection/3.0/tcga-brca/n64/patches \\
+    --rawtiff-dir $FS_MOUNT/data/tcga-brca-rawtiff \\
+    --coords-dir $FS_MOUNT/tissue-detection/3.0/tcga-brca/n64/patches \\
     --manifest runs/manifests/tcga-brca-stage4a-subset.tsv \\
     --batch-size 256 --ramp 300 --runtime 1200 \\
     --training-steps-csv <run-dir>/training-steps.csv \\
@@ -57,6 +57,15 @@ import time
 from collections import OrderedDict
 from pathlib import Path
 
+import os as _os, sys as _sys
+# The mount is a DIMENSION, never a constant: this project runs the identical code
+# against two filesystems. Refuse to guess -- a wrong mount silently measures the
+# other filesystem and the number still looks correct.
+FS_MOUNT = _os.environ.get("FS_MOUNT")
+if not FS_MOUNT:
+    _sys.exit("FATAL: FS_MOUNT is unset -- source cloud-setup/env.sh "
+              "(see cloud-setup/NAMING-AND-VARIABLES.md).")
+
 import cupy as cp
 import h5py
 import numpy as np
@@ -66,6 +75,7 @@ import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torchvision.models import resnet50
+
 
 TILE_SIZE = 256
 
@@ -722,8 +732,8 @@ def main():
     ap.add_argument("--world-size", type=int, default=1,
                     help="Number of DDP ranks (= GPUs). Trainer launches itself via "
                          "torch.multiprocessing.spawn — no torchrun needed.")
-    ap.add_argument("--rawtiff-dir", default="/mnt/liad/data/tcga-brca-rawtiff")
-    ap.add_argument("--svs-dir", default="/mnt/liad/data/tcga-brca")
+    ap.add_argument("--rawtiff-dir", default=FS_MOUNT + "/data/tcga-brca-rawtiff")
+    ap.add_argument("--svs-dir", default=FS_MOUNT + "/data/tcga-brca")
     ap.add_argument("--coords-dir", required=True)
     ap.add_argument("--manifest", required=True)
     ap.add_argument("--batch-size", type=int, default=256, help="Per-rank batch size")
