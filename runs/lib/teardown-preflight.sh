@@ -77,6 +77,33 @@ else
   warn "no live memory dir at $LIVE (expected if memories were authored straight into the mirror)"
 fi
 
+# ── 2b. The next-session handoff prompt ──────────────────────────────────────────
+# WHY THIS IS A GATE. The teardown checklist calls this "the step most easily
+# skipped and most expensive to skip", and it was the only one of the seven with
+# nothing verifying it — and with no defined file, so a handoff "written" into the
+# chat would die with the instance alongside the very context it exists to carry.
+hdr "Next-session handoff prompt"
+HANDOFF="$REPO/cloud-setup/HANDOFF-NEXT-SESSION.md"
+if [ ! -f "$HANDOFF" ]; then
+  bad "no cloud-setup/HANDOFF-NEXT-SESSION.md — the next session would start not knowing what this one did"
+else
+  # It is git-tracked, so the PREVIOUS teardown's copy would sail through a mere
+  # existence check. Require a dated header and refuse a stale one.
+  written=$(grep -m1 -oE '^Written:[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2}' "$HANDOFF" \
+            | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' || true)
+  w_epoch=""
+  [ -n "$written" ] && w_epoch=$(date -u -d "$written" +%s 2>/dev/null || true)
+  if [ -z "$w_epoch" ]; then
+    bad "HANDOFF-NEXT-SESSION.md has no usable 'Written: YYYY-MM-DD' header — this teardown's copy is indistinguishable from the last one's"
+  else
+    age=$(( ( $(date -u +%s) - w_epoch ) / 86400 ))
+    if [ "$age" -le 1 ]; then ok "handoff prompt written $written (${age}d old)"
+    else bad "handoff prompt is ${age}d old (Written: $written) — it describes an earlier teardown, not this one"; fi
+  fi
+  grep -qi "${LEG:-}" "$HANDOFF" 2>/dev/null \
+    || warn "handoff prompt never mentions leg '${LEG:-unset}' — confirm it is about this leg"
+fi
+
 # ── 3. Git clean and pushed ──────────────────────────────────────────────────────
 hdr "Git"
 dirty=$(git -C "$REPO" status --porcelain | wc -l)
@@ -109,6 +136,27 @@ print(sum(1 for k in ec.MUST_MATCH if not c.get(k)))" 2>/dev/null || echo "?")
   if aws s3 ls "s3://$S3_BUCKET/env-contracts/$(basename "$CONTRACT")" >/dev/null 2>&1; then
     ok "contract present in S3"
   else bad "contract NOT in S3 — it dies with the instance"; fi
+  # A recorded env.sh-vs-metadata conflict means the contract is right (it kept the
+  # metadata value) but env.sh is wrong — and env.sh is what the NEXT instance is
+  # rebuilt from, so the rebuild would launch in the wrong AZ or from the wrong AMI.
+  # Self-clearing: fix env.sh, re-run `env-contract.py write`, and the field empties.
+  # -1 = the field is absent, which is NOT the same as "no conflicts": a contract
+  # written before this check existed simply never looked, so claiming agreement would
+  # be asserting something unverified.
+  conflicts=$(python3 -c "
+import json
+c = json.load(open('$CONTRACT'))
+print(len(c['source_conflicts']) if 'source_conflicts' in c else -1)" 2>/dev/null || echo "?")
+  if [ "$conflicts" = "0" ]; then ok "env.sh agrees with instance metadata"
+  elif [ "$conflicts" = "-1" ]; then warn "contract predates the env.sh-vs-metadata check — agreement is unverified, not confirmed"
+  elif [ "$conflicts" = "?" ]; then warn "could not parse $(basename "$CONTRACT") to read source_conflicts"
+  else
+    bad "$conflicts field(s) where env.sh disagreed with instance metadata — env.sh is the rebuild source, fix it and re-run env-contract.py write"
+    python3 -c "
+import json
+for d in json.load(open('$CONTRACT'))['source_conflicts']:
+    print('             %s: env.sh=%r instance=%r' % (d['field'], d['env_sh'], d['instance_metadata']))" 2>/dev/null
+  fi
 else
   bad "no contract for leg '${LEG:-unknown}' — run: runs/lib/env-contract.py write --leg ${LEG:-<leg>}"
 fi

@@ -126,6 +126,16 @@ These change what the numbers mean, so resolving them after cells have run means
     Re-verify rather than assuming the same versions behave the same. Detail: `runs/Stage-4-Patching.md`
     § tool inventory install note.
 
+11. **[USER DECISION] Should `env.sh --check` hard-fail on the current leg's canary field?** Today
+    `WEKA_EC_SCHEME` and `LUSTRE_STRIPE_LAYOUT` are both `_rec` (warn only), yet **the canary relation for the
+    running leg cannot be derived without the one that applies** (`D12`) — so a leg can start with `--check`
+    passing and no consistency check possible. A leg-conditional `_req` would catch it, but it **changes when
+    the gate blocks**: it would fail during Part 5, before Part 6 has provisioned the filesystem. *Options:*
+    (a) leave as warnings and rely on the pre-flight; (b) leg-conditional `_req`, plus a documented "expect
+    this to fail until Part 6"; (c) a separate `--check-ready` mode meaning "ready to measure", distinct from
+    "configured". **Recommend (c)** — the two questions are genuinely different and conflating them is what
+    makes (b) awkward. Detail: `cloud-setup/AUDIT-REPORT.md` § delegation-boundary pass.
+
 ## B. BUILD in the cloud session (deferred engineering — needs the real environment)
 
 Items are labelled by their **`D-n` id** — the stable identifier shared with the table in
@@ -208,6 +218,39 @@ collided with section A's and had a gap; cite the `D-n` id, never a position.)
 
 - **`D-13` — Hydration driver for 1.7** (S3 → filesystem) — needs the real bucket, region, and IAM role.
     `run-leg.sh` reports this step as **MISSING and aborts** rather than skipping it.
+
+- **`D-20` (new) — `runs/lib/prove-recording.sh`.** Rebuild step 9 and `handoff-cloud.md` both say to run a
+   throwaway Stage-0 cell and "confirm" **five** things by eye — recording complete, both canaries functional,
+   S3 sync verified, the `INDEX.md` row correct, an aggregator emitting a row pivoted on `--fs` — with no
+   command given. It runs on **every** rebuild, before spending wallclock, and five eyeball checks is where one
+   gets skipped. Build it as one script with a named non-zero exit per failed assertion. *Needs the real
+   environment:* it runs an actual cell end-to-end.
+
+- **`D-21` (new) — a contract-verified marker `run-leg.sh` refuses without.** Rebuild step 7 runs
+   `env-contract.py verify` as "the gate", then three steps later `run-leg.sh` starts the leg **without
+   checking that the gate ever ran or passed.** Phase 1 (safe now): `verify` writes
+   `runs/.leg-state/$LEG/contract-verified` on PASS and unlinks it on FAIL, and `run-leg.sh` warns loudly when
+   the marker is absent or older than the contract. Phase 2 (**needs the user's explicit ratification**, since
+   it can abort a leg): promote the warning to a refusal.
+
+- **`D-22` (new) — `cloud-setup/verify-conda-env.sh`.** Rebuild step 5 asks for nine imports plus a visible-GPU
+   count to be checked by hand on every rebuild. Script the **verification only** (imports, GPU count vs
+   `nvidia-smi`, `python_version` against the reference contract, non-zero on drift) and leave environment
+   *creation* in the prompt where it stays ask-gated.
+
+- **`D-23` (new) — `sync-to-s3.sh --self-test`.** Its header carries a **seven-step manual first-run
+   procedure**, including the one that actually matters: prove a file under a MIRROR path disappears when
+   deleted locally, and a file under an ARCHIVE path does **not**. Mechanise it under a namespaced
+   `_selftest/` prefix, printing (not running) the cleanup command, and make removal of the file's UNVERIFIED
+   banner conditional on it passing. *Needs the real bucket.*
+
+- **`D-24` (new) — cross-leg artifact fingerprints.** `runs/README.md` declares four cross-leg integrity gates
+   ("same slides producing coords, same per-slide tile counts", "same raw-TIFF byte counts and tile-grid
+   dimensions", "same feature file count / per-slide tile count / tensor shapes"), each "fail-loud and
+   invalidates downstream comparison" — and **nothing computes or compares them.** A declared gate that no code
+   implements is worse than no gate: it reads as covered. *Sequence:* propose the per-artifact-class fingerprint
+   definitions in the `STAGES.md` decision log for ratification **now**; build `capture`/`compare` after Stage
+   3.0 has real output.
 
 > **Nothing was deleted from the script library.** An earlier plan assumed GDS would be dropped, which would
 > have removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**),

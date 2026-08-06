@@ -11,7 +11,7 @@
 > the block-size-matched ceilings every "% of ceiling" divides by.
 
 For project-wide conventions see `../CLAUDE.md`; framing and the fairness contract `../PROJECT-THESIS.md`;
-stage map and decision log **D1–D15** `STAGES.md`; runbook `README.md`.
+stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`.
 
 ---
 

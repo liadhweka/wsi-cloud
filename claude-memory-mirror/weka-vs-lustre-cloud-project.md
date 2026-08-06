@@ -45,7 +45,7 @@ cell risks measuring cache rather than storage. Cache state is recorded per cell
 
 **Current state (2026-07-31): the repo build is COMPLETE; the cloud environment does not exist yet.**
 `~/wsi-cloud/` holds the full doc set (thesis, CLAUDE.md, seven stage roadmaps, STAGES.md with
-decision log **D1–D15**, PRESENTING, SCRIPT-TRACKER, FILESYSTEM-MAP, runbook), the **63-script library** (syntax-clean;
+decision log **D1–D16**, PRESENTING, SCRIPT-TRACKER, FILESYSTEM-MAP, runbook), the **63-script library** (syntax-clean;
 59 carried over intact — nothing deleted, since GDS is retained — plus `sync-to-s3.sh`, `env-contract.py`,
 `run-leg.sh`, `teardown-preflight.sh` written here), 7 manifests, 20 memories, the
 cloud provisioning + handoff docs, and the supporting artifacts (`.gitignore`, `.claude/settings.json`,

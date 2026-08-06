@@ -10,7 +10,7 @@
 > its output coordinate lists gate all of Stages 4/5/6/7 **in both legs**.
 
 For project-wide conventions and recording philosophy see `../CLAUDE.md`; framing and the fairness contract
-`../PROJECT-THESIS.md`; stage map and decision log **D1–D15** `STAGES.md`; runbook `README.md`.
+`../PROJECT-THESIS.md`; stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`.
 
 ---
 
@@ -255,7 +255,7 @@ Byte-verified held-constant inputs, identical in both legs (**D6**).
 
 - `../CLAUDE.md` — project rules: recording philosophy, per-filesystem adapters, framing
 - `../PROJECT-THESIS.md` — the question, held-constant contract, both asymmetries, scope
-- `STAGES.md` — stage map, per-leg plan, decision log **D1–D15** (esp. **D1–D3** magnification, **D15** CPU)
+- `STAGES.md` — stage map, per-leg plan, decision log **D1–D16** (esp. **D1–D3** magnification, **D15** CPU)
 - `Stage-2-Cataloging.md` — the cross-leg ops-counter comparability caveat and the sub-second-cell open item, both of which apply here
 - `../SCRIPT-TRACKER.md` — per-script reference including the 20× contract implementation
 - `README.md` — operational runbook and both canaries

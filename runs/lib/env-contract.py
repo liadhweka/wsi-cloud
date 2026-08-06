@@ -24,6 +24,7 @@ USAGE
     env-contract.py write  --leg {weka|lustre} [-o PATH]
     env-contract.py verify --against PATH [--leg {weka|lustre}]
     env-contract.py show   --file PATH
+    env-contract.py env    --file PATH   # emit env.sh export lines (rebuild recovery)
 
     Facts are collected automatically where possible (uname, nvidia-smi, git,
     versions, mount info) and read from the environment otherwise — see
@@ -54,7 +55,7 @@ MUST_MATCH = [
 ]
 # EXPECTED to differ: filesystem-specific, i.e. the variable under test.
 MAY_DIFFER = [
-    "leg", "fs_mount", "fs_type", "client_hostname", "libcufile_path",
+    "leg", "fs_mount", "fs_type", "fs_transport", "client_hostname", "libcufile_path",
     "weka_backend_type", "weka_backend_count", "weka_capacity_tb",
     "weka_ec_scheme", "weka_backend_ram_total",
     "weka_client_cores", "weka_client_nics",
@@ -62,6 +63,13 @@ MAY_DIFFER = [
     "fsx_efa_enabled", "lustre_stripe_layout",
     "written_utc", "instance_id",
 ]
+# Neither compared nor expected-to-differ: present ONLY so the contract can rebuild
+# env.sh after a teardown. WHY it needs its own list: `s3_bucket` is what you must
+# already know to have FETCHED this contract, so comparing it proves nothing — but
+# leaving it out meant the recovery artifact could not reconstruct the file it is the
+# recovery source for. Both `verify` and `write`'s completeness check iterate the two
+# lists above, so a field here is correctly invisible to them.
+RECOVERY_ONLY = ["s3_bucket"]
 
 
 def sh(cmd, default=None):
@@ -87,18 +95,61 @@ def _libcufile_version(path):
     return m.group(1) if m else None
 
 
+_IMDS = "http://169.254.169.254"
+
+
+def imds(path):
+    """Read one EC2 instance-metadata value, IMDSv2 first.
+
+    WHY the token: newer instances require IMDSv2, and AWS's docs are explicit that
+    "if IMDSv2 is required, IMDSv1 does not work" — a plain GET returns nothing. This
+    used to be a bare `curl`, which meant every metadata-derived contract field came
+    back null on such an instance and `write` failed for reasons that looked unrelated.
+    `curl -f` matters too: without it curl prints the HTTP error INTO the output, so a
+    failure arrives looking like data.
+    Source: docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html
+    """
+    token = sh(f'curl -sfX PUT "{_IMDS}/latest/api/token" '
+               f'-H "X-aws-ec2-metadata-token-ttl-seconds: 21600" --max-time 2')
+    if token:
+        v = sh(f'curl -sf -H "X-aws-ec2-metadata-token: {token}" '
+               f'--max-time 2 "{_IMDS}/latest/meta-data/{path}"')
+        if v:
+            return v
+    # IMDSv1 fallback for instances where it is still permitted.
+    return sh(f'curl -sf --max-time 2 "{_IMDS}/latest/meta-data/{path}"')
+
+
+def _reconcile(conflicts, field, env_name, imds_path):
+    """Prefer instance metadata over env.sh, and RECORD any disagreement.
+
+    WHY not the previous `env(X) or imds(Y)`: env.sh is hand-typed at bootstrap, so a
+    wrong `ami_id` or `instance_type` there is never consulted against reality — it is
+    written into Leg A's contract, hand-copied into Leg B's env.sh from that same
+    contract, and then compared against itself by `verify`. It matches. The drift the
+    contract exists to catch becomes invisible at exactly the moment it matters.
+
+    Metadata is what the instance actually IS, so it wins; but a disagreement is itself
+    a finding (a region/AZ mismatch means the instance is not where it was meant to be),
+    so it is recorded rather than silently resolved.
+    """
+    e, m = env(env_name), imds(imds_path)
+    if e and m and e.strip() != m.strip():
+        conflicts.append({"field": field, "env_sh": e, "instance_metadata": m})
+        return m
+    return m or e
+
+
 def collect(leg, repo_root):
     """Gather every contract field. Unavailable facts are null, never guessed."""
     fs_mount = env("FS_MOUNT")
+    conflicts = []
     c = {
         # ---- held constant ----
-        "instance_type":   env("INSTANCE_TYPE") or sh("curl -s --max-time 2 "
-                           "http://169.254.169.254/latest/meta-data/instance-type"),
-        "aws_region":      env("AWS_REGION"),
-        "aws_az":          env("AWS_AZ") or sh("curl -s --max-time 2 "
-                           "http://169.254.169.254/latest/meta-data/placement/availability-zone"),
-        "ami_id":          env("AMI_ID") or sh("curl -s --max-time 2 "
-                           "http://169.254.169.254/latest/meta-data/ami-id"),
+        "instance_type":   _reconcile(conflicts, "instance_type", "INSTANCE_TYPE", "instance-type"),
+        "aws_region":      _reconcile(conflicts, "aws_region", "AWS_REGION", "placement/region"),
+        "aws_az":          _reconcile(conflicts, "aws_az", "AWS_AZ", "placement/availability-zone"),
+        "ami_id":          _reconcile(conflicts, "ami_id", "AMI_ID", "ami-id"),
         "kernel":          platform.release(),
         "driver_version":  sh("nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1"),
         "cuda_version":    sh("nvidia-smi | grep -oE 'CUDA Version: [0-9.]+' | grep -oE '[0-9.]+'"),
@@ -128,6 +179,11 @@ def collect(leg, repo_root):
         "leg":             leg,
         "fs_mount":        fs_mount,
         "fs_type":         sh(f"findmnt -no FSTYPE {fs_mount}") if fs_mount else None,
+        # The transport actually in use (dpdk|udp for WEKA, efa|tcp for Lustre). D16
+        # makes it a precondition of the measurement, so it belongs in the contract:
+        # a leg measured on a fallback transport is not comparable, and the artifact
+        # that proves comparability has to say which transport it was.
+        "fs_transport":    env("FS_TRANSPORT"),
         "client_hostname": env("CLIENT_HOSTNAME") or platform.node(),
         "weka_backend_type":      env("WEKA_BACKEND_TYPE"),
         "weka_backend_count":     env("WEKA_BACKEND_COUNT"),
@@ -142,9 +198,12 @@ def collect(leg, repo_root):
         "fsx_efa_enabled":        env("FSX_EFA_ENABLED"),
         "lustre_stripe_layout":   (sh(f"lfs getstripe -d {fs_mount} 2>/dev/null | tr '\\n' ' '")
                                    or env("LUSTRE_STRIPE_LAYOUT")) if fs_mount else None,
-        "instance_id":     env("INSTANCE_ID") or sh("curl -s --max-time 2 "
-                           "http://169.254.169.254/latest/meta-data/instance-id"),
+        "instance_id":     _reconcile(conflicts, "instance_id", "INSTANCE_ID", "instance-id"),
         "written_utc":     datetime.now(timezone.utc).isoformat(),
+        # ---- recovery only: not compared, see RECOVERY_ONLY ----
+        "s3_bucket":       env("S3_BUCKET"),
+        # Empty when env.sh and the instance agree, which is the normal case.
+        "source_conflicts": conflicts,
     }
     return c
 
@@ -157,6 +216,19 @@ def cmd_write(a, repo_root):
     missing = [k for k in MUST_MATCH if c.get(k) in (None, "")]
     print(f"env-contract: wrote {out}")
     print(f"env-contract: {len(MUST_MATCH) - len(missing)}/{len(MUST_MATCH)} held-constant fields captured")
+
+    # Loud: env.sh disagreeing with the instance means one of them is describing a
+    # machine this is not. The metadata value was recorded; the human decides whether
+    # env.sh is simply wrong (fix it) or the instance is not where it should be (worse).
+    if c.get("source_conflicts"):
+        print("\nenv-contract: WARNING — env.sh disagrees with this instance's own metadata:",
+              file=sys.stderr)
+        for d in c["source_conflicts"]:
+            print(f"  - {d['field']}: env.sh={d['env_sh']!r}  instance={d['instance_metadata']!r}"
+                  "  → recorded the instance value", file=sys.stderr)
+        print("env-contract: fix cloud-setup/env.sh to match, or explain the difference —\n"
+              "              a region/AZ conflict means the instance is not where it was\n"
+              "              meant to be, which contaminates the comparison.", file=sys.stderr)
     if missing:
         # Loud, because an unrecorded fact can never be shown to have matched later.
         print("\nenv-contract: WARNING — these held-constant fields are UNRECORDED:", file=sys.stderr)
@@ -199,6 +271,14 @@ def cmd_verify(a, repo_root):
     for k, r, v in expected:
         print(f"  differs    {k}: {r} -> {v}")
 
+    # Not a violation by itself — the metadata value is what got compared above — but it
+    # means env.sh describes a machine this is not, and env.sh is what the next rebuild
+    # is reconstructed from.
+    for label, d in (("reference", ref), ("this leg", cur)):
+        for x in d.get("source_conflicts") or []:
+            print(f"\n  NOTE ({label}) {x['field']}: env.sh said {x['env_sh']!r}, "
+                  f"instance said {x['instance_metadata']!r} — the instance value was used.")
+
     if violations or unrecorded:
         print("\nenv-contract verify: FAILED.", file=sys.stderr)
         print("  The two legs are NOT demonstrably comparable. Any head-to-head number\n"
@@ -207,6 +287,74 @@ def cmd_verify(a, repo_root):
               "  before running a measured cell.", file=sys.stderr)
         return 1
     print("\nenv-contract verify: PASSED — every held-constant field matches. Cleared for Leg B.")
+    return 0
+
+
+# Contract field -> env.sh variable. Only fields that belong in env.sh appear here;
+# the rest of the contract is measured state, not configuration.
+ENV_MAP_HELD = {
+    "instance_type": "INSTANCE_TYPE", "aws_region": "AWS_REGION", "aws_az": "AWS_AZ",
+    "ami_id": "AMI_ID", "conda_env_main": "CONDA_ENV_MAIN",
+}
+ENV_MAP_LEG = {
+    "leg": "LEG", "instance_id": "INSTANCE_ID", "client_hostname": "CLIENT_HOSTNAME",
+    "libcufile_path": "LIBCUFILE_PRELOAD", "fs_transport": "FS_TRANSPORT",
+    "weka_backend_type": "WEKA_BACKEND_TYPE", "weka_backend_count": "WEKA_BACKEND_COUNT",
+    "weka_capacity_tb": "WEKA_CAPACITY_TB", "weka_ec_scheme": "WEKA_EC_SCHEME",
+    "weka_backend_ram_total": "WEKA_BACKEND_RAM_TOTAL",
+    "weka_client_cores": "WEKA_CLIENT_CORES", "weka_client_nics": "WEKA_CLIENT_NICS",
+    "fsx_tier": "FSX_TIER", "fsx_capacity_tib": "FSX_CAPACITY_TIB",
+    "fsx_metadata_iops": "FSX_METADATA_IOPS", "fsx_efa_enabled": "FSX_EFA_ENABLED",
+    "lustre_stripe_layout": "LUSTRE_STRIPE_LAYOUT",
+}
+
+
+def cmd_env(a, repo_root):
+    """Emit env.sh-shaped export lines from a contract.
+
+    WHY: env.sh is gitignored, so it is LOST on every rebuild, and the documented
+    recovery was "read the contract and retype the values". That is a transcription
+    step in front of the one artifact whose whole purpose is proving the two legs
+    matched — a typo in AMI_ID or INSTANCE_TYPE defeats the check it exists to pass.
+    The rebuild happens at least twice, so this is worth automating.
+
+    Held-constant values are emitted live; leg-specific ones are emitted COMMENTED,
+    because on a cross-leg rebuild the previous leg's filesystem facts must not be
+    carried over — they are the variable under test.
+    """
+    c = json.loads(Path(a.file).read_text())
+    src_leg = c.get("leg") or "unknown"
+    print(f"# Generated from {a.file} (leg {src_leg!r}) by env-contract.py env")
+    print("# Paste these OVER the placeholders in the top half of cloud-setup/env.sh.")
+    print("# Do NOT '>>' append: env.sh's --check block sits at the bottom and runs")
+    print("# BEFORE anything after it, so appended values would source fine and still")
+    print("# be reported MISSING by --check.")
+    print()
+    print("# ── Held constant across legs: these MUST match or the comparison is invalid ──")
+    for k, var in list(ENV_MAP_HELD.items()) + [("s3_bucket", "S3_BUCKET")]:
+        v = c.get(k)
+        if v in (None, ""):
+            print(f'# {var}=""    # NOT RECORDED in this contract — fill in by hand')
+        else:
+            print(f'export {var}="{v}"')
+    print()
+    print(f"# ── Specific to leg {src_leg!r} — COMMENTED deliberately ──")
+    print("# On a SAME-leg rebuild (a cost pause) uncomment what still applies.")
+    print("# On a CROSS-leg rebuild these belong to the other filesystem: leave them")
+    print("# commented and let the cluster-setup prompt write the new ones.")
+    for k, var in ENV_MAP_LEG.items():
+        v = c.get(k)
+        if v not in (None, ""):
+            print(f'# export {var}="{v}"')
+    print()
+    print("# ── NOT in the contract; supply these yourself ──")
+    print("#   everything else has a working default in env.example.sh")
+    if c.get("source_conflicts"):
+        print()
+        print("# ⚠ This contract recorded a disagreement between the previous env.sh and")
+        print("#   that instance's metadata. The values above are the metadata ones:")
+        for d in c["source_conflicts"]:
+            print(f"#     {d['field']}: env.sh={d['env_sh']!r} instance={d['instance_metadata']!r}")
     return 0
 
 
@@ -227,8 +375,10 @@ def main():
     w = sub.add_parser("write");  w.add_argument("--leg", required=True, choices=["weka", "lustre"]); w.add_argument("-o", "--output")
     v = sub.add_parser("verify"); v.add_argument("--against", required=True); v.add_argument("--leg", choices=["weka", "lustre"])
     s = sub.add_parser("show");   s.add_argument("--file", required=True)
+    e = sub.add_parser("env");    e.add_argument("--file", required=True)
     a = ap.parse_args()
-    return {"write": cmd_write, "verify": cmd_verify, "show": cmd_show}[a.cmd](a, repo_root)
+    return {"write": cmd_write, "verify": cmd_verify, "show": cmd_show,
+            "env": cmd_env}[a.cmd](a, repo_root)
 
 
 if __name__ == "__main__":

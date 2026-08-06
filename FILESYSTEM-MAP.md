@@ -48,20 +48,27 @@ WEKA run and a Lustre run is which mount `$FS_MOUNT` points at.
 │   └── *.md                   #   one file per memory
 │
 ├── cloud-setup/               # provisioning + handoff artifacts
+│   ├── WORKFLOW.md            #   ⭐ ONE-PAGE ROUTER: what to read/paste when, per scenario
 │   ├── NEW-CLOUD-SETUP.md     #   the human-facing walkthrough: empty AWS account → running benchmark
 │   ├── SPINUP-CHECKLIST.md    #   what to tell the person provisioning the environment
 │   ├── TEARDOWN-AND-REBUILD.md#   the do-every-time checklist for both halves
 │   ├── NAMING-AND-VARIABLES.md#   every path/name/variable, with its recommended value
 │   ├── env.example.sh         #   → env.sh (gitignored); has a --check validator
-│   ├── prompt-env-prep-cloud.md  #   Claude prompt 1: system stack + local scratch
-│   ├── handoff-cloud.md       #   Claude prompt 2: build + run the leg
+│   ├── restore-memories.sh    #   mirror → live memory dir, verified (run on EVERY build)
+│   ├── prompt-env-prep-cloud.md      # Claude prompt 1 (Part 5): system stack + local scratch
+│   ├── prompt-weka-cluster-cloud.md  # Claude prompt 2 (Part 6): create + mount WEKA (Leg A)
+│   ├── handoff-cloud.md              # Claude prompt 3 (Part 7): build + run the leg
+│   ├── prompt-lustre-cluster-cloud.md# Claude prompt 4 (Part 8): create + mount FSx Lustre (Leg B)
+│   ├── prompt-teardown-cloud.md      # Claude prompt 5 (end of a leg): close out + GO/NO-GO
+│   ├── HANDOFF-NEXT-SESSION.md#   written at teardown by prompt 5; the next session reads it FIRST.
+│   │                          #   Absent until the first teardown; gated by teardown-preflight.sh
 │   ├── AUDIT-PROMPT.md        #   the pre-deployment repo audit brief
 │   ├── AUDIT-REPORT.md        #   its findings: what was fixed, what is raised, the verdict
 │   └── env-specs/             #   conda env specs for rebuilding the Python stack
 │
 └── runs/                      # benchmark records — ONE tree, filesystem as a dimension
     ├── README.md              #   operational runbook + both canaries
-    ├── STAGES.md              #   stage map, per-leg plan, decision log D1–D15
+    ├── STAGES.md              #   stage map, per-leg plan, decision log D1–D16
     ├── INDEX.md               #   one line per run — AUTO-GENERATED, never hand-edit
     ├── Stage-{1..7}-*.md      #   per-stage roadmaps (the audit trail)
     ├── lib/                   #   the script library (+ GDS-TUNING-CHECKLIST.md, cuFile template)
@@ -217,7 +224,10 @@ still assumed, with a reference index), plus the framing, MIL, cuCIM, and UNI2-h
 | Script library | `runs/lib/` |
 | Dataset manifests | `runs/manifests/` |
 | Run history | `runs/INDEX.md` (auto-generated) |
+| **Start here / what do I do next** | **`cloud-setup/WORKFLOW.md`** — the one-page router |
 | Provisioning checklist | `cloud-setup/SPINUP-CHECKLIST.md` |
+| Filesystem setup prompts | `cloud-setup/prompt-{weka,lustre}-cluster-cloud.md` |
+| Leg close-out / teardown | `cloud-setup/prompt-teardown-cloud.md` → `HANDOFF-NEXT-SESSION.md` |
 | The two mounts | `/mnt/weka` · `/mnt/lustre` — via `$FS_MOUNT` |
 | Datasets (per leg) | `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
 | Coords · raw-TIFF | `$FS_MOUNT/tissue-detection/3.0/…` · `$FS_MOUNT/data/<ds>-rawtiff/` |

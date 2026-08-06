@@ -131,6 +131,39 @@ esac
 [ -d "$FS_MOUNT" ] || die "FS_MOUNT='$FS_MOUNT' is not a mounted directory"
 [ -n "${S3_BUCKET:-}" ] || die "S3_BUCKET is unset -- telemetry would not survive teardown"
 
+# ── D16: each leg runs on its intended transport, or it does not run ──────────────
+# WEKA on DPDK, Lustre on EFA. Both stacks have a fallback (UDP / TCP) that mounts
+# cleanly, serves data, and reports plausible numbers for a transport this project
+# decided not to measure. Every prompt already says STOP AND REPORT IMMEDIATELY, but
+# an instruction is not a mechanism: this is the unattended entry point, so it refuses
+# here rather than trusting that the instruction was followed hours earlier.
+#
+# FS_TRANSPORT is written into env.sh by the per-leg cluster-setup prompt FROM EVIDENCE
+# (the client's own report), never from the mount options that were passed.
+case "$LEG" in weka) WANT_TRANSPORT=dpdk ;; lustre) WANT_TRANSPORT=efa ;; esac
+WAIVER="$STATE/$LEG/transport-waiver"
+if [ -z "${FS_TRANSPORT:-}" ]; then
+  die "FS_TRANSPORT is unset. D16 requires the transport to be EVIDENCED before a leg runs,
+       and an unrecorded transport cannot be shown to be '$WANT_TRANSPORT'. The
+       cluster-setup prompt for this leg records it; re-run that verification."
+elif [ "$FS_TRANSPORT" != "$WANT_TRANSPORT" ]; then
+  if [ -f "$WAIVER" ]; then
+    log "WARNING: transport is '$FS_TRANSPORT', not '$WANT_TRANSPORT' -- proceeding on the"
+    log "         written waiver at $WAIVER:"
+    # Plain stdout on purpose: $MASTER_LOG is not defined until after the preconditions,
+    # and this output is captured by the session log either way.
+    sed 's/^/         | /' "$WAIVER"
+    log "         Every cell in this leg carries that caveat. It is NOT a comparable leg."
+  else
+    die "FATAL: leg '$LEG' is on transport '$FS_TRANSPORT', but D16 requires '$WANT_TRANSPORT'.
+       Refusing to run. A fallback transport (UDP / TCP) produces a COMPLETE and PLAUSIBLE
+       set of numbers for a configuration this project explicitly decided not to measure,
+       so running now and flagging it later spends the wallclock and the money first.
+       Fix the transport, or -- if measuring the fallback is a deliberate human decision --
+       record the reason in:  $WAIVER"
+  fi
+fi
+
 # --from / --only must name a real step. Without this check a typo (a missing dot,
 # the wrong case) silently matches nothing: every step is skipped and the script
 # exits 0 reporting "0 step(s) run" — which reads as success on an overnight run.

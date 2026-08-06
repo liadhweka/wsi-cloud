@@ -429,7 +429,7 @@ What it will contain, and why in this order:
 | For | See |
 |---|---|
 | The question, held-constant contract, both asymmetries, scope | `PROJECT-THESIS.md` |
-| Stage map, per-leg plan, full decision log **D1–D15** | `runs/STAGES.md` |
+| Stage map, per-leg plan, full decision log **D1–D16** | `runs/STAGES.md` |
 | Per-stage methodology and audit trail | `runs/Stage-<N>-*.md` |
 | How a cell is run and recorded; both canaries | `runs/README.md` |
 | What each script does | `SCRIPT-TRACKER.md` |

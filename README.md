@@ -43,17 +43,20 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 
 | If you want to… | Read |
 |---|---|
+| **Know what to read and paste, and when** | **`cloud-setup/WORKFLOW.md`** — one page, per scenario (first spin-up · teardown · rebuild · leg switch) |
 | Understand what we measure and why | **`PROJECT-THESIS.md`** |
 | Present this to stakeholders | **`PRESENTING.md`** |
 | Know the rules this project runs under | **`CLAUDE.md`** |
-| See the stage map, plan, and every methodology decision | **`runs/STAGES.md`** (decision log **D1–D15**) |
+| See the stage map, plan, and every methodology decision | **`runs/STAGES.md`** (decision log **D1–D16**) |
 | Understand one stage in depth | **`runs/Stage-<N>-*.md`** |
 | Run or recover a benchmark cell | **`runs/README.md`** |
 | Know what a script does | **`SCRIPT-TRACKER.md`** |
 | Find where something lives | **`FILESYSTEM-MAP.md`** |
 | Provision the environment | **`cloud-setup/NEW-CLOUD-SETUP.md`** + **`SPINUP-CHECKLIST.md`** |
+| Create + mount a filesystem for a leg | **`cloud-setup/prompt-weka-cluster-cloud.md`** (Leg A) · **`prompt-lustre-cluster-cloud.md`** (Leg B) — paste-to-Claude, reusable on every rebuild |
 | Know what every path / name / variable should be | **`cloud-setup/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
-| Tear down or rebuild the instance | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** (+ `runs/lib/teardown-preflight.sh`) |
+| Tear down or rebuild the instance | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** (+ `runs/lib/teardown-preflight.sh`) — Claude runs it via **`prompt-teardown-cloud.md`**; the human only commits, pushes, and destroys |
+| Pick up where the last session stopped | **`cloud-setup/HANDOFF-NEXT-SESSION.md`** — written at teardown, because Claude's context does not survive one. *Does not exist until the first teardown.* |
 | Know what the pre-deployment audit found | **`cloud-setup/AUDIT-REPORT.md`** — fixed, raised, and the verdict |
 
 **A fresh Claude session continuing this work** starts with the memories — `cloud-session-open-items` (the
@@ -72,9 +75,10 @@ SCRIPT-TRACKER.md      per-script reference + the deferred-work table
 FILESYSTEM-MAP.md      where everything lives
 backup.sh              memories → mirror, then S3 sync
 claude-memory-mirror/  git-tracked copy of the Claude memories (the only continuity across rebuilds)
-cloud-setup/           provisioning guide, the two Claude prompts, conda env specs
+cloud-setup/           WORKFLOW.md (the router), provisioning guide, the five Claude prompts,
+                       restore-memories.sh, conda env specs
 runs/
-  STAGES.md            stage map, per-leg plan, decision log D1–D15
+  STAGES.md            stage map, per-leg plan, decision log D1–D16
   README.md            operational runbook + both canaries
   Stage-{1..7}-*.md    per-stage roadmaps (the audit trail)
   lib/                 script library: 63 files (32 shell + 29 Python + a cuFile
@@ -87,8 +91,13 @@ runs/
 ## Getting to a first result
 
 1. **Provision** — `cloud-setup/SPINUP-CHECKLIST.md` (region, quota, instance, S3 + IAM, WEKA cluster).
-2. **Bootstrap** — `cloud-setup/NEW-CLOUD-SETUP.md`, which hands off to Claude twice: once for the system
-   stack (`prompt-env-prep-cloud.md`), once for the project (`handoff-cloud.md`).
+2. **Bootstrap** — `cloud-setup/NEW-CLOUD-SETUP.md`, which hands off to Claude four times (a fifth,
+   `prompt-teardown-cloud.md`, closes each leg out): the system stack
+   (`prompt-env-prep-cloud.md`), the WEKA filesystem (`prompt-weka-cluster-cloud.md`), the project itself
+   (`handoff-cloud.md`), and later the Lustre filesystem (`prompt-lustre-cluster-cloud.md`). *Why prompts
+   rather than checklist steps:* each runs again on every instance rebuild, and the storage ones have
+   silent-failure modes (a UDP-fallback WEKA mount, a TCP-instead-of-EFA Lustre mount) that produce
+   believable numbers for the wrong configuration.
 3. **Build + Leg A** — Claude does the deferred script work (per-filesystem recording adapters and
    consistency relations, cuFile path accounting, core accounting, the cuFile config, the 1.7 hydration
    driver), proves the pipeline on a throwaway cell, takes a baseline, and runs Leg A. Mount and repo

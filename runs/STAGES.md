@@ -381,6 +381,34 @@ rather than netting it out silently. Most load-bearing in the compute-leaning st
 backends in 4.B / 5.B / 6.A), and it also shifts *effective* parallelism at a given nominal concurrency, so
 both nominal `n` and available-core count are recorded per cell.
 
+**D16 — Each filesystem is measured on its intended transport, and a fallback aborts rather than proceeds.
+(2026-08-06, user instruction)** **WEKA over DPDK. Lustre over EFA.** Both stacks have a working
+lower-performance fallback that engages *without erroring* — WEKA's client can run UDP-only (`num_cores=0
+-o net=udp`), and an FSx Lustre client that has the generic EC2 EFA software but not the FSx-specific client
+configuration mounts over **TCP**. *Why this needs to be a recorded decision rather than an implementation
+detail:* each fallback produces a complete, plausible set of numbers for a configuration this project has
+explicitly promised not to measure — UDP would understate WEKA, and TCP forfeits both GPUDirect Storage and
+the escape from Lustre's per-client-per-file-server bandwidth cap, breaking the "Lustre at maximum" fairness
+basis (**D7**) invisibly. So the intended transport is **not** a tuning preference to be optimised toward; it
+is a **precondition of the measurement**. **Enforcement:** each cluster-setup prompt gates on positive
+evidence of the transport actually in use — the WEKA prompt requires DPDK-vs-UDP evidence from the client
+itself rather than an inference from the mount options passed, and the Lustre prompt requires `lnetctl net
+show` to list an `efa` net, not only `tcp`. **If the intended transport cannot be brought up, the instruction is
+STOP AND REPORT IMMEDIATELY — at the setup step, before mounting, and before any cell runs, including a
+throwaway one.** Explicitly *not* "measure it and flag it in the writeup": the fallback works, so by the time
+the flag is read the wallclock and the money are spent and the results tree's provenance has to be argued
+about. Deliberately measuring a fallback transport requires a **written human waiver with the reason recorded**,
+and would force a re-baseline and a restatement of the fairness basis. DPDK on a VM depends on SR-IOV exposing a
+Virtual Function of the physical device — an instance/driver capability, not a choice — so the realistic
+resolutions are to fix the configuration or change the instance. Record the transport per leg in the environment
+contract either way.
+
+**Distinct from the GPU-direct axis, and not to be conflated:** WEKA falling back to **cuFile compat mode** is
+*expected*, is part of asymmetry 2, and is a **measured axis** — both cuFile modes run on both filesystems
+(**D8**). A transport fallback is a stop; a cuFile compat-mode result is data. *Sources:* `docs.weka.io` on `num_cores` / `net=`
+mount options and the UDP-mode limitations (a UDP client "cannot be configured in high availability mode");
+AWS FSx for Lustre client documentation for the EFA client configuration. Tracked as deferred item `D-16`.
+
 ---
 
 ## Change log
@@ -388,6 +416,7 @@ both nominal `n` and available-core count are recorded per cell.
 | When | Change |
 |---|---|
 | 2026-07-31 | Stage map, per-leg plan, and decision log **D1–D14** created for the WEKA-vs-Lustre AWS project. Status: build phase, nothing measured. |
+| 2026-08-06 | **D16** added — WEKA measured over DPDK and Lustre over EFA, with a silent fallback (UDP / TCP) treated as a stop-and-escalate condition rather than a configuration to measure. |
 | 2026-07-31 | **D15 added** during the Stage 2/3 roadmap audit — the WEKA client's dedicated DPDK cores vs the Lustre client's kernel threads make CPU-derived metrics non-comparable across legs without explicit core accounting. Surfaced by Stage 3, whose headline is a CPU saturation curve; applies to every compute-leaning stage. |
 | 2026-08-03 | **Pre-deployment audit.** No methodology decision changed; the audit found the *implementation* diverging from decisions already recorded here, and fixed it. Load-bearing corrections: every pre-computed run-dir name now carries the `-<leg>-` segment (without it the S3 sync and the teardown gate both skipped the cell silently — **D11**/**D14**); four drivers now hand their pre-computed run dir to `record-run.sh` instead of writing app-level output to an orphan directory; the conda interpreter and libcufile paths are read from documented variables instead of literals from another machine; and every cell `--note` was stripped of prior-environment figures and pre-assigned conclusions (**D9** — those notes are written into each run's `metadata.json`, so the violation was landing inside the results). Stage 5's and 6.A's GPU-count sweeps were brought to N ∈ {1,2,4} to match the 4-GPU instance (**D10**), and the 8-GPU cells that could not run on it were removed. Full record: `../SCRIPT-TRACKER.md` § "Done during the pre-deployment audit" and `cloud-setup/AUDIT-REPORT.md`. |
 

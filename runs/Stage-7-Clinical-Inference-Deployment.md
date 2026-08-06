@@ -10,7 +10,7 @@
 > throughput, because that is what a clinical deployment's SLA is written against.
 
 For project-wide conventions see `../CLAUDE.md`; framing and the fairness contract `../PROJECT-THESIS.md`;
-stage map and decision log **D1–D15** `STAGES.md`; runbook `README.md`.
+stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`.
 
 ---
 

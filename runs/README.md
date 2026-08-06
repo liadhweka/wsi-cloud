@@ -3,7 +3,7 @@
 Every benchmark run lands in its own subdirectory here. This file is the **operational runbook** — how to
 run a cell, what gets recorded, where data lives, both canaries, and how to recover from failures.
 
-For *what* each stage is, the per-leg plan, and the decision log **D1–D15**, see [`STAGES.md`](STAGES.md)
+For *what* each stage is, the per-leg plan, and the decision log **D1–D16**, see [`STAGES.md`](STAGES.md)
 and the per-stage `Stage-<N>-*.md` roadmaps. For where everything lives, see
 [`../FILESYSTEM-MAP.md`](../FILESYSTEM-MAP.md). For project-wide rules — recording philosophy,
 per-filesystem source adapters, durability, framing — see [`../CLAUDE.md`](../CLAUDE.md).
@@ -73,7 +73,7 @@ reader should look at.
 ```
 runs/
   README.md           this runbook
-  STAGES.md           --stage code map, per-leg plan, decision log D1–D15
+  STAGES.md           --stage code map, per-leg plan, decision log D1–D16
   INDEX.md            one line per run, append-only — AUTO-GENERATED, never hand-edit
   Stage-<N>-*.md      per-stage roadmaps (the audit trail)
   lib/                the script library

@@ -5,15 +5,25 @@ copy-pasted, and every step says what it does and how to tell it worked.
 
 **Who does what.** You do the AWS clicking, the credentials, and the storage provisioning. **Claude does all
 the hardware-dependent software work** (GPU stack, GDS, scratch disks, Python environments, datasets, tuning)
-and then runs the benchmark. You hand off to Claude twice, at clearly marked steps.
+and then runs the benchmark. **You hand off to Claude four times**, at clearly marked steps: system prep
+(Part 5), the WEKA filesystem (Part 6), the benchmark itself (Part 7), and — later — the Lustre filesystem
+(Part 8). Each handoff is a self-contained prompt in `cloud-setup/`, reusable on every rebuild. (A fifth,
+`prompt-teardown-cloud.md`, closes a leg out — that one lives in
+[`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md), not here.)
 
 **Order of the project.** **WEKA is Leg A and runs first** (Parts 1–7). **FSx for Lustre is Leg B and comes
 later** (Part 8) — its instructions are written out in advance so nothing is a surprise, but **do not do Part 8
 now.**
 
 > **Notation.** `$THINGS_IN_CAPS` are variables from [`NAMING-AND-VARIABLES.md`](NAMING-AND-VARIABLES.md).
-> Anything in `<angle brackets>` is a value you paste in. When a step says *record this*, write the value into
-> `cloud-setup/env.sh` — later steps and the whole benchmark read from there.
+> Anything in `<angle brackets>` is a value you paste in.
+>
+> **When a step in Parts 1–2 says *note this down*, it means exactly that — a scratch note, not a file.**
+> `cloud-setup/env.sh` does not exist yet: it is created **on the instance** at § 4.2, which is also where you
+> enter these values. Parts 1–2 happen in a browser on your laptop, before the instance even has the repo.
+> Keep a scratch note with four things: **region, AZ, bucket name, and (after launch) the AMI and instance
+> IDs.** § 4.2 collects them, and shows you how to read the last few off the instance instead of transcribing
+> them.
 
 ---
 
@@ -53,7 +63,7 @@ between AZs costs money and adds latency, which would quietly distort the benchm
   But your company's standard region, or wherever you can actually get GPU capacity, wins.
 - **AZ:** pick any one in that region, e.g. `us-west-2a`, and use it for everything.
 
-**Record both** as `AWS_REGION` and `AWS_AZ`.
+**Note both down** — they become `AWS_REGION` and `AWS_AZ` in § 4.2.
 
 ### 1.2 — Request GPU quota *(do this first — it can take a day)*
 AWS limits how many GPU instances you can run, counted in **vCPUs**. `g6e.24xlarge` needs **96**. A brand-new
@@ -97,7 +107,8 @@ datasets live here. Without it, tearing down the instance destroys the results.
 4. Leave everything else at defaults: Block Public Access **on**, Versioning **off**, encryption on
 5. **Create bucket**
 
-**Record the name** as `S3_BUCKET`.
+**Note the name down** — it becomes `S3_BUCKET` in § 4.2. This one cannot be derived later; only you know
+which bucket you made.
 
 > Versioning stays **off** deliberately: measurements are written once and never edited, so versioning would
 > double the storage bill for no benefit.
@@ -189,12 +200,18 @@ Then **Launch instance**.
 > than the instance. Stopping the instance alone is *not* a cost pause — see the cost note in
 > [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md) § 8 before you leave anything idle for long.
 
-### 2.3 — Record what you launched
-Instances → select yours → copy these into `env.sh`:
-- **Instance ID** (`i-…`) → `INSTANCE_ID`
-- **AMI ID** (`ami-…`, on the Details tab) → `AMI_ID` — **this one matters**: rebuilding later must use this
-  exact image, or the OS and drivers silently change
-- **Public IPv4 address** → for connecting
+### 2.3 — Note what you launched
+Instances → select yours. **You need the public IP right now to connect**; the other two you will read off the
+instance itself in § 4.2, so do not bother transcribing them carefully.
+
+- **Public IPv4 address** → needed immediately, for § 2.4. Not a config value.
+- **Instance ID** (`i-…`) and **AMI ID** (`ami-…`, Details tab) → these become `INSTANCE_ID` and `AMI_ID`, but
+  **§ 4.2 reads both from the instance's own metadata** — one copy-pasteable command, no transcription errors.
+  Glance at the AMI ID anyway so you can sanity-check it later: it must be the GPU image you chose, and
+  **rebuilding for Leg B must use this exact image** or the OS and drivers silently change underneath the
+  comparison.
+
+> **Nothing here needs to go into a file yet.** `env.sh` is created at § 4.2, on the instance.
 
 ### 2.4 — Connect
 ```bash
@@ -296,15 +313,78 @@ cd wsi-cloud && ls
 You should see `CLAUDE.md`, `PROJECT-THESIS.md`, `runs/`, `cloud-setup/`, and others.
 
 ### 4.2 — Create the configuration file
+
+> **What `env.sh` is, since you have only ever seen `env.example.sh`.**
+> `cloud-setup/env.example.sh` is the **tracked template** — it lives in GitHub, contains every variable name
+> with safe defaults, and no real values. You copy it to `cloud-setup/env.sh`, which is **your private copy on
+> this instance**: it is in `.gitignore`, so it never goes to GitHub and you never commit it. That is
+> deliberate — it is the one file that may hold environment-specific values, and it is also why **it does not
+> survive a rebuild**, which is what the contract in § 6.3 is for.
+>
+> You edit it with a text editor **on the instance**, over SSH. Not in the GitHub web UI, not on your laptop.
+
 ```bash
+cd /home/ubuntu/wsi-cloud
 cp cloud-setup/env.example.sh cloud-setup/env.sh
+```
+
+**First, let the instance tell you about itself.** Four of the five values are already knowable here, so
+transcribing them from the console is unnecessary work and a chance to fat-finger an ID:
+
+```bash
+# EC2 Instance Metadata Service v2 — get a token, then query with it.
+# --max-time is deliberate: without it this hangs instead of failing if IMDS is
+# unreachable (e.g. run on the wrong machine, or metadata disabled on the instance).
+TOKEN=$(curl -sfX PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" --max-time 2 || true)
+for k in instance-id ami-id instance-type placement/availability-zone placement/region; do
+  v=$(curl -sf --max-time 2 -H "X-aws-ec2-metadata-token: $TOKEN" \
+        "http://169.254.169.254/latest/meta-data/$k" || true)
+  printf '%-30s %s\n' "$k" "${v:-<EMPTY - read it from the console instead>}"
+done
+```
+
+> **Why the token.** Newer instances require IMDSv2, and "if IMDSv2 is required, IMDSv1 does not work" — a
+> plain `curl` just returns nothing. The `PUT` above obtains a session token and the `X-aws-ec2-metadata-token`
+> header presents it. `-f` is deliberate: without it, `curl` prints the error *into* the variable and the
+> failure looks like data.
+> *(Source: [Access instance metadata for an EC2 instance](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instancedata-data-retrieval.html).)*
+>
+> **If any line prints `<EMPTY>`, that is not a disaster** — read that value off the console instead. The loop
+> tells you rather than silently filling in a blank, which is the failure mode worth avoiding.
+
+Now edit the file:
+
+```bash
 nano cloud-setup/env.sh
 ```
-Fill in what you recorded: `AWS_REGION`, `AWS_AZ`, `S3_BUCKET`, `AMI_ID`, `INSTANCE_ID`. Leave the WEKA and FSx
-lines blank — you fill those in Part 6 and Part 8. Leave `LIBCUFILE_PRELOAD` blank too; Claude reports the
-path in Part 5 and you paste it in then (the GPU-direct sweeps refuse to run without it).
+
+| Fill in now | From |
+|---|---|
+| `S3_BUCKET` | your scratch note (§ 1.4) — **your choice, and the only one nothing on the instance can discover** |
+| `AWS_REGION`, `AWS_AZ` | the command above — then **check they match your § 1.1 choice.** They came from the instance, so a mismatch doesn't mean a typo: it means you launched somewhere you didn't intend, and cross-AZ traffic would contaminate the comparison |
+| `INSTANCE_ID`, `AMI_ID` | the command above |
+| `INSTANCE_TYPE` | already correct in the template if you launched `g6e.24xlarge`; otherwise correct it |
+
+| Leave blank for now | Filled in at |
+|---|---|
+| `LIBCUFILE_PRELOAD` | **Part 5** — Claude reports the path; the GPU-direct sweeps refuse to start without it |
+| `WEKA_*` | **Part 6** — Claude writes them itself |
+| `FSX_*`, `LUSTRE_STRIPE_LAYOUT` | **Part 8** (Leg B) |
+| `CLIENT_HOSTNAME`, `SCRIPT_COMMIT` | Claude, during Part 7 |
 
 Save in nano with **Ctrl+O**, Enter, then **Ctrl+X**.
+
+> **Can Claude do this instead of me?** For everything after this step, yes — from Part 5 onward there is a
+> Claude session on this instance with write access to the repo, and it fills in `LIBCUFILE_PRELOAD`, the WEKA
+> and FSx configuration, and the contract. **Not this step**, though, for one hard reason: **there is no Claude
+> session until Part 5** — it is installed in § 3.5 and the repo only arrives in § 4.1 — and the memory restore
+> in § 4.3 needs `env.sh` to exist first.
+>
+> Of the five values, only `S3_BUCKET` is genuinely undiscoverable; the rest come from the instance itself. So
+> **Part 5 re-derives them from instance metadata and cross-checks them against what you typed here**, and
+> tells you about any disagreement. This step is the bootstrap, not the source of truth — and § 6.3's
+> `./cloud-setup/env.sh --check` is what proves nothing was missed.
 
 ```bash
 source cloud-setup/env.sh
@@ -313,19 +393,20 @@ echo 'source /home/ubuntu/wsi-cloud/cloud-setup/env.sh' >> ~/.bashrc   # automat
 ```
 
 > `env.sh` is deliberately **not** in GitHub (it's per-machine), so it does **not** survive a rebuild — which is
-> why Part 6.9 saves the same values into a contract file in S3.
+> why Part 6.3 saves the same values into a contract file in S3.
 
 ### 4.3 — Restore Claude's memories — **do not skip**
 The project's accumulated knowledge lives in files Claude reads at startup. Without them a new session doesn't
 know the methodology, the decisions, or what's already been done.
 ```bash
 cd /home/ubuntu/wsi-cloud
-SLUG=$(printf '%s' "$PWD" | sed 's#^/#-#; s#/#-#g')
-echo "$SLUG"                                        # -home-ubuntu-wsi-cloud
-mkdir -p ~/.claude/projects/$SLUG/memory
-rsync -a claude-memory-mirror/ ~/.claude/projects/$SLUG/memory/
-ls ~/.claude/projects/$SLUG/memory/                 # expect ~20 files, including MEMORY.md
+./cloud-setup/restore-memories.sh
 ```
+> It's a script rather than a few `rsync` lines because it runs on **every** build and its failure mode is
+> silent — copying into the wrong directory succeeds, and a fresh session then starts amnesiac with no error.
+> The script derives the directory name from the repo path instead of trusting a typed one, refuses to
+> "restore" an empty mirror, and **verifies** the result. It prints `OK — N memory file(s) live` when it
+> worked; anything else is a real failure, so don't continue past it.
 
 ### 4.4 — Get your Hugging Face token ready *(you cannot log in yet)*
 One of the three AI models is access-gated, so a token is required — but the `hf` command **does not exist
@@ -366,272 +447,71 @@ It also reports the full path of the system `libcufile`. **Paste that into `LIBC
 
 ---
 
-## Part 6 — WEKA: create and mount the filesystem (Leg A)
+## Part 6 — WEKA: create and mount the filesystem (Leg A) *(second handoff)*
 
-**This part assumes no prior WEKA knowledge.** It is written to the same depth as Part 8 (Lustre), because the
-two legs must be provisioned with equal care — an under-configured WEKA is a "sizing artifact", not a finding.
+**Almost all of this is Claude's work now.** Provisioning a WEKA filesystem and joining a client to it is a
+dozen CLI steps with version-sensitive command names, a destructive resize in the middle, and half a dozen
+values that must be recorded exactly. That is a bad fit for a human following prose and a good fit for a session
+that can read the vendor docs, check `--help` against the actual cluster, and write the values into `env.sh`
+itself.
 
-**The shape of it.** A WEKA cluster is a set of **backend** EC2 instances that own the storage. Your GPU
-instance joins as a **client**: it installs WEKA's client software, joins the cluster, and mounts a filesystem
-over a kernel filesystem type called `wekafs`. Between "the cluster exists" and "I can write to `/mnt/weka`"
-there are four things that are easy to miss the first time:
+### 6.1 — What only you can do
 
-1. capacity in a cluster is handed out to **filesystems**, and on a cloud deployment a **default filesystem
-   already holds all of it** — so you must free some before you can create your own;
-2. every filesystem must belong to a **filesystem group**;
-3. the client software is installed **from a backend**, not from a package repo;
-4. the **first mount** is what actually joins the client to the cluster, and it needs networking arguments the
-   later mounts do not.
-
-> **Version drift is real, and the CLI has changed names between versions.** Everything below cites
-> `docs.weka.io`, but **confirm against the version your cluster actually runs** — `weka version current`, then
-> `weka <command> --help`. Where the docs themselves disagree between versions, both forms are given.
-
----
-
-### 6.1 — Provision the cluster
-
-Use your normal Port blueprint. Put it in the **same region, AZ, and VPC** as the GPU instance, and attach the
-`wsi-bench-sg` security group.
-
-> **What a WEKA-on-AWS deployment builds, for context.** WEKA's own reference path is a Terraform package that
-> provisions the backends in an **Auto Scaling Group behind a Launch Template**, inside an AWS **Placement
-> Group** to cut inter-node latency, plus Lambda functions, a Step Functions state machine, Secrets Manager
-> entries and CloudWatch log groups for scale-out/scale-in and auto-healing. Your blueprint may differ in
-> mechanism but produces the same thing: a set of backend instances you can `ssh` to.
-> *(Source: [WEKA installation on AWS](https://docs.weka.io/planning-and-installation/aws).)*
->
-> Note the placement group is a deliberate trade: WEKA's docs say it "prioritizes performance over resilience
-> and may reduce fault tolerance in the event of hardware failures." For a benchmark that is the right side of
-> the trade — but record it, because it is part of what was measured.
+1. **Provision the cluster** through your Port blueprint — same **region, AZ and VPC** as the instance, with the
+   `wsi-bench-sg` security group attached. This is a web tool; Claude cannot drive it.
+2. **Note one backend's IP or hostname.** Claude needs it and cannot discover it.
+3. **Have the cluster credentials to hand**, if your cluster requires a CLI login.
+4. **Know your sizing choices**, because they are recorded as evidence and cannot be inferred: backend instance
+   type and count, usable capacity, protection/EC scheme, and client networking mode.
 
 Sizing, and **why** — full reasoning in [`SPINUP-CHECKLIST.md`](SPINUP-CHECKLIST.md) § D:
 - **Enough backends to comfortably exceed ~25 GB/s** to one client. WEKA must not be the bottleneck, or a
   measured difference is a sizing artifact rather than a real finding.
 - **~20–25 TB usable.**
-- **Client networking: DPDK** (the "performance" option), not UDP. This is a deployment-time choice and it
-  matters to the comparison — see 6.7.
+- **Client networking: DPDK** (the "performance" option), not UDP.
 
-**Before you leave the console, note one backend's IP or hostname.** You need it in 6.2 and again in 6.7, and
-hunting for it later is the single most common stall in this part. Any backend will do.
+> **What a WEKA-on-AWS deployment builds, for context.** WEKA's reference path provisions the backends in an
+> Auto Scaling Group behind a Launch Template, inside an AWS **Placement Group** to cut inter-node latency, plus
+> Lambda functions, a Step Functions state machine, Secrets Manager entries and CloudWatch log groups for
+> scale-out and auto-healing. Your blueprint may differ in mechanism but produces the same thing: backend
+> instances you can `ssh` to. The placement group is a deliberate trade — WEKA's docs note it "prioritizes
+> performance over resilience" — which is right for a benchmark, but record it, because it is part of what was
+> measured. *(Source: [WEKA installation on AWS](https://docs.weka.io/planning-and-installation/aws).)*
 
----
-
-### 6.2 — Reach the cluster and authenticate
-
-The WEKA CLI is installed **on every backend**. There is no separate admin host.
-
-```bash
-ssh <your-key> ec2-user@<BACKEND-IP>      # user depends on the backend AMI your blueprint used
-weka status
-```
-
-`weka status` "displays the overall status of the WEKA cluster", showing whether it is healthy, partially
-protected, rebuilding, or unavailable. **It must say healthy before you go further** — provisioning numbers
-taken from a rebuilding cluster are meaningless.
-*(Source: [Manage the system using the WEKA CLI](https://docs.weka.io/getting-started-with-weka/manage-the-system-using-weka-cli).)*
-
-**Authentication.** If the CLI asks for credentials:
+### 6.2 — Hand off to Claude
 
 ```bash
-weka user login            # writes a token to ~/.weka/auth-token.json
-weka user whoami           # confirms who you are
+tmux new -A -s wsi
+cd /home/ubuntu/wsi-cloud
+claude
 ```
-The CLI reads `WEKA_USERNAME` / `WEKA_PASSWORD` from the environment if set; otherwise it uses the token file;
-and **if no user is logged in and no token file exists it defaults to `admin`/`admin`** — which is also worth
-knowing as a thing to change.
-*(Source: [Manage users using the CLI](https://docs.weka.io/operation-guide/user-management/user-management-1).)*
+Paste **exactly this**:
 
-> **You can also drive the cluster from the GPU instance** once the client is installed (6.7), using
-> `weka -H <BACKEND-IP> <command>` — the `-H/--hostname` option "directs the CLI to communicate with the
-> cluster through the specified hostname or IP". That is often more convenient than keeping a second ssh
-> session open, and it is what `record-run.sh` relies on.
+> Read the file `cloud-setup/prompt-weka-cluster-cloud.md` and do everything it says, then report back.
+
+Then **give it the four things from 6.1** when it asks.
+
+Claude inspects the cluster read-only first and reports what it found; **asks before the destructive step**
+(cloud deployments ship a default filesystem holding all the capacity, so room has to be made); creates the
+filesystem group and filesystem; installs the client and mounts it at `/mnt/weka`; verifies with a real write;
+and **writes the WEKA values into `cloud-setup/env.sh` itself** rather than asking you to transcribe them.
+
+**Expect to approve several steps.** Resizing a filesystem, `curl | sh`, `sudo`, and mounting all pause for you
+by design — read what it proposes rather than waving it through, especially the resize.
+
+**When it reports back**, check three things: the mount is `wekafs` and writable, it is on **DPDK and not UDP**
+(it must show you evidence, not an inference), and `./cloud-setup/env.sh --check` passes. Then `/exit`.
+
+> **Why DPDK-versus-UDP is worth your attention:** UDP trades throughput for CPU and would understate WEKA,
+> which corrupts the comparison exactly as silently as under-configuring Lustre would.
 >
-> **A browser GUI is served by the backends on port 14000.** Whether you can reach it depends on your security
-> group and whether you are inside the VPC; the CLI path below is authoritative either way, so do not block on
-> the GUI. (Port 14000 is also the port the client installer is fetched from — 6.7.)
+> **Claude is instructed to stop the moment DPDK fails to come up — before mounting, before Part 7, before any
+> cell — and report to you.** So if it reports UDP, or cannot evidence which transport it is on, **nothing has
+> been measured yet and nothing should be.** Fix DPDK or change the instance; measuring UDP and noting it in the
+> writeup is explicitly not an option (**D16**), because the numbers come out looking fine.
 
----
+### 6.3 — Save the configuration to S3
 
-### 6.3 — Look at what the deployment already gave you *(the step that surprises everyone)*
-
-```bash
-weka status                # capacity summary
-weka fs                    # list existing filesystems
-weka fs group              # list existing filesystem groups
-```
-
-**On a cloud deployment there is already a filesystem, and it holds everything.** WEKA's docs state that "when
-deploying a WEKA system on a cloud platform (AWS, Azure, or GCP), the WEKA system includes a default filesystem
-configured to maximum capacity."
-*(Source: [Manage filesystems](https://docs.weka.io/weka-filesystems-and-object-stores/managing-filesystems).)*
-
-So `weka fs add` for a new filesystem will fail for lack of capacity until you deal with that. **Note the exact
-name shown by `weka fs`** — use what is printed, not a name from a guide.
-
-**Two valid ways forward. Pick one and record which:**
-
-| Option | Do this | When |
-|---|---|---|
-| **A — shrink the default, create your own** | 6.4 then 6.5/6.6 | **Recommended.** The benchmark filesystem is then explicitly sized and named, and appears in the contract as your own object |
-| **B — just use the default filesystem** | skip to 6.7, mount the default fs at `/mnt/weka` | Fewer steps, but the filesystem's size and settings are whatever the deployment chose — you must still record them |
-
-Either way the mount point is `/mnt/weka`, which is all the benchmark scripts care about (`$FS_MOUNT`).
-
----
-
-### 6.4 — Free capacity by shrinking the default filesystem
-
-```bash
-weka fs update <default-fs-name> --total-capacity <smaller-size>     # e.g. 1TiB
-weka fs                                                             # confirm the freed capacity
-```
-
-`weka fs update <name> [--total-capacity total-capacity] [--ssd-capacity ssd-capacity] …` is the documented way
-to change an existing filesystem's size.
-*(Source: [Manage filesystems using the CLI](https://docs.weka.io/weka-filesystems-and-object-stores/managing-filesystems/managing-filesystems-1).)*
-
-> ⚠ **Shrinking a filesystem that holds data can destroy it.** On a freshly deployed cluster the default
-> filesystem is empty, so this is safe — but confirm it is empty first, and never run this against a
-> filesystem with anything in it. If `weka fs` shows used capacity, stop and ask.
-
----
-
-### 6.5 — Create a filesystem group
-
-Every filesystem belongs to a **filesystem group**, which is where the tiering policy lives. You may already
-have one from 6.3; if not:
-
-```bash
-weka fs group                                  # list groups
-weka fs group create wsibench-group            # create one if none suits
-```
-
-Signature: `weka fs group create <name> [--target-ssd-retention=<seconds>] [--start-demote=<seconds>]`. The two
-optional parameters control tiering to an object store, which **this project does not use** — object/S3 access
-is explicitly out of scope — so the defaults are correct and you should not set them.
-*(Source: [Managing Filesystem Groups](https://docs.weka.io/3.14/fs/managing-filesystems/managing-filesystem-groups) — verify with `weka fs group --help`, as this page is from an older doc branch.)*
-
----
-
-### 6.6 — Create the benchmark filesystem
-
-```bash
-weka fs add wsibench wsibench-group 20TiB      # <name> <group> <total-capacity>
-weka fs                                        # confirm it exists at the size you asked for
-```
-
-Signature: `weka fs add <name> <group-name> <total-capacity> [--ssd-capacity …] [--encrypted] [--data-reduction] …`
-Minimum capacity is 1 GiB, and **the group name is mandatory** — that is why 6.5 comes first.
-*(Source: [Manage filesystems using the CLI](https://docs.weka.io/weka-filesystems-and-object-stores/managing-filesystems/managing-filesystems-1).)*
-
-> **`add` or `create`?** The current CLI reference documents `weka fs add`; WEKA's own getting-started page
-> shows `weka fs create new_fs my_fs_group 1TiB`. Both appear in official docs, so the name has moved between
-> versions. Run `weka fs --help` and use what your cluster accepts.
->
-> **Do not enable `--encrypted` or `--data-reduction`.** Both change the I/O path, and this filesystem is one
-> half of a controlled comparison — every setting that is not held constant across the two legs is a confound.
-> Record whatever you *do* set.
->
-> **`WEKA_FS_NAME` in `env.sh` is this name** (`wsibench` by default). It is deliberately separate from the
-> mount path: the filesystem is named `wsibench`, and it is mounted at `/mnt/weka`.
-
----
-
-### 6.7 — Install the WEKA client on the GPU instance, and mount
-
-**Back on the GPU instance now**, not a backend.
-
-The client software is fetched **from a backend over port 14000** — not from a package repository:
-
-```bash
-curl http://<BACKEND-IP>:14000/dist/v1/install | sh     # installs the WEKA agent
-sudo mkdir -p /mnt/weka
-```
-*(Source: [Adding Clients (AWS)](https://docs.weka.io/3.14/install/aws/adding-clients) — confirm the current
-install URL for your cluster version before running it; piping a URL to `sh` deserves that much care.)*
-
-Then the **first mount**, which does more than mount: "The first `mount` command serves a dual purpose: 1) It
-installs the WEKA client software. 2) It joins the WEKA cluster." Later mounts need only per-mount options.
-*(Source: [Mount filesystems](https://docs.weka.io/weka-filesystems-and-object-stores/mounting-filesystems).)*
-
-```bash
-# DPDK mount — the performance path this project measures
-sudo mount -t wekafs -o num_cores=<N> -o net=<netdev> <BACKEND-IP>/wsibench /mnt/weka
-```
-
-The syntax is
-`mount -t wekafs -o <options> <backend0>[,<backend1>,…,<backendN>]/<fs> <mount-point>`; a `:/` separator works
-in place of `/`. Listing **several backends** is supported and is the more robust form. The options that matter:
-
-| Option | What it does |
-|---|---|
-| `num_cores=<N>` | "the number of processing cores allocated to handle client network operations". `0` means UDP-only. **Mutually exclusive with `core=`** |
-| `core=<core-id>` | pins specific cores instead of a count — repeatable, e.g. `-o core=2 -o core=4` |
-| `net=<netdev>` | the client's network device for WEKA traffic |
-
-> **`num_cores` is not a throwaway number — it is measured.** Those cores are **reserved by the WEKA client and
-> unavailable to the benchmark**, which is exactly the asymmetry decision **D15** exists for: the Lustre client
-> reserves none, so CPU-derived metrics are computed over *application-available* cores and the reservation is
-> reported as part of WEKA's cost. Whatever you choose, put it in `WEKA_CLIENT_CORES` (6.8) and **do not change
-> it mid-leg** — a client reconfiguration is a benchmark change and forces a re-baseline.
->
-> **If DPDK will not come up**, the documented fallback is UDP mode:
-> `sudo mount -t wekafs -o num_cores=0 -o net=udp <BACKEND-IP>/wsibench /mnt/weka`.
-> **Treat that as a finding, not a workaround** — UDP trades throughput for CPU and would understate WEKA,
-> which breaks the fairness basis (**D7**) just as silently as an under-configured Lustre would. Also note a
-> UDP-mode client "cannot be configured in high availability mode".
->
-> **Why DPDK needs care on a VM at all:** WEKA's docs note that for DPDK on a virtual machine, "Single Root I/O
-> Virtualization (SR-IOV) must be used to expose a Virtual Function (VF) of the physical device to the client."
-> On AWS that is the enhanced-networking/ENA path you already enabled at launch. If the mount rejects your
-> `net=` device, this is the area to look at — and it is a question for Claude's Part 7 discovery pass, which
-> is required to consult WEKA's docs rather than guess.
-
-Finally, make the mount usable by the benchmark user and create the data directory:
-
-```bash
-sudo chown ubuntu:ubuntu /mnt/weka
-mkdir -p /mnt/weka/data
-```
-
----
-
-### 6.8 — Verify it actually works, and record the values
-
-```bash
-findmnt /mnt/weka                                                      # mount + type (expect wekafs)
-df -h /mnt/weka                                                        # expected capacity
-weka status                                                            # still healthy?
-weka local status                                                      # the client container's own state
-dd if=/dev/zero of=/mnt/weka/testfile bs=1M count=1000 oflag=direct    # writes 1 GB
-rm /mnt/weka/testfile
-```
-
-`dd` should report a sensible speed. **If it doesn't run at all, stop here** — a broken mount invalidates
-everything after it.
-
-Now fill these into `env.sh`. **Most are your 6.1 provisioning choices** — they are inputs you already made,
-not things to go hunting for:
-
-| Variable | What | Where it comes from | Why it matters |
-|---|---|---|---|
-| `WEKA_FS_NAME` | Filesystem name (`wsibench`) | **6.6** | The scripts mount by name; kept distinct from the mount path deliberately |
-| `WEKA_BACKEND_TYPE`, `WEKA_BACKEND_COUNT` | Backend instance type and how many | **Your 6.1 choice** | Evidence for the fairness comparison |
-| `WEKA_CAPACITY_TB` | Usable size | **6.6**; cross-check `df -h /mnt/weka` | Same |
-| `WEKA_EC_SCHEME` | Protection scheme (e.g. `3+2`) | **Your 6.1 choice** | **Required** — the per-sweep consistency canary derives the wire-vs-app write amplification from it and cannot run without it |
-| `WEKA_BACKEND_RAM_TOTAL` | Total RAM across backends | Backend instance type × count | Server-side cache size; sets how large the Stage 6.B corpus must be to read genuinely cold |
-| `WEKA_CLIENT_CORES`, `WEKA_CLIENT_NICS` | Cores and NICs the client reserves | **Your 6.7 mount options**; cross-check `weka local status` | WEKA reserves CPU cores; that is part of its cost and is measured per cell (**D15**) |
-
-> **If you cannot pin down a value, leave it blank and move on** — except `WEKA_EC_SCHEME`, which the canary
-> needs. Claude re-reads the client and cluster configuration during its Part 7 discovery pass; it is on the
-> box, it has the mount, and it is required to fetch WEKA's documentation rather than guess. What matters is
-> that **every one of these is filled in before teardown**, because `runs/lib/teardown-preflight.sh` checks the
-> contract for completeness and the fairness basis is unverifiable afterwards.
-
----
-
-### 6.9 — Save the configuration to S3
 ```bash
 source cloud-setup/env.sh
 ./cloud-setup/env.sh --check          # must pass; fix anything it flags
@@ -648,7 +528,7 @@ runs/lib/sync-to-s3.sh --mode full
 
 ---
 
-## Part 7 — Hand off to Claude: run the benchmark *(second handoff)*
+## Part 7 — Hand off to Claude: run the benchmark *(third handoff)*
 
 ### 7.1 — Start the session
 
@@ -689,146 +569,89 @@ with SSH and `tmux new -A -s wsi`.
 
 ---
 
-## Part 8 — LATER: FSx for Lustre (Leg B)
+## Part 8 — LATER: FSx for Lustre (Leg B) *(fourth handoff)*
 
 > **Do not do this yet.** It happens after Leg A is finished and closed out. Written now so it holds no
 > surprises.
 
-Lustre works differently from WEKA: instead of a vendor client, it uses a **kernel module that must match your
-exact Linux kernel version**, and it reaches full speed over **EFA** (the network path you enabled at launch).
+**Like Part 6, almost all of this is Claude's work.** The Lustre side is *more* delicate than the WEKA side, not
+less: the client is a kernel module that must match your exact kernel, EFA has to be configured for the Lustre
+client specifically, and the tuning is part of what makes the comparison fair. Two of those have failure modes
+that produce believable numbers while invalidating the leg — which is exactly why they belong in a prompt with
+hard gates rather than a checklist.
 
 ### 8.1 — Finish Leg A properly first
+
 Work through [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md) § Teardown, including
 `runs/lib/teardown-preflight.sh`, which must print **GO**. Then rebuild the instance from the **same `AMI_ID`**,
-same type, same AZ.
+same type, same AZ, and bootstrap it per that document's § Rebuild.
 
-### 8.2 — Create the file system
-Console → **FSx** → **Create file system** → **Amazon FSx for Lustre**.
+### 8.2 — What only you can do
 
-| Setting | Value | Why |
-|---|---|---|
-| Deployment type | **Persistent 2** | Current generation, and the only one where metadata performance is provisioned independently |
-| Throughput per unit of storage | **1000 MB/s/TiB** — the highest | We deliberately give Lustre its **best** configuration; beating a competitor's best is worth far more than beating a weak setup |
-| Storage capacity | **at least 25 TiB** | At 1000 MB/s/TiB, 25 TiB is where Lustre's disks can finally saturate the instance's network. Below that, Lustre is the bottleneck and we'd be measuring our own sizing choice |
-| Metadata configuration | **User-provisioned**, a high value | Metadata is where the two filesystems differ most architecturally |
-| VPC / subnet / security group | **Same as the instance**, `wsi-bench-sg` | Cross-AZ would distort results |
-| EFA | **Enabled** | Required for GPUDirect Storage, and it removes a hard per-server bandwidth cap |
+1. **Create the FSx file system** — or approve Claude creating it via `aws fsx create-file-system`, which it will
+   offer. It is a paid resource whose configuration *is* the experiment, so it never happens unilaterally.
+   Letting Claude use the CLI has one real advantage: the exact parameters land in the transcript, which is the
+   evidence the fairness basis needs later.
 
-Creation takes ~10 minutes. **Record** `FSX_TIER`, `FSX_CAPACITY_TIB`, `FSX_METADATA_IOPS`, `FSX_EFA_ENABLED`.
+   | Setting | Value | Why |
+   |---|---|---|
+   | Deployment type | **Persistent 2** | Current generation, and the only one where metadata performance is provisioned independently of capacity |
+   | Throughput per unit of storage | **1000 MB/s/TiB** — the highest | We deliberately give Lustre its **best** configuration; beating a competitor's best is worth far more than beating a weak setup |
+   | Storage capacity | **at least 25 TiB** | At 1000 MB/s/TiB, 25 TiB is where Lustre's disks can finally saturate the instance's network. Below that, Lustre is the bottleneck and we'd be measuring our own sizing choice |
+   | Metadata configuration | **User-provisioned**, a high value | Metadata is where the two filesystems differ most architecturally |
+   | VPC / subnet / security group | **Same as the instance**, `wsi-bench-sg` | Cross-AZ would distort results |
+   | EFA | **Enabled** | Required for GPUDirect Storage, and it removes a hard per-server bandwidth cap |
 
-### 8.3 — Install the EFA software
-*(Source: AWS EFA getting-started guide, Step 3.)*
+   Creation takes ~10 minutes.
+
+2. **Decide the kernel policy** when Claude asks — see the warning below.
+3. **Approve the installs, the reboots and the mount.**
+
+### 8.3 — Hand off to Claude
+
 ```bash
-curl -O https://efa-installer.amazonaws.com/aws-efa-installer-latest.tar.gz
-tar -xf aws-efa-installer-latest.tar.gz && cd aws-efa-installer
-sudo ./efa_installer.sh -y
-cd ~ && sudo reboot
+tmux new -A -s wsi
+cd /home/ubuntu/wsi-cloud
+claude
 ```
-Reconnect, then verify:
-```bash
-fi_info -p efa -t FI_EP_RDM       # must list an "efa" provider
-```
-Ubuntu also needs one protection setting relaxed for EFA's shared-memory path:
-```bash
-sudo sysctl -w kernel.yama.ptrace_scope=0
-echo "kernel.yama.ptrace_scope = 0" | sudo tee /etc/sysctl.d/10-ptrace.conf
-```
+Paste **exactly this**:
 
-### 8.4 — Install the Lustre client
-*(Source: AWS "Installing the Lustre client", Ubuntu section.)*
-```bash
-wget -O - https://fsx-lustre-client-repo-public-keys.s3.amazonaws.com/fsx-ubuntu-public-key.asc \
-  | gpg --dearmor | sudo tee /usr/share/keyrings/fsx-ubuntu-public-key.gpg >/dev/null
+> Read the file `cloud-setup/prompt-lustre-cluster-cloud.md` and do everything it says, then report back.
 
-sudo bash -c 'echo "deb [signed-by=/usr/share/keyrings/fsx-ubuntu-public-key.gpg] https://fsx-lustre-client-repo.s3.amazonaws.com/ubuntu $(lsb_release -cs) main" > /etc/apt/sources.list.d/fsxlustreclientrepo.list && apt-get update'
+Claude verifies the environment contract against Leg A **before** anything is provisioned (a mismatch found then
+costs nothing); installs the EFA software and the Lustre client; **configures the Lustre client for EFA**;
+mounts; captures the stripe layout; proposes tuning; and writes the FSx values into `env.sh` itself.
 
-uname -r                       # note your kernel version — and compare it to the contract
-sudo apt install -y linux-aws lustre-client-modules-aws && sudo reboot
-```
-> ## ⚠ This command can change the kernel — OPEN DECISION (`D-17`)
-> `linux-aws` is the *latest* AWS kernel, and **`kernel` is a `MUST_MATCH` field in the environment
-> contract** you verify three sub-sections later in 8.7. So run as written, this step can make Leg B fail its
-> own comparability gate — the one thing this project is built to prevent.
+### 8.4 — The two things to watch for in its report
+
+> ## ⚠ 1. EFA must actually be in use, not merely installed
+> Enabling EFA on the instance and on the file system, and installing the generic EC2 EFA software, does **not**
+> configure the *Lustre client* to use EFA. Without the FSx-specific client configuration the mount quietly runs
+> over **TCP** — forfeiting GPUDirect Storage **and** the escape from the per-server bandwidth cap, while still
+> producing a full set of believable numbers. That would mean Leg B was measured at a configuration this project
+> explicitly promised not to use.
 >
-> **Decide before running it:** either pin the kernel and install the matching module
-> (`sudo apt install -y lustre-client-modules-$(uname -r)`, checking availability with
-> `apt-cache search lustre-client-modules` first), or accept the kernel change and **re-baseline both legs**,
-> recording that decision. Do not discover this at 8.7.
-Reconnect and confirm the module exists:
-```bash
-modinfo lustre | head -3
-```
-> **If you get `Module Not Found`:** the client packages must match the kernel exactly. Run
-> `sudo apt-cache search lustre-client-modules` to see which kernels are supported and install the matching
-> one. **Don't skip this** — a mismatched module simply will not mount.
-
-### 8.5 — Mount it
-
-> ## ⚠ MISSING STEP — the Lustre client is not yet configured for EFA (`D-16`)
-> Everything so far enables EFA on the **instance** (2.2), requests it on the **file system** (8.2), and
-> installs the **generic EC2** EFA software (8.3). None of that configures the *Lustre client* to use EFA — AWS
-> ships a separate FSx-Lustre EFA client setup for that, and this guide does not run it.
+> **Claude must show you `lnetctl net show` listing an `efa` net.** Not "I installed EFA" — the output.
 >
-> **Without it the mount below goes over TCP**, which forfeits **both** GPUDirect Storage and the escape from
-> the per-client-per-server bandwidth cap — while still producing perfectly plausible numbers. That silently
-> breaks the "Lustre at maximum" fairness basis (**D7**) this whole comparison rests on: Leg B would be
-> measured at a configuration we explicitly promised not to use.
->
-> **Before mounting:** get the current procedure from AWS's own FSx for Lustre client documentation (do not
-> follow a remembered command — this tooling changes), run it, then treat the check below as a **hard gate**:
->
-> ```bash
-> sudo lnetctl net show      # must list an `efa` net, not only `tcp`
-> ```
->
-> **If it lists only `tcp`, stop.** Do not run a Leg-B cell. This is open item `D-16` in the
-> `cloud-session-open-items` memory and item 3 in `AUDIT-REPORT.md`; the mount string the console gives you
-> will also change once the EFA LND is in use.
+> **If it shows only `tcp`, Claude is instructed to stop right there — before mounting, before any cell — and
+> report to you.** Leg B does not start, and it does not get measured-then-flagged; per **D16** the transport is
+> a precondition of the measurement. Tracked as `D-16`.
 
-The FSx console gives you the exact command for your file system:
+> ## ⚠ 2. The kernel must not drift
+> `kernel` is a held-constant field in the environment contract. The documented Lustre client install pulls
+> `linux-aws`, the *latest* AWS kernel — so run naively it can invalidate the comparison the contract exists to
+> protect. Claude will ask you to choose: **pin the kernel** and install the matching
+> `lustre-client-modules-$(uname -r)` (preferred), or accept the change and **re-baseline both legs**.
+> Tracked as `D-17`.
 
-Console → **FSx** → your file system → **Attach** → copy the mount command shown.
+**Also confirm before you let it move on:** `./cloud-setup/env.sh --check` passes, `LUSTRE_STRIPE_LAYOUT` is
+recorded (the consistency check derives Lustre's expected wire-vs-application relation from it), and
+`env-contract.py verify` comes back clean on every held-constant field.
 
-It looks like this:
-```bash
-sudo mkdir -p /mnt/lustre
-sudo mount -t lustre -o relatime,flock <dns-name>@tcp:/<mountname> /mnt/lustre
-sudo chown ubuntu:ubuntu /mnt/lustre
-```
-> **Use the console's exact string** rather than typing from memory — the DNS name and the short mount name are
-> specific to your file system, and a wrong one fails confusingly.
+### 8.5 — Then hand off to the benchmark
 
-Verify:
-```bash
-findmnt /mnt/lustre
-lfs df -h /mnt/lustre          # Lustre-specific: storage and metadata targets
-lfs getstripe -d /mnt/lustre   # how files are spread across servers
-```
-**Record the `lfs getstripe` output** as `LUSTRE_STRIPE_LAYOUT` — the measurement-validation check needs it,
-exactly as WEKA's needed its protection scheme.
-
-### 8.6 — Switch the project to Leg B
-```bash
-nano cloud-setup/env.sh        # change: export LEG="lustre"
-source cloud-setup/env.sh
-echo "$FS_MOUNT"               # must now print /mnt/lustre
-./cloud-setup/env.sh --check
-```
-
-### 8.7 — Prove the two legs are comparable — the gate
-```bash
-aws s3 cp s3://$S3_BUCKET/env-contracts/env-contract-leg-weka.json /tmp/
-runs/lib/env-contract.py verify --against /tmp/env-contract-leg-weka.json --leg lustre
-```
-It separates **VIOLATION** (something that should have stayed identical has changed — the comparison is
-invalid) from **differs as expected** (the filesystem settings, which are the whole point).
-
-**A VIOLATION means stop and fix it.** Comparing two environments that differ in more than the filesystem would
-blame the filesystem for something else — the single error this project exists to avoid.
-
-### 8.8 — Hand off to Claude for Leg B
-Same as Part 7. Claude verifies everything, applies Lustre-specific tuning (part of giving Lustre its best
-configuration), re-loads the datasets from S3, and runs the same benchmark.
+Same as Part 7 — `cloud-setup/handoff-cloud.md`. Claude re-hydrates the datasets from S3, applies the remaining
+Lustre-leg work, and runs the same cells against the new mount.
 
 ---
 
@@ -849,5 +672,5 @@ configuration), re-loads the datasets from S3, and runs the same benchmark.
 
 1. **EFA interface type at launch** (2.2) — cannot be added later; Lustre needs it.
 2. **The S3 bucket and IAM role** (1.4, 1.5) — without them, deleting the instance destroys all results.
-3. **`env-contract.py write`** (6.9) — it's how you prove the two legs were comparable, *and* how you recover
+3. **`env-contract.py write`** (6.3) — it's how you prove the two legs were comparable, *and* how you recover
    `env.sh` after a rebuild.

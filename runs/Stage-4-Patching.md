@@ -10,7 +10,7 @@
 > **4.D**. Both are regenerated per leg on the filesystem under test.
 
 For project-wide conventions and recording philosophy see `../CLAUDE.md`; framing and the fairness contract
-`../PROJECT-THESIS.md`; stage map and decision log **D1–D15** `STAGES.md`; runbook `README.md`; the coord
+`../PROJECT-THESIS.md`; stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`; the coord
 generator `Stage-3-Tissue-Detection.md`.
 
 ---

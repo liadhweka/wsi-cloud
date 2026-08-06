@@ -81,6 +81,17 @@ export FSX_CAPACITY_TIB=""
 export FSX_METADATA_IOPS=""
 export FSX_EFA_ENABLED=""
 export LUSTRE_STRIPE_LAYOUT=""                   # REQUIRED to derive the Lustre canary relation (D12)
+export SCRIPT_COMMIT=""                          # both legs must run the same code; --check reports it
+
+# FS_TRANSPORT — the transport this leg's client is ACTUALLY on, from evidence.
+#   weka:   dpdk | udp        lustre:  efa | tcp
+# Written by the per-leg cluster-setup prompt from the client's own report, never from
+# the mount options that were passed. run-leg.sh REFUSES to start a leg when it is
+# unset, or when it is the fallback without a written waiver in
+# runs/.leg-state/$LEG/transport-waiver (D16). Why a hard gate and not a caveat: UDP
+# and TCP mount cleanly and report plausible numbers for a transport this project
+# decided not to measure, so "run now, flag later" spends the wallclock first.
+export FS_TRANSPORT=""
 
 # ─────────────────────────────────────────────────────────────────────────────────
 # --check : validate the configuration before anything runs.
@@ -99,6 +110,25 @@ if [ "${1:-}" = "--check" ]; then
   _dir() {
     if [ -d "${!1:-/nonexistent}" ]; then printf '  ok       %-24s = %s (exists)\n' "$1" "${!1}";
     else echo "  MISSING  $1 = '${!1:-}' — directory does not exist" >&2; fail=$((fail+1)); fi
+  }
+  # _recfile: progressively-captured like _rec, but a value that IS set must point at a
+  # real file. WHY the asymmetry: blank means "not captured yet", which is fine early —
+  # whereas a set-but-nonexistent path is the one state that fails SILENTLY. A stale
+  # LIBCUFILE_PRELOAD (e.g. carried over from a previous instance) makes LD_PRELOAD a
+  # no-op, so the GPU-direct cells quietly run on the conda env's bundled libcufile and
+  # still report perfectly plausible numbers.
+  _recfile() {
+    if [ -z "${!1:-}" ]; then echo "  pending  $1 — $2"; warn=$((warn+1));
+    elif [ -f "${!1}" ]; then printf '  ok       %-24s = %s (exists)\n' "$1" "${!1}";
+    else echo "  MISSING  $1 = '${!1}' — set but the file does not exist on THIS instance" >&2; fail=$((fail+1)); fi
+  }
+  # _genfile: for a path that is ALWAYS set from the template, so blankness carries no
+  # information — what matters is whether the file has been generated on this instance
+  # yet. Warns rather than fails, because generation legitimately happens after the
+  # first --check. (Do NOT use _recfile here: it would fail every fresh bootstrap.)
+  _genfile() {
+    if [ -f "${!1:-/nonexistent}" ]; then printf '  ok       %-24s = %s (exists)\n' "$1" "${!1}";
+    else echo "  pending  $1 = '${!1:-}' — not generated on this instance yet: $2"; warn=$((warn+1)); fi
   }
 
   echo "── Required ─────────────────────────────────────────────────────────"
@@ -121,12 +151,15 @@ if [ "${1:-}" = "--check" ]; then
   _dir SCRATCH_DIR
 
   echo "── Recorded at provisioning (blank is OK early) ──────────────────────"
-  _rec CLIENT_HOSTNAME        "aggregators filter telemetry by hostname"
-  _rec LIBCUFILE_PRELOAD      "every kvikIO sweep driver refuses to start without it"
-  _rec WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12)"
-  _rec WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
-  _rec AMI_ID                 "Leg B rebuilds from this exact AMI"
-  _rec SCRIPT_COMMIT          "both legs must run the same code"
+  _rec     CLIENT_HOSTNAME        "aggregators filter telemetry by hostname"
+  _recfile LIBCUFILE_PRELOAD      "every kvikIO sweep driver refuses to start without it"
+  _genfile CUFILE_ENV_PATH_JSON   "regenerated per instance (D-10) — its addresses are instance-specific"
+  _rec     FS_TRANSPORT           "run-leg.sh refuses to start a leg without it (D16)"
+  _rec     WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12) — Leg A"
+  _rec     LUSTRE_STRIPE_LAYOUT   "needed to derive the Lustre canary relation (D12) — Leg B"
+  _rec     WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
+  _rec     AMI_ID                 "Leg B rebuilds from this exact AMI"
+  _rec     SCRIPT_COMMIT          "both legs must run the same code"
 
   echo "── AWS reachability ─────────────────────────────────────────────────"
   if command -v aws >/dev/null 2>&1; then

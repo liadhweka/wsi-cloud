@@ -11,13 +11,33 @@ Lustre (later)** — followed by the head-to-head synthesis.
 **Nothing has been benchmarked. Every number in the repo is `[PENDING]`.** You are the first session to run
 a cell.
 
+> **If `cloud-setup/HANDOFF-NEXT-SESSION.md` exists, read it before anything else** — and the sentence above is
+> then out of date. That file is the *previous* session's own account of what it completed, what is
+> mid-stage, and what it learned that should change the plan. It is written at teardown precisely because
+> Claude's context does not survive one, so it outranks this prompt's assumptions about the current state.
+
 **What the human has already done** (per `cloud-setup/NEW-CLOUD-SETUP.md`): provisioned the instance (from a
 pinned AMI — **verify in 4.0 that it actually carries the GPU stack**; the image choice was still an open
-decision when this prompt was written, `C10`), the S3 bucket + IAM role, and the WEKA cluster; wired SSH↔GitHub and set their git identity;
-installed Claude; cloned this repo; restored the memories; filled in `cloud-setup/env.sh`; and mounted WEKA at
-`/mnt/weka`. A **prior env-prep session** (`cloud-setup/prompt-env-prep-cloud.md`) verified the
-GPU/CUDA/GDS/networking stack, reported the system `libcufile` path, installed miniforge, and provisioned
-`/data/local-nvme`.
+decision when this prompt was written, `C10`), the S3 bucket + IAM role, and the WEKA **backend cluster**;
+wired SSH↔GitHub and set their git identity; installed Claude; cloned this repo; restored the memories
+(`cloud-setup/restore-memories.sh`); and filled in the decision-only half of `cloud-setup/env.sh`.
+
+**What two prior Claude sessions already did** — read their reports rather than re-deriving:
+- **env-prep** (`cloud-setup/prompt-env-prep-cloud.md`) verified the GPU/CUDA/GDS/networking stack, reported
+  the system `libcufile` path, installed miniforge, and provisioned `/data/local-nvme`.
+- **WEKA cluster setup** (`cloud-setup/prompt-weka-cluster-cloud.md`) created the filesystem, installed the
+  client, **mounted it at `/mnt/weka`**, and wrote the WEKA facts into `env.sh` — including `WEKA_EC_SCHEME`
+  (without which the consistency canary cannot be derived) and `WEKA_CLIENT_CORES`. **`num_cores` is measured
+  configuration, not a knob** (`D15`): do not change it mid-leg.
+  > **If that session reported a UDP mount instead of DPDK — or could not evidence which — STOP AND REPORT
+  > IMMEDIATELY. Do not run any cell, including a throwaway one.** Per **D16** the transport is a precondition
+  > of the measurement, not a caveat to note in the writeup: a UDP mount produces a complete, plausible set of
+  > numbers for a configuration this project decided not to measure. Only a written human waiver, with the
+  > reason recorded, changes that.
+
+The Leg-B equivalent, `cloud-setup/prompt-lustre-cluster-cloud.md`, runs before Leg B and is not your concern
+now — but its two hard gates (an EFA-not-TCP mount, and the kernel-vs-contract question) are why Leg A's
+contract must be written completely.
 
 **One thing they probably have NOT done: the Hugging Face login.** `hf` ships with the Python environments,
 which *you* build in 4.1 — so `hf auth login` cannot have run yet, and one of the three foundation models is
@@ -65,14 +85,18 @@ Two rules that follow, and that you will be tempted to bend:
   - **`weka-vs-lustre-cloud-open-decisions`** — what is still *assumed*, with an index of every place each
     assumption is referenced. Keep the index current.
   - Plus the framing, MIL, cuCIM, and UNI2-h memories.
-  - **If `MEMORY.md` is missing, STOP** and tell the human to run the restore block in
-    `cloud-setup/NEW-CLOUD-SETUP.md` § 4.3. Do not proceed without the memories.
+  - **If `MEMORY.md` is missing:** run `./cloud-setup/restore-memories.sh` yourself — the mirror is in-repo
+    and the script verifies the result — then report its output and **ask the human to restart the session**
+    so the memories actually load. **Do not proceed on this session's context**; that is the failure this
+    check exists to catch. If the script *refuses* — empty mirror, or no `MEMORY.md` in it — **STOP and
+    report**: that means the mirror itself is broken, and no restore can fix it. **Do not proceed without the
+    memories** either way. (`NEW-CLOUD-SETUP.md` § 4.3 is the human-facing version of the same one-liner.)
 
 ## STEP 2 — Read the project docs
 
 - **`PROJECT-THESIS.md`** — the question, the held-constant contract, **both deliberate asymmetries**, scope.
 - **`runs/STAGES.md`** — the stage map, the comparison structure, the GPU-direct matrix, the 20× contract,
-  the per-filesystem adapter table, the per-leg plan, and the **decision log D1–D15**. Read the whole
+  the per-filesystem adapter table, the per-leg plan, and the **decision log D1–D16**. Read the whole
   decision log; it is where the *why* of every methodology choice lives.
 - **All seven `runs/Stage-<N>-*.md` roadmaps** — methodology, per-substage rationale, caveats.
 - **`runs/README.md`** — the runbook, **both canaries**, the silent-skip hazards, the cross-leg integrity
@@ -103,6 +127,27 @@ Two rules that follow, and that you will be tempted to bend:
 - **What is missing is exactly the deferred work in `SCRIPT-TRACKER.md`'s table and section B of the
   open-items memory.** That is not incidental cleanup; **it is a hard prerequisite for a valid cell.**
 - **Leg A is WEKA.** Leg B is FSx for Lustre, provisioned later. The instance is the same in both.
+
+### Is this a first build or a rebuild? Route accordingly.
+
+This prompt is pasted on **every** build — first spin-up, cost pause, and the Leg-A→Leg-B switch. The two
+states differ, so establish which you are in **during 4.0** rather than assuming: `cloud-setup/HANDOFF-NEXT-SESSION.md`
+exists → **rebuild**; `git log` shows commits after this prompt was written → **rebuild**;
+`runs/INDEX.md` has rows → **rebuild**.
+
+| On a **rebuild** | Because |
+|---|---|
+| **4.1 build the environment — REDO** | the conda envs lived on ephemeral scratch. Use the pinned `*.conda-explicit.txt`, not the loose recipe: `conda_env_main` and `python_version` are held-constant contract fields |
+| **4.2 datasets — RE-HYDRATE, don't re-download** | S3 holds them; the mount is what died. Byte-verify against the manifest |
+| **4.3 the deferred script work — VERIFY, don't redo** | it is committed to git and arrived with the clone. Re-run its checks; only build what `SCRIPT-TRACKER.md` still marks deferred |
+| **4.4 open-items section A — CONTINUE** | the memory holds only what is *still* open, so it is already the correct work list |
+| **4.5 baseline — only if the hardware or the mount configuration changed** | otherwise the previous leg's baseline stands, and re-taking it burns wallclock. Say which you concluded and why |
+| **4.5b the blocker gate — ALWAYS** | it gates the first *measured* cell, not the first build |
+| **4.6 run the leg — RESUME** | `run-leg.sh --leg $LEG` skips steps whose markers are in `runs/.leg-state/$LEG/`, which is git-tracked and therefore survived. **If the marker dir is empty on a mid-leg rebuild, stop and say so** — that means the previous teardown did not commit them, and blindly re-running would duplicate hours of cells |
+
+**`HANDOFF-NEXT-SESSION.md` outranks this file on anything about current state.** It was written by the
+previous session, which knew things this prompt cannot: what was mid-flight, what failed, and what it learned
+that should change the plan.
 
 ---
 
@@ -261,6 +306,7 @@ a checklist is needed rather than a careful re-read.
 
 | # | Blocker | Where |
 |---|---|---|
+| 9e | ⛔ **The transport this leg is actually on, evidenced** — WEKA on **DPDK** (not UDP), Lustre on **EFA** (not TCP), per **D16**. Not the mount options you passed; the client's own report. **This row is a STOP, not a caveat**: if the evidence is missing or shows the fallback, run **nothing at all** — not even the throwaway pipeline-proof cell — and report immediately. A fallback transport yields a complete, plausible dataset for a configuration this project decided not to measure, so "measure now, flag later" spends the wallclock and the money before anyone can act | `D-16`, **D16** |
 | 10 | **Lustre client-side EFA configuration** — without it the client mounts over TCP, forfeiting GDS *and* the per-server-cap escape while still producing numbers. That breaks the "Lustre at maximum" fairness basis (**D7**) invisibly | `D-16` |
 | 11 | **The kernel-vs-contract policy** — installing `linux-aws` can move the kernel, and `kernel` is a `MUST_MATCH` contract field, so the documented procedure can invalidate the comparison it protects | `D-17` |
 | 12 | **Lustre tuning** — part of "Lustre at maximum"; skipping it understates Lustre | `D-11` |
@@ -278,16 +324,15 @@ land — **numbers and caveats only, no narrative.**
 
 ### 4.7 — Close out Leg A
 
-**Follow `cloud-setup/TEARDOWN-AND-REBUILD.md` § Teardown** — it is the do-every-time checklist, and
-`runs/lib/teardown-preflight.sh` is the GO/NO-GO gate that proves nothing is lost. The steps below are its
-project-specific parts.
+**Read `cloud-setup/prompt-teardown-cloud.md` and do what it says** — it is the whole close-out procedure
+(finish the roadmaps and `PRESENTING.md`, write `HANDOFF-NEXT-SESSION.md`, `./backup.sh`, the environment
+contract, the verified S3 sync, then the GO/NO-GO gate), with the human owning only commit+push and the
+destruction. `cloud-setup/TEARDOWN-AND-REBUILD.md` § Teardown is the same sequence written for them.
 
-1. Fill in the roadmaps and `PRESENTING.md` — **still scoped as half an unfinished comparison.**
-2. **Write the environment contract** to S3: instance type, region/AZ, AMI, kernel, driver/CUDA versions,
-   dataset byte-manifest, script commit, and both filesystems' provisioned configuration.
-3. `./backup.sh`, **verified S3 sync**, and tell the human it is ready for the stage commit — **they commit
-   and push; never do it autonomously.**
-4. **Write the Leg B handoff prompt**, including everything Leg A taught you that should change Leg B.
+Two things there that are yours specifically and cannot be recovered later: **single-leg claims stay scoped as
+half an unfinished comparison**, and the handoff must carry **everything this leg taught us that should change
+the next one's plan** — Leg B's roadmap is explicitly provisional, and improving it from Leg A's findings is
+the point, not a deviation.
 
 ---
 

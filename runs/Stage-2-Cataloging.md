@@ -11,7 +11,7 @@
 > the slide header), so the 20× contract (**D1–D5**) does not change a single Stage 2 cell.
 
 For project-wide conventions and recording philosophy see `../CLAUDE.md`; for framing and the fairness
-contract `../PROJECT-THESIS.md`; for the stage map and decision log **D1–D15** `STAGES.md`; for how to run
+contract `../PROJECT-THESIS.md`; for the stage map and decision log **D1–D16** `STAGES.md`; for how to run
 a cell and recover from failures `README.md`. The read ceilings Stage 2's "% of ceiling" divides by come
 from `Stage-1-Ingest.md` (1.0b / 1.0d), **matched by block size** — those must land first.
 
@@ -262,7 +262,7 @@ Both are byte-verified held-constant inputs, identical in both legs (**D6**).
 
 - `../CLAUDE.md` — project rules: recording philosophy, per-filesystem adapters, framing
 - `../PROJECT-THESIS.md` — the question, held-constant contract, both asymmetries, scope
-- `STAGES.md` — stage map, per-leg plan, decision log **D1–D15**
+- `STAGES.md` — stage map, per-leg plan, decision log **D1–D16**
 - `Stage-1-Ingest.md` — the synthetic ceilings (1.0b/1.0d) Stage 2's "% of ceiling" divides by, block-size matched; and the per-timestamp client-summing aggregator pattern this stage's aggregator reuses
 - `README.md` — operational runbook and both canaries
 - `../SCRIPT-TRACKER.md` — per-script reference and deferred cloud-session TODOs

@@ -10,7 +10,7 @@
 > maps most directly onto what production WSI research pipelines actually do.
 
 For project-wide conventions see `../CLAUDE.md`; framing and the fairness contract `../PROJECT-THESIS.md`;
-stage map and decision log **D1–D15** `STAGES.md`; runbook `README.md`. Stage 4 supplies both data paths
+stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`. Stage 4 supplies both data paths
 and the raw-TIFF artifact; Stage 5 supplies the DDP scaling context.
 
 ---
@@ -420,7 +420,7 @@ past cache and is the largest single footprint in the project after raw-TIFF.
 
 ## Cross-references
 
-- `../CLAUDE.md` · `../PROJECT-THESIS.md` · `STAGES.md` (**D1–D15**) · `README.md`
+- `../CLAUDE.md` · `../PROJECT-THESIS.md` · `STAGES.md` (**D1–D16**) · `README.md`
 - `Stage-4-Patching.md` — both data paths, the raw-TIFF artifact, the full cuFile-mode grid
 - `Stage-5-Training.md` — DDP mechanics, the attribution discipline, cuFile-mode scoping precedent
 - `Stage-2-Cataloging.md` — the cross-leg operation-counter comparability caveat

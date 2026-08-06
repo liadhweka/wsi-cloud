@@ -174,6 +174,12 @@ separately. Five naming cases tested, all pass.
 **11. `runs/.leg-state/` was not gitignored, so every teardown would have blocked.** *(E — MAJOR)*
 `run-leg.sh`'s done-markers dirtied the tree and `teardown-preflight.sh` NO-GOes on a dirty tree — the gate
 would have refused until someone committed per-leg scratch state. **Fix:** ignored, with the reason.
+> ⚠ **Reversed on 2026-08-06 — this fix treated the wrong symptom.** Ignored *and* unsynced meant the markers
+> died with the instance, so `TEARDOWN-AND-REBUILD.md`'s "a rebuild mid-leg picks up where it stopped" was
+> false: a rebuilt `run-leg.sh --leg $LEG` would silently re-run every completed step into duplicate
+> timestamped run dirs — wasted hours and polluted aggregates, with no error. They are now **git-tracked**
+> (`CLAUDE.md`: git is authoritative for all small text), and the dirty-tree concern is moot because teardown
+> step 5 commits everything anyway, which is precisely when the markers need capturing.
 
 **12. The conda interpreter path was a hardcoded literal in 16 drivers.** *(E — MAJOR)*
 `CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604`, documented nowhere, contradicting
@@ -451,14 +457,82 @@ only what WEKA's reference AWS deployment builds, as context.
 
 ---
 
+## Follow-up pass: delegation boundary — "the human is told to do what Claude does better"
+
+Requested after Parts 6 and 8 became Claude prompts, on two themes: **work assigned to the human that Claude
+should do**, and **per-rebuild toil written as a checklist that should be a script**. Swept the setup and
+teardown path with three adversarially-verified lenses plus a pass of my own.
+
+**What the sweep confirmed correct** (32 items, worth stating because the boundary is the deliverable): Parts
+0–2 entirely — browser work before any Claude session exists, plus region/AZ/bucket decisions nothing on the
+instance can discover; Parts 3.1–4.1 — tmux, the base system, GitHub SSH, the Claude install and the clone are
+what *create* the session; every reboot; the Port blueprint and the FSx console configuration, both of which
+*are* the methodology; the Hugging Face token and login; **`git commit && git push`**; and **the destruction
+itself**. Those stay human for reasons, not by inertia.
+
+**Five things moved to Claude, each because the human hop was the only place an error could enter:**
+
+| | Was | Now |
+|---|---|---|
+| `LIBCUFILE_PRELOAD` | Claude reports the path, human pastes it into `env.sh` | Claude writes it and proves the write. *The exact failure the old wording warned about — a path from another machine making `LD_PRELOAD` a silent no-op — was created by the transcription hop, not prevented by it* |
+| `INSTANCE_ID` / `AMI_ID` / `INSTANCE_TYPE` / `AWS_REGION` / `AWS_AZ` | typed by hand at § 4.2, never re-checked | § 4.2 still bootstraps them (no session exists yet), but **env-prep re-derives all five from instance metadata and reconciles** |
+| Missing memories | "STOP and tell the human to run the restore block" | Claude runs `restore-memories.sh` itself, then asks for a session restart |
+| Teardown steps 1–4, 6–7 | an eight-step human checklist | `prompt-teardown-cloud.md`; the human does only commit+push and the destruction |
+| Rebuild step 6 ("mount the filesystem") | two sentences | paste the per-leg cluster prompt |
+
+**And the finding the sweep and I reached independently — the one step nothing verified.** Teardown step 2,
+*write the handoff prompt for the next session*, is called "the step most easily skipped and most expensive to
+skip" in this repo's own words, is listed in `CLAUDE.md`'s ordered checklist, and is item 4 of
+`handoff-cloud.md`'s close-out — and it had **no defined file and no gate**, while the other six steps had one
+each. So it could be "done" into a chat message and die with the very context it exists to carry. It now has
+`cloud-setup/HANDOFF-NEXT-SESSION.md` plus a `teardown-preflight.sh` check that NO-GOes on missing, on a missing
+`Written:` header, and on a date more than a day old — the staleness case matters because the file is
+git-tracked, so the *previous* teardown's copy would sail through an existence check. Tested across six cases.
+*(The sweep proposed a per-leg filename instead; a single file plus a date gate was chosen because multiple
+teardowns happen per leg, so a per-leg name would be overwritten just the same while making the gate compute a
+filename.)*
+
+**Three defects found in this round's own work, by testing it:**
+1. The `>>` append hint I had put in `env-contract.py env` was wrong — `env.sh`'s `--check` block sits at the
+   bottom and runs **before** anything appended after it, so appended values source correctly and are still
+   reported `MISSING`. Proven with a minimal repro, then documented as *paste, don't append*.
+2. `_recfile` (fail when a recorded path does not exist) applied to `CUFILE_ENV_PATH_JSON` would have failed
+   `--check` on **every fresh bootstrap**, because that variable's path is always set from the template while
+   the file is generated later. Split into `_genfile`, which warns.
+3. The contract-conflict gate reported "env.sh agrees with instance metadata" for a contract written *before*
+   the check existed — asserting agreement that was never tested. Now distinguishes absent from empty.
+
+**One more, structural:** `env.sh` was reconciled against nothing. `instance_type`, `aws_region`, `aws_az`,
+`ami_id` and `instance_id` were read as `env(X) or imds(Y)`, so a wrong hand-typed value was recorded into Leg
+A's contract, copied into Leg B's `env.sh` **from that same contract**, and compared against itself by
+`verify` — a match, with the drift the contract exists to catch invisible. Metadata now wins, disagreements are
+recorded in `source_conflicts`, `write` warns, and the pre-flight NO-GOes (self-clearing: fix `env.sh`, re-write
+the contract). `s3_bucket` was also added as a third `RECOVERY_ONLY` field, because the artifact used to rebuild
+`env.sh` did not contain the one value the rebuild cannot derive.
+
+**Raised, not built** — each needs the real environment or a decision, and each is in the
+`cloud-session-open-items` memory: a `prove-recording.sh` for the five-things-by-eye check at rebuild step 9;
+a contract-verified marker that `run-leg.sh` refuses without; a `verify-conda-env.sh` import/GPU-count check;
+`--self-test` for `sync-to-s3.sh`'s seven-step manual first-run procedure; the cross-leg artifact fingerprints
+that `runs/README.md` declares as gates but nothing computes; and whether `--check` should hard-fail on the
+current leg's canary field (`WEKA_EC_SCHEME` / `LUSTRE_STRIPE_LAYOUT`) — a warn→fail promotion that changes when
+the gate blocks, so it is the user's call.
+
+---
+
 ## Re-verification after fixes
 
 Re-run clean after every edit (the prompt's step 5, and it caught finding 10 above):
 
 | Check | Result |
 |---|---|
-| `bash -n` on all 32 shell files | pass |
+| `bash -n` on all **35** shell files | pass |
 | `py_compile` on all 29 Python files | pass |
+| handoff-prompt gate — 6 cases (missing · stale date · fresh · fresh+leg · no header · impossible date) | correct verdict each; only the two valid-and-fresh cases pass |
+| `env.sh --check` `_recfile`/`_genfile` — 3 states (blank · set-but-missing · set-and-present) | pending / MISSING / ok; fresh bootstrap produces no false failure |
+| `env-contract.py` metadata reconciliation, with IMDS stubbed to disagree | conflict recorded, metadata value kept, `write` warns on stderr |
+| contract-conflict gate — 4 cases (none · two · pre-check contract · unparseable) | OK / NO-GO / *unverified* WARN / parse WARN |
+| `env-contract.py env` round-trip incl. `s3_bucket` | emits sourceable shell; leg-specific fields commented; recorded conflicts reproduced as comments |
 | `record-run.sh` guards — 8 paths | all exit 2, correct messages |
 | `record-run.sh` end-to-end (scratch run dir) | `0_README.md` 1629 bytes, title and `INDEX.md` line match the dir |
 | `sync-to-s3.sh` guards — 6 paths | all exit 1 |

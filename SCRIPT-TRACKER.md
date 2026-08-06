@@ -46,7 +46,7 @@ one.
 | **D-2** | Repo-root retargeting | The hardcoded `REPO=` line in **28 shell files** replaced with derivation from the script's own location; 14 further files cleaned of other absolute paths | `grep`: **0 files** retain the old repo path |
 | **D-3** | Filesystem labelling | `record-run.sh` **requires** the filesystem, takes `--fs {weka\|lustre}` and **falls back to `$LEG`** when the flag is absent (so the argument-free sweep drivers work), puts it in the run-dir name and as a first-class `metadata.json` field, and **cross-validates it against `FS_MOUNT`** | All paths tested: neither set, invalid, `--fs` vs `FS_MOUNT` mismatch, `LEG` vs `FS_MOUNT` mismatch, agreeing — each exits 2 with the right message |
 | **D-12** | Environment contract | `env-contract.py` — `write` / `verify` / `show`, with the **held-constant vs expected-to-differ field split** that makes verification meaningful | Round-tripped: 0 violations, unrecorded fields correctly reported as *unverifiable* and failing |
-| **D-14** | Leg orchestrator | `run-leg.sh` — 22 steps in dependency order, with all four unattended guards | `--list`, `--dry-run`, and both refusal paths tested |
+| **D-14** | Leg orchestrator | `run-leg.sh` — 22 steps in dependency order, with all five unattended guards | `--list`, `--dry-run`, and every refusal path tested (incl. the **D16** transport gate: unset, wrong-transport, waived, correct) |
 
 ### ✅ Done during the pre-deployment audit (2026-08-03)
 
@@ -64,7 +64,7 @@ place and missing in others — the class of defect that produces a plausible-lo
 | **A-7** | Prior-environment results and narrative inside recorded notes | Cell `--note` strings — written into every run's `metadata.json` and `0_README.md` — carried measured figures from another environment, a previous host's NUMA/NIC map, WEKA-only source lists, and pre-assigned conclusions (one asserted an outcome outright). A **D9** violation embedded in the results themselves | All notes rewritten leg-agnostic, with the methodology *why* kept and every prior number and expectation removed |
 | **A-8** | Contract never reached S3 | `sync-to-s3.sh` had no `env-contracts/` path, yet `teardown-preflight.sh` NO-GOes without it and Leg B fetches Leg A's contract from there | Added, with archive (never-delete) semantics |
 | **A-9** | Duplicated held-constant field list had drifted | `teardown-preflight.sh` checked **9** fields against the contract's **17** — it would call a contract "complete" that `env-contract.py write` had itself rejected | Imports `MUST_MATCH` from `env-contract.py`; one source of truth |
-| **A-10** | `runs/.leg-state/` not gitignored | `run-leg.sh`'s done-markers dirtied the tree, and `teardown-preflight.sh` NO-GOes on a dirty tree — so every teardown would block on committing scratch state | Added to `.gitignore` |
+| **A-10** | `runs/.leg-state/` not gitignored | `run-leg.sh`'s done-markers dirtied the tree, and `teardown-preflight.sh` NO-GOes on a dirty tree | Added to `.gitignore` — **then deliberately REVERSED on 2026-08-06.** The markers are the only thing that stops a resumed leg from re-running completed steps, and ignored-plus-unsynced meant they died with the instance, making the rebuild doc's "picks up where it stopped" false: a rebuilt `run-leg.sh` would silently redo hours of sweeps into duplicate run dirs. Now **git-tracked** (git is authoritative for small text, per `CLAUDE.md`); teardown step 5's `git add -A` captures them, which is exactly when they need capturing |
 | **A-11** | `run-leg.sh` could not execute 7 of its steps | It invoked each driver bare, but seven dispatch on `$1` and exit 2 with a usage message when given none — the chain would have aborted at step 4.C. `--from`/`--only` were also unvalidated, so a typo silently skipped every step and exited **0** | Each step carries its target with the choice justified inline; the runner word-splits it; both selectors validated against the step-id list. **A missing step surfaced in the process: `sweep-stage6a-extract.sh tier3` existed but nothing ran it**, so 6.A Tier 3 was absent from every leg — now step `6.A.3`. 22 steps |
 | **A-12** | Stage-7 aggregator matched zero cells | Its regex anchored `-s7-` to the timestamp and its glob missed `-s7.N-`. Partly *caused* by `A-1`: it was the only aggregator anchoring on the timestamp, which is why the re-verification pass exists | Stage part unanchored, sub-stage optional, glob widened; 5 naming cases tested |
 | **A-13** | Four smaller confirmed defects | `sweep-stage1-mixed.sh` called `fio` at `/usr/local/bin/fio` while all four siblings use bare `fio` and apt installs `/usr/bin/fio`; `inference-per-slide-stage7.py` silently defaulted to GPU 2 (an index encoding a previous machine's NIC adjacency); `sweep-stage6b-stress.sh` understated `b2c` as 3 cells and `all` as 24 (really 4 and 25); both Tier-2 orchestrators justified `CHUNK_SIZE` with another environment's capacity | Path made bare; the GPU pin now **refuses** rather than defaulting (all four callers pin it explicitly); counts corrected; capacity figures removed and re-derivation tracked as open item **9d** — the *value* still needs the real capacity |
@@ -195,7 +195,17 @@ confirm it does **not** disappear from S3. Also tracked as open item `D-7`.
 
 ### `env-contract.py` — cross-leg comparability enforcement ⭐ NEW (`D-12`)
 **What.** `write` collects every environment fact into JSON at the end of a leg; `verify` compares the current
-environment against a reference contract before the next leg's first cell; `show` prints one readably.
+environment against a reference contract before the next leg's first cell; `show` prints one readably; **`env`
+emits it back as `env.sh`-shaped `export` lines** for the rebuild.
+**Why `env` exists.** `env.sh` is gitignored, so it is **lost on every rebuild** — and the documented recovery
+was "read the contract and retype the values". That put a transcription step in front of the one artifact whose
+whole purpose is proving the two legs matched: a typo in `AMI_ID` or `INSTANCE_TYPE` defeats the check it
+exists to pass. **Held-constant fields are emitted live; leg-specific fields are emitted COMMENTED** — on a
+cross-leg rebuild those describe the *other* filesystem, and the cluster-setup prompt writes the new ones.
+Fields absent from the contract are emitted as a commented placeholder saying so, never invented.
+*Caveat:* **paste the output over the placeholders, do not `>>` append.* `env.sh`'s `--check` block sits at the
+bottom of the file and runs before anything appended after it, so appended values source correctly and are
+still reported `MISSING`.
 **Why.** The two legs run at **different times on a rebuilt instance**. Anything that drifts — AMI, driver,
 dataset bytes, script commit — is **indistinguishable from a filesystem difference** once the numbers exist.
 This makes comparability a mechanical check rather than a judgement call.
@@ -209,6 +219,17 @@ under test.
 anything unavailable is recorded as **null, never guessed**. `verify` treats a null on a held-constant field
 as **unverifiable → FAILED**, because *an unrecorded fact cannot be shown to have matched*. `write` also exits
 non-zero when held-constant fields are missing, so an incomplete contract cannot pass unnoticed.
+**`env.sh` is reconciled against instance metadata, not trusted.** `instance_type`, `aws_region`, `aws_az`,
+`ami_id` and `instance_id` are fetched from **both** `env.sh` and IMDS; **metadata wins** and any disagreement
+is recorded in `source_conflicts`. *Why the old `env(X) or imds(Y)` was wrong:* `env.sh` is hand-typed at
+bootstrap, so a wrong `ami_id` went into Leg A's contract, was copied into Leg B's `env.sh` **from that same
+contract**, and then compared against itself by `verify` — it matched, and the drift the contract exists to
+catch was invisible. `write` warns on a conflict; `teardown-preflight.sh` NO-GOes on one, because `env.sh` is
+what the next instance is rebuilt from. A contract predating the check reports *unverified*, not *agrees*.
+**Third field list, `RECOVERY_ONLY` (`s3_bucket`).** Comparing it proves nothing — you must already know the
+bucket to have fetched the contract — but without it the recovery artifact could not rebuild the file it is the
+recovery source for. It is invisible to `verify` and to `write`'s completeness check, which both iterate the
+other two lists.
 
 ### `run-leg.sh` — unattended leg orchestrator ⭐ NEW (`D-14`)
 **What.** Drives one whole leg's sweeps in dependency order: **22 steps**, `--dry-run`, `--list`, `--from`,
@@ -219,19 +240,25 @@ silently skip the whole leg.
 **Why.** A leg is many hours of sweeps that must run in a fixed order because each stage produces inputs the
 next consumes. Driving that by hand overnight invites a missed step or a silently-continued failure.
 **It orchestrates SWEEPS, not cells** — per-cell recording and failure isolation stay with `record-run.sh`.
-**The four guards, each with its reason:** (1) **abort the chain on any step failure** — later steps consume
+**The five guards, each with its reason:** (1) **abort the chain on any step failure** — later steps consume
 earlier outputs, so continuing would build cells on missing inputs; (2) **checkpoint + resume** via per-step
 done-markers, so a crash re-runs only what is missing; (3) **S3 sync after every step**, because both mounts
 and local scratch are ephemeral; (4) **tee everything** — on an overnight run the log is the only forensic
-record.
+record; (5) **refuse a leg on the wrong transport** — WEKA must be on DPDK and Lustre on EFA (**D16**), read
+from `FS_TRANSPORT`, which the cluster-setup prompt records from evidence. Unset refuses too, because an
+unrecorded transport cannot be shown to be the right one. Overridable only by a written reason in
+`runs/.leg-state/$LEG/transport-waiver`, which is then echoed into the log. *Why here:* this is the unattended
+entry point, and the fallback transports (UDP / TCP) mount cleanly and report plausible numbers, so an
+instruction followed hours earlier is not evidence.
 **Caveats.** Refuses to start without `FS_MOUNT`/`S3_BUCKET`, and **refuses if `--leg` disagrees with
 `FS_MOUNT`**. A step whose driver does not exist yet is reported **MISSING and aborts** rather than being
 skipped — *a leg with a hole in it looks complete in `INDEX.md`*, which is the failure this prevents. Two
 steps are currently MISSING by design: 1.7 (`D-13`) and 6.B.1 (needs the corpus-size decision, open item 5b).
 
 ### `teardown-preflight.sh` — prove nothing is lost, before tearing down ⭐ NEW
-**What.** Checks seven things and prints **GO / NO-GO**: nothing in flight · live memories mirrored · git clean
-**and pushed** · environment contract complete **and in S3** · **every local run dir's raw telemetry present in
+**What.** Checks nine things and prints **GO / NO-GO**: nothing in flight · live memories mirrored · **the
+next-session handoff prompt written and dated today** · git clean **and pushed** · environment contract complete
+**and in S3** · **`env.sh` agreeing with instance metadata** · **every local run dir's raw telemetry present in
 S3** · nothing else stranded on ephemeral storage · rebuild inputs (AMI, type, region/AZ) recorded.
 **Why it VERIFIES rather than tears down.** Terminating the instance and deleting filesystems is irreversible,
 so it stays a human action. The part worth automating is not the destruction — it is **proving** nothing is
@@ -243,6 +270,23 @@ silently-failed sync is invisible until you look for data that no longer exists.
 check, so **never use it before a real teardown**.
 **Caveats.** Exits non-zero on NO-GO, deliberately — never wire it into an automated teardown that ignores the
 exit code. Companion checklist: `cloud-setup/TEARDOWN-AND-REBUILD.md`.
+
+### `cloud-setup/restore-memories.sh` — mirror → live memory dir ⭐ NEW
+**What.** Copies `claude-memory-mirror/` into `~/.claude/projects/<slug>/memory/` and **verifies** the result.
+`--check` verifies without changing anything. *(Lives in `cloud-setup/`, not `runs/lib/` — it is bootstrap, not
+benchmark.)*
+**Why it is a script and not four lines in the checklist.** It runs on **every** instance build — at least
+twice, once per leg — and its failure mode is **silent**: `rsync` into the wrong directory succeeds, and a
+fresh Claude session then starts with no memories and **no error**, proceeding to redo settled decisions. On an
+ephemeral instance the mirror is the only continuity that exists. The manual version also asked the operator to
+eyeball "expect ~20 files", which is exactly the check people skip.
+**So it: derives the slug from the repo path** rather than trusting a typed one; **refuses** on a missing or
+empty mirror or a mirror with no `MEMORY.md` (better than producing an empty memory dir); and **diffs** the
+result afterwards.
+**Caveats.** **Direction matters — restore *before* ever running `backup.sh`**, which mirrors the other way and
+would otherwise overwrite the mirror from an empty live dir (it refuses in that case; correct ordering makes
+the refusal moot). *Extra* files in the live dir are reported but **not** a failure — that is the live dir
+being ahead after a session wrote new memories; *missing* or *differing* files are fatal.
 
 ---
 
@@ -534,6 +578,6 @@ held-constant input across legs (**D6**).
 ## Cross-references
 
 `CLAUDE.md` (rules, recording, durability) · `PROJECT-THESIS.md` (the question and both asymmetries) ·
-`runs/STAGES.md` (**D1–D15**) · `runs/README.md` (runbook, both canaries, silent-skip hazards) ·
+`runs/STAGES.md` (**D1–D16**) · `runs/README.md` (runbook, both canaries, silent-skip hazards) ·
 `FILESYSTEM-MAP.md` (paths) · the per-stage roadmaps (methodology and audit trail) ·
 `cloud-session-open-items` memory (the running tracker, including every `⏳ DEFER` above).

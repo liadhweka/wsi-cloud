@@ -82,6 +82,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 | `LUSTRE_STRIPE_LAYOUT` | `lfs getstripe` after mount | **Required** to derive the Lustre consistency relation (**D12**). |
 | `DRIVER_VERSION` · `CUDA_VERSION` · `NVIDIA_FS_VERSION` · `LIBCUFILE_VERSION` · `KERNEL_VERSION` | The instance | Held-constant contract; the cuFile stack must be version-matched. |
 | `SCRIPT_COMMIT` | `git rev-parse HEAD` | Both legs must run the same code. |
+| `FS_TRANSPORT` | `dpdk` (WEKA) / `efa` (Lustre) | The transport actually in use, from the client's own report — never from the mount options passed. **`run-leg.sh` refuses to start a leg when it is unset or shows the fallback** (`udp`/`tcp`) without a written waiver (**D16**): the fallbacks mount cleanly and report plausible numbers for a configuration we decided not to measure. |
 
 ## Table 3 — DERIVED (computed; never set by hand)
 

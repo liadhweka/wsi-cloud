@@ -106,7 +106,10 @@ These five are decided at creation time and are expensive to change, so capture 
     because it is the only input that could push the corpus past the planned capacity.
 
 14. **Client networking mode: DPDK (performance-optimized), not UDP.** DPDK is WEKA's fast path and gives
-    the client kernel-bypass; UDP mode trades throughput for CPU and would understate WEKA.
+    the client kernel-bypass; UDP mode trades throughput for CPU and would understate WEKA. **This is a
+    precondition, not a preference** (**D16**): if DPDK cannot be brought up, the instruction everywhere is
+    *stop and report immediately* — before mounting and before any cell — because a UDP mount produces a
+    complete, plausible dataset for a transport we decided not to measure.
 
 15. **Same VPC, subnet, and AZ as the g6e instance.** Keeps the client-to-backend path short and free, and
     keeps Leg A's topology reproducible for Leg B.

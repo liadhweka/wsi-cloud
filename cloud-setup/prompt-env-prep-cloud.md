@@ -34,16 +34,38 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
 
 ## Do these, in order
 
+0. **Reconcile `env.sh` against what the instance actually is** — first, because everything downstream trusts
+   these values and one of them is a `MUST_MATCH` contract field.
+
+   The human typed `INSTANCE_ID`, `AMI_ID`, `INSTANCE_TYPE`, `AWS_REGION` and `AWS_AZ` into
+   `cloud-setup/env.sh` by hand at § 4.2. Re-derive all five from instance metadata — reuse the `imds()` helper
+   already in `runs/lib/env-contract.py` rather than writing another `curl` block — and **compare**:
+
+   - **Agreement** → say so, and move on.
+   - **Disagreement** → the metadata wins; **write the metadata value into `env.sh`** and report both values.
+     *Why this matters more than a typo:* `ami_id` and `instance_type` are held-constant contract fields, and
+     the contract is built from `env.sh`. A wrong value there would be written into Leg A's contract *and*
+     compared against itself in Leg B's verify — it would match, and the mismatch it exists to catch would be
+     invisible. A region/AZ disagreement is different in kind: it means the instance is not where it was meant
+     to be, which is a **stop-and-tell-the-human** finding, not an edit.
+   - **IMDS unreachable** → report that plainly and leave `env.sh` alone. Do not guess.
+
+   `S3_BUCKET` is the one value metadata cannot supply. Confirm it is set and reachable (that is item 9).
+
 1. **GPU + driver + CUDA.** `nvidia-smi` — record **GPU model, count, memory**, driver and CUDA versions. If
    the driver is missing, **stop and report**: installing a GPU driver on a bare instance is a reboot-class
    task for the human.
 2. **CUDA toolkit + GDS tools + `libcufile`.** Locate `gdscheck` and `gdsio` (typically under the CUDA
    install's `gds/tools/`, often **not** on `$PATH`) and `libcufile.so.*` — record the version. If absent,
    note what needs installing and cite the NVIDIA GDS install guide.
-   > **Report the full path of the system `libcufile`, not just its version.** Every kvikIO sweep driver
-   > reads it as `LIBCUFILE_PRELOAD` and **refuses to start without it** — a path from another machine makes
-   > `LD_PRELOAD` a silent no-op, so the GPU-direct cells would run on the conda env's bundled copy and still
-   > report numbers. The human puts your reported path into `cloud-setup/env.sh`.
+   > **Report the full path of the system `libcufile`, not just its version — and write it into
+   > `LIBCUFILE_PRELOAD` in `cloud-setup/env.sh` yourself.** Every kvikIO sweep driver reads that variable and
+   > **refuses to start without it**; a path from another machine makes `LD_PRELOAD` a silent no-op, so the
+   > GPU-direct cells would run on the conda env's bundled copy and still report numbers. *Why you write it
+   > rather than reporting it for the human to paste:* you derived the path on this machine seconds earlier,
+   > and the transcription hop is the only place a stale path can enter. Prove the write — `env.sh --check`
+   > only *warns* on this field, so quote `[ -f "$LIBCUFILE_PRELOAD" ]` and the non-null `libcufile_version`
+   > that `runs/lib/env-contract.py write` derives from it.
 3. **GDS kernel path.** `nvidia-fs` module version and whether the GPU peer-memory module is loaded. Record
    both versions and **whether they are matched to each other** — a mismatch is a known source of subtle
    failures. Load or install if cleanly possible; **flag anything needing a module build or reboot.**
@@ -72,12 +94,23 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
 9. **AWS access sanity.** Confirm the instance can reach its S3 bucket **via the IAM instance profile, not
    credentials on disk** — a read and a small write. This is the durable store the whole project depends on;
    if it does not work, everything downstream silently has nowhere safe to land.
+10. **The kernel, running vs pending.** `kernel` is a `MUST_MATCH` contract field, and § 3.2's `apt-get upgrade`
+    can install a newer `linux-image` that is **staged but not yet booted** — so `uname -r` alone can report a
+    kernel this instance will stop running at its next reboot, and there *are* later reboots.
+    ```bash
+    uname -r                                  # running
+    ls -1 /boot/vmlinuz-* 2>/dev/null         # is a newer one staged?
+    grep -h linux-image /var/log/apt/history.log 2>/dev/null | tail -5
+    ```
+    **Report running and pending separately.** If they differ, that is deferred item `D-17` firing early:
+    surface it as a pause with the two options — reboot now and baseline the contract on the new kernel, or pin
+    the current one — and a recommendation. Do not decide it yourself, and do not reboot without approval.
 
 ## Report back (then stop)
 
 1. **A component table:** GPU/driver/CUDA · CUDA-toolkit + GDS tools · `nvidia-fs` + peer-memory module ·
-   networking incl. EFA · system tools · local NVMe · miniforge · `/dev/shm` · S3 access →
-   **present? / version / installed-now / MISSING → needs human**.
+   networking incl. EFA · system tools · local NVMe · miniforge · `/dev/shm` · S3 access ·
+   **kernel (running / pending)** → **present? / version / installed-now / MISSING → needs human**.
 2. **The hardware topology summary** — GPU↔NUMA↔NIC affinity, NUMA nodes and core counts, and interface link
    rates. **Capture this clearly**: the project handoff uses it to derive GPU pinning and concurrency ranges,
    and those values must not be guessed.
@@ -94,8 +127,9 @@ project handoff (Part 7). Memory restore and the Hugging Face login are Parts 4.
 this prompt; note that `hf` does not exist until Part 7 builds the Python environments, so the human may
 still owe that step.
 
-**Two things you must hand back explicitly, because later steps refuse to run without them:**
-- the **full path of the system `libcufile`** → the human puts it in `LIBCUFILE_PRELOAD` in
-  `cloud-setup/env.sh`; every kvikIO sweep driver reads it and aborts if it is unset;
+**Three things you must hand back explicitly, because later steps refuse to run without them:**
+- the **full path of the system `libcufile`**, which **you** have written into `LIBCUFILE_PRELOAD` in
+  `cloud-setup/env.sh` (item 2) — every kvikIO sweep driver reads it and aborts if it is unset;
 - the **GPU/NUMA/NIC topology map and core counts** → deferred items `D-8` and `D-9` are re-derived from it,
-  and it must not be guessed.
+  and it must not be guessed;
+- **every `env.sh` value you changed** in item 0, with the metadata value beside the typed one.
