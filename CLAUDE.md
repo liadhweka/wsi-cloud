@@ -1,253 +1,286 @@
-# Project Instructions: WEKA vs Lustre — WSI Storage Comparison on AWS (Claude Code)
+# Project Instructions: WEKA vs Lustre — WSI storage comparison on AWS
 
-You run this competitive storage benchmark directly on the AWS GPU instance, at my direction —
-executing the pipeline and providing technical insight and decision support (especially on the
-storage side) as we go. The project compares **WEKA and Lustre** for a modern whole-slide-imaging
-(WSI) / digital-pathology pipeline: same instance, same workload, same datasets, **only the filesystem
-under the mount point changes.** It runs as two sequential legs — **Leg A: WEKA**, then **Leg B: FSx for
-Lustre** — followed by the head-to-head synthesis. Full framing in `PROJECT-THESIS.md`; everything below
-holds across both legs.
+You run this competitive storage benchmark on the project's AWS GPU instance at my direction — executing the
+pipeline and providing technical insight and decision support, especially on the storage side. It runs as two
+sequential legs — **Leg A: WEKA**, then **Leg B: FSx for Lustre** — followed by the head-to-head synthesis.
 
-**No benchmark has run yet. Every number is `[PENDING]`.**
+**`PROJECT-THESIS.md` is the source of truth for _what we measure and why_. This file is _how we work_.**
+Where the two overlap, the thesis owns the methodology and this file points at it — never restates it, because
+two copies of a rule drift.
 
 ## Rules
 
-The eleven rules below govern how you work in this codebase. Read them every
-session. They are not aspirational. If a rule and a user request conflict,
-surface the conflict — do not silently override either one.
+The eleven rules govern how you work here. Read them every session. They are not aspirational. **If a rule and
+a request conflict, surface the conflict — don't silently override either one.**
 
-**Rule 1 — Think Before Coding.** No silent assumptions. State what you're
-assuming. Surface tradeoffs. Ask before guessing. Push back when a simpler
-approach exists.
+**1 — Think before coding.** No silent assumptions. State what you're assuming, surface tradeoffs, ask before
+guessing, push back when something simpler would do.
 
-**Rule 2 — Simplicity First.** Minimum code that solves the problem. No
-speculative features. No abstractions for single-use code. If a senior
-engineer would call it overcomplicated — simplify.
+**2 — Simplicity first.** Minimum code that solves the problem. No speculative features, no abstractions for
+single-use code. If a senior engineer would call it overcomplicated, simplify.
 
-**Rule 3 — Surgical Changes.** Touch only what you must. Don't "improve"
-adjacent code, comments, or formatting. Don't refactor what isn't broken.
-Match existing style.
+**3 — Surgical changes.** Touch only what you must. Don't "improve" adjacent code, comments or formatting.
+Don't refactor what isn't broken. Match existing style.
 
-**Rule 4 — Goal-Driven Execution.** Define success criteria. Loop until
-verified. The user states what success looks like; you choose the steps and
-iterate until the criteria demonstrably hold.
+**4 — Goal-driven execution.** Define success criteria, then loop until verified. I state what success looks
+like; you choose the steps and iterate until the criteria demonstrably hold.
 
-**Rule 5 — Use the model only for judgment calls.** Use Claude/LLM calls for:
-classification, drafting, summarization, extraction from unstructured text.
-Do NOT use them for: routing, retries, status-code handling, deterministic
-transforms. If a status code already answers the question, plain code answers
-the question. (In this codebase: parsing, transforms, hashing, and queries are
-always plain code.)
+**5 — Use the model only for judgment calls.** Classification, drafting, summarization, extraction from
+unstructured text — yes. Routing, retries, status-code handling, deterministic transforms — no. Parsing,
+transforms, hashing and queries are always plain code.
 
-**Rule 6 — Surface conflicts, don't average them.** If two existing patterns
-in the codebase contradict, don't blend them. Pick one (the more recent /
-more tested), explain why, and flag the other for cleanup. "Average" code
-that satisfies both rules is the worst code.
+**6 — Surface conflicts, don't average them.** If two patterns contradict, pick one (the more recent, more
+tested), explain why, and flag the other for cleanup. "Average" code that half-satisfies both is the worst
+outcome.
 
-**Rule 7 — Read before you write.** Before adding code in a file, read the
-file's exports, the immediate caller, and any obvious shared utilities. If
-you don't understand why existing code is structured the way it is, ask
-before adding to it. "Looks orthogonal to me" is the most dangerous phrase
-in this codebase.
+**7 — Read before you write.** Read the file, its caller, and any shared utility before adding to it. If you
+don't understand why something is structured the way it is, ask. *"Looks orthogonal to me"* is the most
+dangerous phrase in this codebase.
 
-**Rule 8 — Tests verify intent, not just behavior.** Every test must encode
-WHY the behavior matters, not just WHAT it does. A test that asserts a
-hardcoded round-trip is worthless. If you can't write a test that would fail
-when business logic changes, the function is wrong. (Example here: a sweep's
-recording check must assert that the **filesystem-side and wire-level numbers track
-the app-level rate at the consistency relation derived for THAT filesystem**, and
-that **the I/O path each cell actually took matches what the cell claims** — not
-merely that every cell produced a `results.json`.)
+**8 — Tests verify intent, not just behaviour.** A test must encode **why** the behaviour matters. Here that
+means: a sweep's recording check asserts that the filesystem-side and wire-level numbers track the app-level
+rate **at the consistency relation derived for that filesystem**, and that **the I/O path a cell actually took
+matches what it claims** — not merely that every cell produced a `results.json`.
 
-**Rule 9 — Checkpoint after every significant step.** After completing each
-step in a multi-step task: summarize what was done, what's verified, what's
-left. Don't continue from a state you can't describe back to the user. If
-you lose track, stop and restate.
+**9 — Checkpoint after every significant step.** Summarize what was done, what's verified, what's left. Never
+continue from a state you can't describe back to me.
 
-**Rule 10 — Match the codebase's conventions, even if you disagree.** If the
-codebase uses snake_case and you'd prefer camelCase: snake_case. Disagreement
-is a separate conversation. Inside the codebase, conformance > taste. If you
-genuinely think a convention is harmful, surface it. Don't fork it silently.
+**10 — Match the codebase's conventions**, even where you'd choose differently. Conformance beats taste. If a
+convention is genuinely harmful, surface it — don't fork it silently.
 
-**Rule 11 — Fail loud.** If you can't be sure something worked, say so
-explicitly. "Migration completed" is wrong if 30 records were skipped
-silently. "Tests pass" is wrong if you skipped any. "Backed up to S3" is wrong
-if the sync errored on three files and you didn't say so. Default to
-surfacing uncertainty, not hiding it.
+**11 — Fail loud.** If you can't be sure something worked, say so. "Backed up to S3" is wrong if the sync
+errored on three files and you didn't say so. Default to surfacing uncertainty, not hiding it.
+
+## Write lean
+
+**Write what is true and durable.**
+
+- No alternatives that were considered and dropped. No history. No state-of-things-today.
+- **No placeholders for unknowns** — state the rule that governs the unknown instead.
+- No value that drifts (versions, capacities, counts, paths) in a document about *method*; cite the rule, not
+  the number.
+- **A document that must be updated to stay correct will eventually be wrong.**
+
+**This is not a licence to delete rationale.** Every *why* that changes what someone does stays. Lean means no
+sentence that doesn't earn its place — not no explanation. The test, in both directions: **does removing this
+change what anyone does?**
+
+### No change logs. No date stamps. Decisions are a register, not a log.
+
+**Git is the audit trail.** It records what changed, when, and in what order — automatically and correctly. A
+change log maintained by hand inside a document is a worse copy of that, and one more thing that must be
+updated to stay true. Delete them.
+
+**Keep a decision _register_, not a decision _log_:** one entry per **live** decision, stating the decision and
+why it is right **on its own terms** — never as a contrast with what it replaced. When a decision changes,
+**overwrite the entry.** A superseded decision plus an explanation of why it was wrong helps nobody and rots
+immediately; the reader needs to know what we do now and why that is sound.
+
+Two things look like history but are not, and they stay:
+
+- **A standing constraint** — *"don't use X; it does Y"* is forward-looking instruction that stops a future
+  session re-proposing X. Write it as a constraint, not as a record of when we learned it.
+- **A data-validity note** — if cells ran under a methodology that later changed, cells from before and after
+  are not comparable. That fact attaches to the **affected cells**, not to a log.
+
+**Preserve data, overwrite prose.** Benchmark data is irreplaceable and costs hours and real money; documents
+are in git.
 
 ## Documentation — non-negotiable
 
-Accuracy beats speed: **reference official docs, not training data**, before giving any command, flag, API call, mount option, tuning parameter, price, or config — these change between versions, and cloud specs and prices change without notice.
+Accuracy beats speed: **reference official docs, not training data**, before giving any command, flag, API
+call, mount option, tuning parameter, price or config. These change between versions, and cloud specs and
+prices change without notice.
 
-- **AWS** → `docs.aws.amazon.com` (EC2 instance specs, FSx for Lustre performance/tiers/limits, EFA, S3, IAM, service quotas). **WEKA** → `docs.weka.io`. **Lustre** → `doc.lustre.org` (+ AWS's FSx guide for the managed specifics). **NVIDIA** → GDS / cuFile / nvidia-fs docs. **WSI toolkits** → their official docs/repos: OpenSlide, cuCIM + kvikIO (`docs.rapids.ai`), tifffile, large_image, MONAI, CLAM, Trident / Patho-Bench, Slideflow, QuPath. **Datasets** → their portals: TCGA (GDC), CAMELYON16/17 (+ the AWS Open Data registry), PANDA, BRACS, GTEx, PCam.
-- Cite the specific page/file used. **If docs and training data disagree, the docs win — say so.** If something's undocumented, say that; don't fabricate flags. Flag version sensitivity and check the installed version (`pip show`, `--version`) first.
-- **Never quote a cloud spec, cap, quota, or price from memory** — fetch it, and stamp any price figure with the date it was checked.
-- Fetching official docs is standing-approved — never ask first (`feedback_docs_fetch_standing_approval` memory).
-
-## Memory hygiene — non-negotiable
-
-Memory (`~/.claude/projects/.../memory/`, indexed by `MEMORY.md`) holds durable cross-session knowledge: decisions **and their why**, agreed plans / open questions, user preferences & feedback, standing environment facts, external resources. **Tactical state is NOT memory's job** — driver versions, current mounts, `weka status`, `lfs df`, free space: re-derive with shell commands, freely (you're on the box).
-
-- **Update memory in the same response** as any exchange that shifts the picture durably; skip what a future session can trivially re-derive.
-- **Prune aggressively** — periodically re-read `MEMORY.md` + its files; delete anything wrong, finished/resolved (keep the decision + why, drop the deliberation), duplicated, or that a fresh session wouldn't actually benefit from (the strongest test). A small accurate memory beats a large stale one.
-- **Treat undated, unsourced commitments in memory as claims to verify, not facts.** This memory set has previously contained a fabricated deadline. If a memory asserts an external commitment, a date, or a promise, confirm it with me before acting on it.
-- Don't prune durable preferences/conventions along with stale state — those don't expire from disuse.
-- The bar: a fresh session loads memory + this file and continues without my re-describing decisions, plans, or standing context. **On an ephemeral cloud instance this is not a nicety — it is the only continuity that exists.**
+- **AWS** → `docs.aws.amazon.com` (EC2 specs, FSx for Lustre performance/tiers/limits, EFA, S3, IAM, quotas).
+  **WEKA** → `docs.weka.io`. **Lustre** → `doc.lustre.org` plus AWS's FSx guide for the managed specifics.
+  **NVIDIA** → GDS / cuFile / nvidia-fs. **WSI toolkits** → OpenSlide, cuCIM + kvikIO (`docs.rapids.ai`),
+  tifffile, large_image, MONAI, CLAM, Trident, Slideflow, QuPath. **Datasets** → TCGA (GDC), CAMELYON16/17
+  (and the AWS Open Data registry), PANDA, BRACS, GTEx, PCam.
+- Cite the page used. **If docs and training data disagree, the docs win — say so.** If something is
+  undocumented, say that; don't fabricate flags. Check the installed version first (`pip show`, `--version`).
+- **Never quote a cloud spec, cap, quota or price from memory** — fetch it, and stamp any price with the date
+  it was checked.
+- **Fetching official docs is standing-approved — never ask first.** Still ask before: a fetch that downloads a
+  large asset, a service I've named off-limits, anything that sends project data in the request, or any
+  non-WebFetch outbound channel — external output is ask-first like any state-mutating action.
 
 ## How we work together
 
-**Plan first, then execute.** For real methodology decisions (what to benchmark, how to provision, what to measure, dataset/tool/model) — surface options + tradeoffs and let me ratify; the methodology calls are mine. Once agreed, execute without re-asking for decided steps. Read-only checks (`weka status`, `lfs df`, `nvidia-smi`, `df`, `ls`) just run. Default to working through the next agreed task; long sweeps are background work (no routine "still running" pings). Surface open decisions as a plain-text numbered list with a recommendation each — not the AskUserQuestion picker (`feedback_decision_interaction` memory).
+**Priorities, in order: accuracy → safety → dependability → exhaustive recording → speed.**
 
-**Safety.** Verify before mutating state you haven't checked this session; state the reason and ask before any `sudo`, mount/format, package install, or destructive op (say what would be lost first). (`feedback_accuracy_safety_dependability` memory.)
+**Plan first, then execute.** For real methodology decisions (what to benchmark, how to provision, what to
+measure, dataset/tool/model) — surface options and tradeoffs and let me ratify; **the methodology calls are
+mine.** Once agreed, execute without re-asking. Read-only checks (`weka status`, `lfs df`, `nvidia-smi`, `df`,
+`ls`) just run. Surface decisions as a **plain-text numbered list with a recommendation each** — not the
+AskUserQuestion picker, which forces one click per decision and blocks discussion.
 
-**Pause only for these four triggers:** (1) open decisions / un-pre-decided methodology forks; (2) actual issues to debug; (3) soft issues that may reshape FUTURE-step methodology (flag in the summary; don't block agreed work); (4) anything else needing my attention (surprising results, external steps I must take, sudo or destructive ops). Otherwise proceed. Unattended overnight chains are the normal mode, so a trigger that fires at 3am must be **mechanical** — the canary aborts the chain itself rather than waiting to be noticed. (`feedback_autonomous_execution_cadence` memory.)
+**Safety.** Verify before mutating state you haven't checked this session. State the reason and ask before any
+`sudo`, mount, format, package install or destructive operation — and say what would be lost first.
 
-**The roadmap is planning truth, not a frozen contract.** Per-stage roadmaps capture decisions before much is measured; before each tier/substage, reassess against accumulated findings and revise proactively (surface before committing wallclock). "Locked" decisions are revisable; the goal is THE BEST BENCHMARK. **Leg B's plan is explicitly provisional until Leg A's results exist** — improving it from what Leg A taught us is the point, not a deviation. (`feedback_methodology_revisability` memory.)
+**Dependability defaults:** tee long output to a dated log; checkpoint anything over ~10 minutes; keep scripts
+idempotent; pin versions that affect numbers.
 
-**Interpret instructions completely** — do the requisite surrounding work (state cleanup, doc + memory updates, forensic preservation), not just the literal verb; never leave a half-clean state. (`feedback_complete_implied_work` memory.)
+**Pause only for these four triggers:** (1) open decisions or un-pre-decided methodology forks; (2) actual
+issues to debug; (3) soft issues that may reshape *future*-step methodology (flag in the summary, don't block
+agreed work); (4) anything else needing my attention — surprising results, external steps I must take, sudo or
+destructive operations. Otherwise proceed; long sweeps are background work, with no routine "still running"
+pings.
 
-**Benchmarking data preservation is non-negotiable** — re-running costs hours-to-days and real money; never lose granular results.
+**Unattended overnight chains are the normal mode**, which makes the tee'd log the primary forensic record of
+what happened while nobody was watching — and means **a trigger that fires at 3am must be mechanical.** The
+canary aborts the chain itself rather than waiting to be noticed.
 
-## Framing — load-bearing for every doc here
+**The roadmap is planning truth, not a frozen contract.** Roadmaps are written before much is measured. Before
+each tier or substage, reassess against what has been measured since and revise proactively — surfaced before
+committing wallclock, not after I ask. **Leg B's plan is explicitly provisional until Leg A's results exist**;
+improving it from what Leg A taught us is the point, not a deviation. If a cell already ran under the old
+methodology, preserve it and redo.
 
-**Results precede story.** No document may contain a predicted outcome, an expected magnitude, a
-pre-assigned "headline" stage, or a narrative built before the measurement exists. Keep the
-**WHY-we-measure-it-this-way** (methodology rationale — that's what makes a number evaluable, and it is
-separately mandated); delete the **WHAT-it-will-show**. Interpretation sections stay marked
-`[STORY PENDING RESULTS]` until results land. **Report losses** — provisioning Lustre at maximum raises
-that chance, and a weakness found here is one a customer doesn't find later. (`feedback-results-precede-story` memory.)
+**Interpret instructions completely.** Before declaring something done, ask what the full scope implies:
+(1) the literal ask; (2) cleanup of the prior state's residue; (3) every doc whose cadence is triggered;
+(4) the decision register; (5) memory; (6) forensic preservation of **run artifacts** — rename a replaced or
+failed run dir, never delete it (this covers data, not prose: superseded document text is overwritten, since
+git holds it); (7) verify the new state is actually clean. Not a licence to scope-creep — but never leave a
+half-clean state.
 
-**Each leg is half an unfinished comparison.** A single leg's numbers mean little in a vacuum; their
-force is the head-to-head. Present single-leg findings as strong-but-incomplete, leave explicit room for
-the other leg, and state that the consolidated comparison is built later. This is not a licence to soften
-findings — record the numbers plainly; it is the **claim** that stays scoped. (`feedback-each-leg-is-half-an-unfinished-comparison` memory.)
+**Git: one commit and push per stage, at closeout — and I do it.** Don't commit autonomously, don't suggest
+committing mid-stage, and don't read a large `git status` as a signal to commit. Flag "ready for stage commit"
+at closeout. The push is also a teardown prerequisite.
 
-**State both deliberate asymmetries wherever results appear.** (1) **Provisioning** — Lustre at maximum
-capability vs WEKA at a realistic production configuration, cost reported alongside. (2) **Transport /
-GPU-direct** — Lustre-over-EFA supports GDS; WEKA-over-ENA is expected to fall back to cuFile compat mode.
-A reader's first question is "what was the other side running?"; the answer must already be on the page.
-Naming the asymmetries is what makes the result credible.
+**tmux:** all work runs inside `tmux new -A -s wsi` — assume you're already in it. Still tee long output (it
+survives even if tmux dies). Don't propose `nohup`/`disown`.
 
-**Bandwidth is expected to be client-capped for both sides** at the instance's line rate. A tie on pure
-bandwidth cells reflects the instance, not either filesystem, and must never be presented as a finding
-about either. The informative axes are metadata, IOPS, small-file behaviour, concurrency, and latency.
-
-## The held-constant contract
-
-Exactly one variable changes between legs: the filesystem. Everything else is held constant, recorded,
-and verified.
-
-**Held constant:** the compute instance (type, region, AZ, AMI), the workload code (script commit), the
-datasets and their byte contents, the 20× magnification contract, the model set, the recording harness.
-**Varied:** the mount.
-
-Because the legs run at different times, this is enforced mechanically by an **environment contract** —
-a machine-readable file written at the end of Leg A (instance type, region/AZ, AMI ID, kernel,
-driver/CUDA/nvidia-fs versions, dataset byte-manifest, script commit) that **Leg B verifies before its
-first cell.** A mismatch is a fail-loud condition, not a footnote. Without it, "were these two legs even
-comparable?" is unanswerable at exactly the moment it matters most.
-
-**Mount convention:** WEKA at `/mnt/weka`, Lustre at `/mnt/lustre`. Scripts take `--fs {weka|lustre}` and
-resolve the path through `$FS_MOUNT` rather than hardcoding it — the filesystem is a *dimension*, not a
-fork in the code.
+**Benchmark data preservation is non-negotiable.** Re-running costs hours-to-days and real money. Never delete
+a run directory, however broken — rename it `-FAILED-<reason>` and say so.
 
 ## Recording — non-negotiable
 
-"If it isn't recorded, it didn't happen." Re-running costs hours-to-days and real money; over-capture is cheap. Per run, via `record-run.sh`, save: raw tool output verbatim (fio JSON, nvidia-smi / filesystem-stats traces, tracebacks); run metadata (timestamp, host, filesystem + its provisioned config, kernel/driver/CUDA/library versions, full command, env); exact config (every tunable knob); results with context; notes.
+"If it isn't recorded, it didn't happen." Every benchmark runs through the recording wrapper. Per cell: raw
+tool output verbatim, run metadata, the exact configuration, results with context, the **cache state
+achieved**, and **wallclock plus the cost inputs** — because cost-to-complete is calculated from them
+(`PROJECT-THESIS.md` §4) and cannot be reconstructed after the fact.
 
-- **Time series, not point estimates** — capture the full timeline (typically 1 s) and derive aggregates (mean / p50 / p95 / p99 / peak) from it.
-- **Multiple sources** — app-level + the filesystem's own telemetry + the wire counters for the access path in use; discrepancies are data, not noise.
-- **Pre / during / post** snapshots; **verify the capture** before trusting a run (empty source → fix infra + re-run).
-- **Cold-vs-warm is a hard, enforced axis, not an occasional variant.** A maxed FSx carries file-server cache RAM comparable to the instance's own RAM, and WEKA caches too — so any warm cell risks measuring cache rather than storage. Record cache state per cell.
-- Small text artifacts (configs, parsed results, READMEs) stay in `runs/` in-repo; large raw outputs go to S3 (see **Durability** below) — never only to instance-local disk.
+**No metric is designated primary** (thesis §4). Capture the full set on every cell where it is meaningful;
+which axis turns out to be decisive is a result, not a design input, so a cell that recorded only the axis
+someone expected to matter cannot be repaired later.
 
-**Per-filesystem source adapters, and an FS-agnostic canary.** The primaries differ per filesystem, and **a source that is bypassed or irrelevant for the path in use must never be quoted for a throughput/latency/IOPS number** — cite the path-appropriate primary or flag it diagnostic-only.
+- **Time series, not point estimates** — capture the timeline and derive aggregates from it.
+- **Multiple sources**, pre/during/post. Discrepancies are data, not noise.
+- **Verify the capture** before trusting a run — an empty source means fix the infrastructure and re-run.
+- **Never quote a throughput, latency or IOPS number from a source the filesystem in use bypasses.** The
+  per-filesystem primaries, which sources are diagnostic-only on each leg, and the per-filesystem consistency
+  relation are defined in **`PROJECT-THESIS.md`** — that is the single source; don't restate the table here.
+- **Run the consistency canary after every sweep.** Disagreement means the instrumentation is wrong — fix it
+  before continuing, because every subsequent number depends on it.
+- **Prove the I/O path per cell.** For any cuFile cell, record cuFile's own accounting of GPU-direct versus
+  bounced bytes as a first-class source. **A configuration flag is not proof of behaviour.**
+- **Cold-versus-warm is an enforced axis, not an occasional variant** — both sides carry substantial cache, so
+  any warm cell risks measuring cache rather than storage. Record cache state per cell.
 
-| | Primaries | Diagnostic-only |
-|---|---|---|
-| **WEKA (DPDK over ENA)** | `weka stats realtime` (filesystem-side), app-level, and the wire counters for the DPDK path | kernel network counters (`sar -n DEV`), `iostat` (block layer bypassed → reads ~zero for the wekafs mount), `sar -u` (DPDK cores spin-poll → look ~100% busy regardless) |
-| **Lustre (FSx)** | client `/proc/fs/lustre` + `lctl get_param` stats, CloudWatch per-OST/MDT metrics, app-level, **plus the client's network counters — which ARE the data path here** (kernel LNet over TCP, or the EFA provider's counters when EFA-mounted) | whichever of the above does not match the LND actually in use — determine it, don't assume |
+### Durability — the cloud-specific half
 
-**Derive the consistency relation per filesystem; never port one across.** WEKA's erasure coding implies a
-specific wire-vs-app ratio (write amplification set by the EC scheme — which is why the scheme is captured
-at provisioning). Lustre stripes across OSTs with no default erasure coding, so its relation is different
-and must be derived from the actual stripe layout. **Run the canary after every sweep**; disagreement =
-bugged infra → fix before continuing. Only Primary sources participate in the ratio check.
+**Instance-local NVMe and both filesystem mounts are ephemeral.** They die with the instance, and the instance
+is deliberately rebuilt between legs. **Nothing that matters may rest only there.** Claude's conversation
+context does not survive either — only the repo, the memory mirror, and S3 do.
 
-**Prove the I/O path per cell.** For any kvikIO/cuFile cell, record cuFile's own accounting of
-GPU-direct vs bounced bytes (`CUFILE_STATS`, `/proc/driver/nvidia-fs/stats`) as a first-class source.
-**A configuration flag is not proof of behaviour** — `allow_compat_mode` being set does not tell you which
-path a read took. A cell that quietly fell back, or quietly didn't, silently poisons the comparison.
+**Authority split, no overlap:** **git** is authoritative for all small text — docs, per-run JSON and READMEs,
+configs, the memory mirror. **S3** is authoritative for the heavy write-once data git can't hold — raw
+telemetry and datasets.
 
-### Durability & backup — the cloud-specific half of "if it isn't recorded, it didn't happen"
+**`backup.sh` is the single durability entry point**, with two deliberately different sync semantics:
+**mirror-with-delete** where local is the source of truth and git backs it independently; **add-and-update,
+never delete** for raw telemetry and datasets, because reclaiming local disk must not destroy the only
+remaining copy. The sync is **verified, not assumed.**
 
-**Instance-local NVMe and both filesystem mounts are ephemeral.** They die with the instance and the
-cluster, and the instance is deliberately rebuilt between legs. **Nothing that matters may rest only
-there.** Claude's conversation context does not survive either — only the repo, the memory mirror, and S3 do.
+**The teardown and rebuild checklist is mandatory, not advisory**, and its order is load-bearing: skipping a
+step loses work permanently. The environment contract is what makes two legs run at different times provably
+comparable; a mismatch is a fail-loud condition, not a footnote.
 
-**Authority split (no overlap, so no conflict):**
-- **git is authoritative for all small text** — docs, `results.json`, `metadata.json`, `0_README.md`,
-  configs, the memory mirror.
-- **S3 is authoritative for the heavy write-once data git can't hold** — raw telemetry time series and the
-  datasets.
+## Repo structure
 
-**`backup.sh` is the single durability entry point** — it mirrors live memories into
-`claude-memory-mirror/`, then syncs everything backup-worthy to S3. **Two sync semantics, deliberately
-different:**
-- **Mirror-with-delete** for things where local is genuinely the source of truth (memory mirror, docs,
-  small text). Git backs these independently, so an exact reflection is safe.
-- **Add-and-update, NEVER delete** for raw telemetry and datasets. New and changed files go up; the script
-  never removes anything from S3. *Why:* we will want to reclaim local disk by cleaning old raw telemetry,
-  and a `--delete` sync would then destroy the only remaining copy — precisely what the data-preservation
-  rule forbids. Removing something from S3 is a deliberate manual act.
+```
+docs/      what we decided — methodology, roadmaps, findings, provisioning procedure
+scripts/   what we run with — the library, manifests, environment specs
+runs/      what we got — INDEX.md and run directories, nothing else
+prompts/   paste-to-Claude task prompts, re-runnable on every rebuild
+```
 
-**When to run it:** whenever new data lands that needs backing up — `record-run.sh` syncs a run's
-artifacts at end-of-run and periodically during long runs, and `backup.sh` does the full sweep. Always
-before a commit, and **always before any teardown.** The sync is **verified, not assumed** (Rule 11:
-"backed up" is wrong if three files errored and you didn't say so).
+Scripts derive their repo root from their own location and **never hardcode a path.**
 
-**Teardown & rebuild checklist** (`cloud-setup/TEARDOWN-AND-REBUILD.md`, with `runs/lib/teardown-preflight.sh` as the GO/NO-GO gate) — in this order, skipping any one loses work
-permanently: handoff prompt written → `./backup.sh` → **environment contract written**
-(`env-contract.py write --leg $LEG`) → **verified S3 sync** (`sync-to-s3.sh --mode full`, which carries the
-contract) → `git commit && git push` → **pre-flight GO**. *Why the contract comes before the commit and the
-sync:* it is a git-tracked file *and* an S3 object, so writing it last would leave it in neither — and the
-pre-flight checks for it in both.
-
-**Iterative allowlist (`.claude/settings.json`):** add safe, repeated operations to `allow` as prompt-fatigue shows up; add never-auto-run patterns to `ask`/`deny`; mention any change I make.
+**The filesystem is a dimension, not a fork in the code.** One `runs/` tree; `--fs {weka|lustre}` appears as a
+segment in the run-directory name and a field in each run's metadata, so aggregators pivot on it and emit
+head-to-head comparisons directly. *Why one tree:* the deliverable **is** the cross-filesystem delta; separate
+trees would force every comparison to be assembled by hand. A hardcoded mount makes a Lustre cell silently
+measure WEKA, and the number looks correct.
 
 ## Docs cadence — which doc to update when
 
-After any exchange that shifts the picture durably, update every doc whose cadence is triggered (in place); batch related updates (one methodology revision often touches the roadmap, `PRESENTING.md`, and a memory at once) and defer the rest to its natural moment. Don't over-update (churn) and don't leave a stale doc a future session would plan against. **`PROJECT-THESIS.md` + the per-stage roadmaps + `PRESENTING.md` are the source of pipeline truth.**
-
-**Results live in one `runs/` tree, with the filesystem as an explicit dimension** (`--fs` → a segment in the run-dir name + a field in `metadata.json`), so the aggregators can pivot on it and emit head-to-head CSVs directly. *Why one tree, not one per filesystem:* the deliverable **is** the cross-filesystem delta; separate trees would force every comparison to be assembled by hand. Cross-leg drift is caught by the environment contract instead — made **visible** rather than structurally prevented.
+After any exchange that shifts the picture durably, update every doc whose cadence is triggered, in place.
+Batch related updates; defer the rest. Don't churn, and don't leave a stale doc a future session would plan
+against.
 
 | Doc | Purpose | Cadence |
 |---|---|---|
-| `CLAUDE.md` (`/`) | Project rules | Only when I steer a new convention (rare) |
-| `README.md` (`/`) | Repo entry point: status banner, what makes it a real comparison, the Start-here and Layout tables, the path to a first result | When the status changes, a doc is added or renamed, a count in Layout drifts, or the deferred-work set changes |
-| `PROJECT-THESIS.md` (`/`) | What we measure and why: the question, the held-constant contract, both asymmetries, sequencing, scope | When the framing or a load-bearing assumption changes |
-| `PRESENTING.md` (`/`) | Presentable per-stage script — self-contained (WSI context, what, **why**, the question it answers, numbers, caveats, pointers). A methodology script with `[STORY PENDING RESULTS]` until results exist; update in place, never an index (`feedback_presenting_md_role` memory) | In place when a finding/caveat lands; heaviest at stage closeout |
-| `SCRIPT-TRACKER.md` (`/`) | Per-script reference for `runs/lib/` (what + why, I/O, caveats, reusability, deferred TODOs) | After each script created/changed |
-| `FILESYSTEM-MAP.md` (`/`) | "Where does X live?" — both mounts, S3 layout, local scratch, tools, memory | When a load-bearing path/dir/env/bucket-prefix emerges |
-| `runs/STAGES.md` | Stage-code map (`--stage` values) **+ the project plan hub**: the per-leg plan and order, the 20× coord-space contract, and the **cross-stage methodology decision log** (project-wide forks — fairness basis, magnification, dataset cohort, GPU-direct matrix, instance guardrail — each with what / when / why / sources) | On stage-status change, plan/decision change, or substage add/remove |
-| `runs/README.md` | `record-run.sh` runbook + recovery + the per-FS source table and canaries | When recording infra changes |
-| `runs/Stage-<N>-*.md` | Per-stage roadmap: methodology, **why each substage exists**, the question each answers, results, decision + change logs | **Constantly** — most-updated; the audit trail |
-| `cloud-setup/WORKFLOW.md` | **One-page router**: which doc to read and which prompt to paste, per scenario. Ordering and pointers ONLY — the procedures live in the two docs below, so a duplicated step here is a bug | When a prompt is added/renamed, a handoff moves, or a scenario's order changes |
-| `cloud-setup/*` | Human-facing provisioning guide + the setup/handoff prompts | When provisioning or the bootstrap sequence changes |
-| `runs/INDEX.md`, run-dir `0_README.md` | Run history / per-run description | Auto-generated by `record-run.sh` — **never hand-edit** |
-| memory + `MEMORY.md` | Durable knowledge + index | Per memory hygiene above |
+| `PROJECT-THESIS.md` | **Source of truth** — the question, the held-constant contract, both asymmetries, what gets measured, recording, sequencing, scope | Only when the methodology itself changes |
+| `CLAUDE.md` | How we work | Only when I steer a new convention (rare) |
+| `README.md` | Repo entry point: what this is, layout, the path to a first result | When the layout or that path changes |
+| `docs/cloud-setup/WORKFLOW.md` | One-page router: which doc to read and which prompt to paste, per scenario. **Ordering and pointers only** — a duplicated procedure step here is a bug | When a prompt is added or renamed, a handoff moves, or a scenario's order changes |
+| `docs/STAGES.md` | Stage map (`--stage` values) + the per-leg plan + the **cross-stage decision register** | On stage-status, plan or decision change |
+| `docs/Stage-<N>-*.md` | Per-stage roadmap: methodology, **why each substage exists**, per-cell results as produced, the stage's decision register | **Constantly** — most-edited doc |
+| `docs/RESULTS.md` | **Findings and their story** — the cross-stage synthesis (see below) | When a finding lands; heaviest at stage closeout |
+| `docs/SCRIPT-TRACKER.md` | Per-script reference for `scripts/` — what + why, I/O, caveats, and the deferred-work table | After each script created or changed |
+| `docs/RUNBOOK.md` | How to run and record a cell; recovery; the canaries | When recording infrastructure changes |
+| `docs/FILESYSTEM-MAP.md` | "Where does X live?" — both mounts, S3 layout, scratch, tools | When a load-bearing path or environment fact emerges |
+| `docs/NAMING-AND-VARIABLES.md` | Every path, name and variable with its recommended value — the single source of truth for names, and the reason `$FS_MOUNT` exists. Paired with `env.example.sh` | When a variable is added, renamed, or its recommended value changes |
+| `docs/cloud-setup/*` | Human-facing procedure for a lifecycle event: spin-up, provisioning, teardown and rebuild, plus `WORKFLOW.md`, the one-page router | When provisioning or the bootstrap sequence changes |
+| `runs/INDEX.md`, run-dir `0_README.md` | Run history / per-run description | **Auto-generated — never hand-edit** |
+| memory + `MEMORY.md` | Open items and external commitments | Per memory hygiene below |
 
-**Where decisions live:** a decision scoped to **one stage** → that stage's `runs/Stage-<N>-*.md` decision log; a **cross-stage / project-wide** methodology decision (the fairness basis, the 20× contract, the dataset cohort, the GPU-direct matrix, a framing rule) → the decision log in `runs/STAGES.md`. Record what / when / why / official sources; don't split one decision across both. Any decision touching an **assumed** environment value must also update the reference index in the `weka-vs-lustre-cloud-open-decisions` memory.
+**`docs/RESULTS.md` — findings and story, and the rule that keeps it honest.** It carries the cross-stage
+synthesis: what was found, what it means, the caveats. It may be as granular as the findings require — but
+**numbers live in exactly one place.** Per-cell results belong in the stage roadmap, beside the methodology
+that produced them; RESULTS.md quotes only headline figures **with a pointer to the cell they came from**, and
+never reproduces per-cell tables. Two copies of a number drift, and the stale one is invisible. Keep a
+consistent per-stage shape so the synthesis stays compressible. It is written **after** results exist; before
+that it is a skeleton, not scaffolding.
 
-**Where UNRESOLVED items live — non-negotiable, because burial is the real failure mode.** An open question recorded only inside the roadmap that surfaced it will not be seen again until someone re-audits that roadmap. So whenever an exchange or audit surfaces something that must be **resolved before the first measured cell, built in the cloud session, or watched during benchmarking**, add it to the **`cloud-session-open-items` memory in the same edit** — a one-or-two-line entry plus a pointer to the doc holding the detail. Memory loads every session automatically; a doc has to be found. **That memory holds ONLY open items: when something is done, delete the entry.** The completion record belongs in the relevant doc (`SCRIPT-TRACKER.md`'s done table, a stage change log, a decision-log entry), and git history preserves the memory's prior state. *Why deletion rather than a resolved list:* a fresh session loads that file to know what to **do**, so a completed-items section grows without bound and — worse — an entry left in place after completion gets redone.
+**Where decisions live:** scoped to one stage → that stage's roadmap decision register; cross-stage or
+project-wide → the register in `docs/STAGES.md`. Record **what, why, and the sources** — not when, and not what
+it replaced. Don't split one decision across both.
 
-**Record the WHY everywhere** (`feedback_methodology_why` memory): every methodology choice (in any doc) needs its rationale, not just the choice — numbers without it aren't presentable, and in a competitive comparison every choice is a place a skeptical reader looks for bias. A choice recorded without its why is a bug to fix in the same edit.
+**Record the WHY everywhere.** Every methodology choice, in any doc, needs its rationale — not just the choice.
+In a competitive comparison every choice is a place a skeptical reader looks for bias, so a choice recorded
+without its why is **a bug to fix in the same edit.**
 
-**Fresh-session reading order** — to *present* results: `PROJECT-THESIS.md` → `PRESENTING.md` → `FILESYSTEM-MAP.md` (orient) → `SCRIPT-TRACKER.md` (scripts) → `runs/README.md` (how to run) → `runs/STAGES.md` → `runs/Stage-<N>-*.md` → a run's `0_README.md`. **To *continue/execute* the work:** start with the `weka-vs-lustre-cloud-project` memory (what this is + current state) and `weka-vs-lustre-cloud-open-decisions` (what's still assumed) → `PROJECT-THESIS.md` → `runs/STAGES.md` (status header + plan + decision log) → the relevant `runs/Stage-<N>-*.md`.
+**Where unresolved items live.** An open question recorded only in the doc that surfaced it will not be seen
+again until someone re-audits that doc. So whenever something must be resolved before the first measured cell
+or watched during benchmarking, **add it to the open-items memory in the same edit**, with a pointer to the doc
+holding the detail. Memory loads every session; a doc has to be found. **That memory holds only open items —
+delete an entry when it is done.**
 
-## Naming convention
+**Framing.** The framing rules that govern every document here are in `PROJECT-THESIS.md`.
 
-Run directories: `<UTC-timestamp>-<fs>-s<stage>-<workload>-<config>` — e.g.
-`2026-…-weka-s4.C-kvikio-brca-N4-compat`. The `--fs` and `--stage` values passed to `record-run.sh` become
-the `<fs>` and `s<stage>` segments automatically, and both are recorded in `metadata.json` so the
-aggregators can pivot on filesystem without parsing directory names.
+## Memory hygiene
+
+Memory (indexed by `MEMORY.md`, mirrored into the repo by `backup.sh`) holds only what the repo cannot:
+**open items, decisions still in flight, and external commitments.**
+
+- **Conventions belong in this file. Findings belong in docs. Tactical state belongs nowhere** — driver
+  versions, current mounts, `weka status`, `lfs df`, free space: re-derive with a read-only command, freely.
+  You're on the box.
+- **Prune aggressively.** Delete anything wrong, resolved, duplicated, or that a fresh session wouldn't
+  benefit from — the strongest test.
+- **Treat an undated or unsourced commitment in memory as a claim to verify, not a fact.**
+- The bar: a fresh session loads memory plus this file and continues without my re-describing anything. **On an
+  ephemeral cloud instance this is not a nicety — with the repo and S3, it is the only continuity that exists.**
+
+## Fresh-session reading order
+
+**To execute:** the open-items memory (the work list) → `PROJECT-THESIS.md` → this file → `docs/STAGES.md`
+(plan + decision register) → the relevant `docs/Stage-<N>-*.md` → `docs/RUNBOOK.md` before running a cell.
+
+**To understand results:** `docs/RESULTS.md` → the stage roadmap behind any figure → the run's `0_README.md`.
+
+**Iterative allowlist (`.claude/settings.json`):** add safe, repeated operations to `allow` as prompt-fatigue
+shows up; add never-auto-run patterns to `ask`/`deny`; tell me about any change you make.

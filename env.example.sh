@@ -1,0 +1,187 @@
+#!/usr/bin/env bash
+# env.example.sh — the project's configuration. Copy to env.sh, fill in, source it.
+#
+#     cp env.example.sh env.sh
+#     $EDITOR env.sh
+#     source env.sh
+#     ./env.sh --check          # validate before running anything
+#
+# env.sh is gitignored. Every name here is documented in docs/NAMING-AND-VARIABLES.md.
+#
+# ⚠ NO SECRETS IN HERE. AWS credentials come from the instance profile; Hugging Face
+#   from `hf auth login`. Treat this file as if it were public.
+#
+# The scripts FAIL LOUDLY on an unset required variable rather than defaulting —
+# because a wrong default (especially a mount path) produces a plausible-looking
+# number from the wrong filesystem, which is the worst failure mode in this project.
+
+# ── Identity & location (DECIDE NOW) ─────────────────────────────────────────────
+export PROJECT_USER="ubuntu"                     # AMI default user. NOT root — see the doc.
+export PROJECT_HOME="/home/${PROJECT_USER}"
+export REPO_DIR="${PROJECT_HOME}/wsi-cloud"
+export GITHUB_REPO="liadhweka/wsi-cloud"
+
+# ── AWS (DECIDE NOW) ─────────────────────────────────────────────────────────────
+export AWS_REGION="us-west-2"                    # instance + both filesystems + bucket, all same region
+export AWS_AZ=""                                 # FILL IN: pick one and keep it (cross-AZ contaminates)
+export INSTANCE_TYPE="g6e.24xlarge"              # (subject to change — see STAGES.md D10)
+export S3_BUCKET=""                              # FILL IN: globally unique, e.g. weka-wsi-bench-<suffix>
+
+# ── Filesystems (DECIDE NOW) ─────────────────────────────────────────────────────
+export WEKA_MOUNT="/mnt/weka"                    # Leg A
+export LUSTRE_MOUNT="/mnt/lustre"                # Leg B
+export WEKA_FS_NAME="wsibench"                   # the filesystem NAME (need not equal the mount path)
+
+# ── Local scratch & Python (DECIDE NOW) ──────────────────────────────────────────
+export SCRATCH_DIR="/data/local-nvme"            # EPHEMERAL — dies with the instance
+export CONDA_ROOT="${SCRATCH_DIR}/miniforge"     # the miniforge INSTALL root
+export CONDA_ENVS_DIR="${SCRATCH_DIR}/conda-envs"  # where the ENVS live (not under CONDA_ROOT)
+export CONDA_ENV_MAIN="wsi-cucim-2604"           # matches scripts/env-specs/ filenames
+export CONDA_ENV_ALT="wsi-cucim"
+
+# ── Tools & GDS config (DECIDE NOW) ──────────────────────────────────────────────
+export CLAM_DIR="${PROJECT_HOME}/wsi-tools/CLAM" # tissue detector (Stage 3); cloned during setup
+export CUFILE_CONFIG_DIR="${PROJECT_HOME}/cufile-config"
+export CUFILE_ENV_PATH_JSON="${CUFILE_CONFIG_DIR}/cufile.json"   # generated per instance (D-10)
+
+# LIBCUFILE_PRELOAD — the PATH of the system libcufile matched to the loaded
+# nvidia-fs module. Exporting the PATH is safe and required: the kvikIO sweep
+# drivers read it and refuse to start without it. What must NOT be exported
+# globally is LD_PRELOAD itself — the drivers set that per cell, on kvikIO cells
+# only, because cuCIM segfaults under a preloaded newer libcufile.
+# ⏳ D-10: fill in from the real instance (the env-prep session reports it).
+export LIBCUFILE_PRELOAD=""                      # e.g. /usr/local/cuda-<ver>/targets/x86_64-linux/lib/libcufile.so.<ver>
+
+# ── Which leg is running (set per leg) ───────────────────────────────────────────
+export LEG="weka"                                # weka | lustre
+
+# ── DERIVED — do not set by hand ─────────────────────────────────────────────────
+export MEMORY_SLUG="$(printf '%s' "$REPO_DIR" | sed 's#^/#-#; s#/#-#g')"
+case "${LEG}" in
+  weka)   export FS_MOUNT="${WEKA_MOUNT}" ;;
+  lustre) export FS_MOUNT="${LUSTRE_MOUNT}" ;;
+  *)      echo "env.sh: LEG must be 'weka' or 'lustre', got '${LEG}'" >&2 ;;
+esac
+
+# ── RECORDED AT PROVISIONING — fill in as you go; feeds the environment contract ──
+# Leave blank until known. `--check` warns (does not fail) on these, because they are
+# captured progressively rather than up front.
+export AMI_ID=""
+export INSTANCE_ID=""
+export CLIENT_HOSTNAME=""                        # load-bearing: aggregators filter telemetry by it
+export WEKA_BACKEND_TYPE=""
+export WEKA_BACKEND_COUNT=""
+export WEKA_CAPACITY_TB=""
+export WEKA_EC_SCHEME=""                         # REQUIRED to derive the WEKA canary relation (D12)
+export WEKA_BACKEND_RAM_TOTAL=""                 # drives Stage 6.B corpus sizing (tracker item 5b)
+export WEKA_CLIENT_CORES=""
+export WEKA_CLIENT_NICS=""
+export FSX_TIER=""                               # Leg B
+export FSX_CAPACITY_TIB=""
+export FSX_METADATA_IOPS=""
+export FSX_EFA_ENABLED=""
+export LUSTRE_STRIPE_LAYOUT=""                   # REQUIRED to derive the Lustre canary relation (D12)
+export SCRIPT_COMMIT=""                          # both legs must run the same code; --check reports it
+
+# FS_TRANSPORT — the transport this leg's client is ACTUALLY on, from evidence.
+#   weka:   dpdk | udp        lustre:  efa | tcp
+# Written by the per-leg cluster-setup prompt from the client's own report, never from
+# the mount options that were passed. run-leg.sh REFUSES to start a leg when it is
+# unset, or when it is the fallback without a written waiver in
+# runs/.leg-state/$LEG/transport-waiver (D16). Why a hard gate and not a caveat: UDP
+# and TCP mount cleanly and report plausible numbers for a transport this project
+# decided not to measure, so "run now, flag later" spends the wallclock first.
+export FS_TRANSPORT=""
+
+# ─────────────────────────────────────────────────────────────────────────────────
+# --check : validate the configuration before anything runs.
+# Sourcing this file does NOT run the check; you must invoke it explicitly.
+# ─────────────────────────────────────────────────────────────────────────────────
+if [ "${1:-}" = "--check" ]; then
+  fail=0; warn=0
+  _req() { # _req VAR "why it matters"
+    if [ -z "${!1:-}" ]; then echo "  MISSING  $1 — $2" >&2; fail=$((fail+1));
+    else printf '  ok       %-24s = %s\n' "$1" "${!1}"; fi
+  }
+  _rec() {
+    if [ -z "${!1:-}" ]; then echo "  pending  $1 — $2"; warn=$((warn+1));
+    else printf '  ok       %-24s = %s\n' "$1" "${!1}"; fi
+  }
+  _dir() {
+    if [ -d "${!1:-/nonexistent}" ]; then printf '  ok       %-24s = %s (exists)\n' "$1" "${!1}";
+    else echo "  MISSING  $1 = '${!1:-}' — directory does not exist" >&2; fail=$((fail+1)); fi
+  }
+  # _recfile: progressively-captured like _rec, but a value that IS set must point at a
+  # real file. WHY the asymmetry: blank means "not captured yet", which is fine early —
+  # whereas a set-but-nonexistent path is the one state that fails SILENTLY. A stale
+  # LIBCUFILE_PRELOAD (e.g. carried over from a previous instance) makes LD_PRELOAD a
+  # no-op, so the GPU-direct cells quietly run on the conda env's bundled libcufile and
+  # still report perfectly plausible numbers.
+  _recfile() {
+    if [ -z "${!1:-}" ]; then echo "  pending  $1 — $2"; warn=$((warn+1));
+    elif [ -f "${!1}" ]; then printf '  ok       %-24s = %s (exists)\n' "$1" "${!1}";
+    else echo "  MISSING  $1 = '${!1}' — set but the file does not exist on THIS instance" >&2; fail=$((fail+1)); fi
+  }
+  # _genfile: for a path that is ALWAYS set from the template, so blankness carries no
+  # information — what matters is whether the file has been generated on this instance
+  # yet. Warns rather than fails, because generation legitimately happens after the
+  # first --check. (Do NOT use _recfile here: it would fail every fresh bootstrap.)
+  _genfile() {
+    if [ -f "${!1:-/nonexistent}" ]; then printf '  ok       %-24s = %s (exists)\n' "$1" "${!1}";
+    else echo "  pending  $1 = '${!1:-}' — not generated on this instance yet: $2"; warn=$((warn+1)); fi
+  }
+
+  echo "── Required ─────────────────────────────────────────────────────────"
+  _req PROJECT_USER    "everything else derives from it"
+  _req REPO_DIR        "the memory slug derives from this path"
+  _req AWS_REGION      "instance, filesystems and bucket must share it"
+  _req AWS_AZ          "cross-AZ traffic contaminates the comparison"
+  _req INSTANCE_TYPE   "held constant across both legs"
+  _req S3_BUCKET       "the only durable store; teardown loses telemetry without it"
+  _req LEG             "determines FS_MOUNT and the S3 prefix"
+  _req FS_MOUNT        "a wrong mount silently measures the other filesystem"
+  _req MEMORY_SLUG     "where memories are restored to"
+  _req CONDA_ENV_MAIN  "matches the env-specs filenames"
+  _req CONDA_ENVS_DIR  "every sweep driver builds its interpreter path from it"
+  _req SCRATCH_DIR     "the local-scratch source paths derive from it"
+
+  echo "── Paths ────────────────────────────────────────────────────────────"
+  _dir REPO_DIR
+  _dir FS_MOUNT
+  _dir SCRATCH_DIR
+
+  echo "── Recorded at provisioning (blank is OK early) ──────────────────────"
+  _rec     CLIENT_HOSTNAME        "aggregators filter telemetry by hostname"
+  _recfile LIBCUFILE_PRELOAD      "every kvikIO sweep driver refuses to start without it"
+  _genfile CUFILE_ENV_PATH_JSON   "regenerated per instance (D-10) — its addresses are instance-specific"
+  _rec     FS_TRANSPORT           "run-leg.sh refuses to start a leg without it (D16)"
+  _rec     WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12) — Leg A"
+  _rec     LUSTRE_STRIPE_LAYOUT   "needed to derive the Lustre canary relation (D12) — Leg B"
+  _rec     WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
+  _rec     AMI_ID                 "Leg B rebuilds from this exact AMI"
+  _rec     SCRIPT_COMMIT          "both legs must run the same code"
+
+  echo "── AWS reachability ─────────────────────────────────────────────────"
+  if command -v aws >/dev/null 2>&1; then
+    if aws sts get-caller-identity >/dev/null 2>&1; then
+      echo "  ok       credentials (instance profile) working"
+      if [ -n "${S3_BUCKET:-}" ] && aws s3 ls "s3://${S3_BUCKET}/" >/dev/null 2>&1; then
+        echo "  ok       s3://${S3_BUCKET}/ reachable"
+      else
+        echo "  MISSING  cannot list s3://${S3_BUCKET:-<unset>}/ — wrong name or missing s3:ListBucket" >&2
+        fail=$((fail+1))
+      fi
+    else
+      echo "  MISSING  no working AWS credentials — expected an instance profile" >&2; fail=$((fail+1))
+    fi
+  else
+    echo "  MISSING  aws CLI not on PATH" >&2; fail=$((fail+1))
+  fi
+
+  echo "─────────────────────────────────────────────────────────────────────"
+  if [ "$fail" -gt 0 ]; then
+    echo "env.sh --check: $fail REQUIRED item(s) missing, $warn pending. DO NOT run benchmarks yet." >&2
+    exit 1
+  fi
+  echo "env.sh --check: all required items present ($warn still pending at provisioning). OK."
+fi

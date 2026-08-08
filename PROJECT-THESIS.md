@@ -1,162 +1,233 @@
-# Project thesis — WEKA vs Lustre for the WSI pipeline, on AWS
+# PROJECT THESIS — WEKA vs Lustre for a whole-slide-imaging pipeline on AWS
 
-> **Status: BUILD PHASE. No benchmark has run. Every number in this repo is `[PENDING]`.**
-> This document defines what we are measuring and why. It deliberately contains **no findings, no
-> predictions, and no customer story** — those follow the results, never the reverse.
+**This document is the source of truth.** Everything else in this repository is aligned to it; where anything
+disagrees, this file wins and the other thing is a bug. It defines **what we measure and why** — never what the
+result will be, and never what happens to be true today.
 
 ---
 
-## The question
+## 1. The question
 
-**For a modern whole-slide-imaging / digital-pathology pipeline running on AWS, how does WEKA compare
-to Lustre?** Both filesystems, both POSIX, both mounted by the *same* GPU instance running the *same*
-workload against the *same* datasets. The deliverable is the head-to-head delta, stage by stage.
+**For a whole-slide-imaging / digital-pathology pipeline on AWS, how do WEKA and Lustre compare — stage by
+stage, across every axis we can measure, and at what cost to complete the same work?**
 
-The pipeline is the real one, not a synthetic proxy: ingest → cataloging → tissue detection → patching
-→ training → foundation-model feature extraction + MIL → clinical inference. Each stage stresses storage
-differently — large sequential reads, random small-block reads, metadata storms, small-file corpora,
-mixed concurrent load — and a storage comparison that only measures peak bandwidth answers almost none
-of the questions a pathology platform team actually has.
+**Who it is for.** A platform team choosing the storage layer under a pathology AI pipeline. They are not
+buying GB/s; they are buying the ability to run a pipeline within a time and a budget. So the comparison has to
+answer both halves — how each filesystem behaves under each stage's access pattern, and what each configuration
+costs to finish the job.
 
-## Why this is a fair comparison, and where it is deliberately not
+**Both are parallel filesystems built for HPC**, addressed over POSIX, running the same workload on the same
+client. This is a genuine head-to-head, not a demonstration.
 
-The comparison holds one thing constant and varies one thing:
+---
 
-**Held constant** — the compute instance, the workload code, the datasets and their byte contents, the
-magnification contract, the model set, the recording harness, the region and AZ.
-**Varied** — the filesystem under the mount point.
+## 2. The comparison structure
 
-Two asymmetries are real, deliberate, and stated up front rather than discovered later. Naming them is
-what makes the result credible; hiding them is what would make it worthless.
+**Two sequential legs, one workload, one client.**
 
-### Asymmetry 1 — the transport, and GPUDirect Storage
+| | |
+|---|---|
+| **Leg A** | WEKA, self-managed on EC2, mounted at `/mnt/weka` |
+| **Leg B** | FSx for Lustre, managed, mounted at `/mnt/lustre` |
+| Client | one GPU instance type, held constant across both legs |
+| Pipeline | ingest → cataloging → tissue detection → patching → training → foundation-model feature extraction and MIL → clinical inference |
 
-The two filesystems reach the same instance NIC by different paths, because each vendor's own fast path
-*is* different:
+The legs run at **different times on a rebuilt instance** — the instance is deliberately destroyed between
+them. That is the defining constraint of this project's methodology, and §3 is the response to it.
 
-- **WEKA on AWS** uses DPDK over ENA — kernel-bypass, but ENA is not RDMA-capable, so the true
-  GPU-direct path (NIC → GPU memory, no bounce buffer) is expected to be unavailable. *Expected*, not
-  assumed: this is resolved empirically on the real client with `gdscheck -p` plus a recorded canary
-  cell, not from documentation. WEKA's own materials claim GDS support on AWS; the transport analysis
-  suggests compat-mode fallback. We measure it.
-- **FSx for Lustre** supports GPUDirect Storage on EFA-enabled file systems with EFA-enabled clients,
-  which is also what escapes a 5 Gbps-per-client-per-OSS cap.
+**Leg B's plan is provisional until Leg A's results exist.** Improving it from what Leg A taught us is the
+point, not a deviation.
 
-**We do not drop the GPU-direct path to force symmetry.** We run it on both sides and let the difference
-be part of the measurement — because it is precisely the choice a customer faces. `kvikIO`/cuFile runs on
-WEKA in compat mode, so the *same application code* and the *same raw-TIFF artifact* execute on both
-filesystems; only the underlying transport differs, which is the thing under test.
+---
 
-The measurement matrix, per applicable stage:
+## 3. The held-constant contract
 
-| | POSIX (native reads) | cuFile **compat** | cuFile **GDS** |
-|---|---|---|---|
-| **WEKA** | ✅ | ✅ | ✅ *if achievable — determined empirically* |
-| **Lustre** | ✅ | ✅ | ✅ (over EFA) |
+Exactly one thing changes between legs: **the filesystem under the mount point.**
 
-Three cells per filesystem, not two: **compat mode exists on both sides**, and the compat-vs-compat pair is
-what makes the asymmetry analysable rather than confounding. Full decomposition in `runs/STAGES.md` § The
-GPU-direct measurement matrix.
+**Held constant:** the compute instance (type, region, AZ, AMI) · the workload code (one script commit) · the
+datasets and their byte contents · the magnification contract · the model set · the recording harness's metric
+definitions.
 
-Both filesystems get a plain-POSIX cell as well as a kvikIO cell. This matters in both directions:
-kvikIO-in-compat-mode stacks a bounce buffer and the cuFile layer on top of POSIX and may be *slower
-than the filesystem's own native path*, so without the POSIX cell we would understate whichever side
-falls back. Every cell records which path it actually took — cuFile's own accounting of GPU-direct vs
-bounced bytes is a first-class recorded source, because a configuration flag is not proof of behavior.
+**Varied:** the filesystem, its mount, its provisioning and tuning (§5), and **the telemetry sources
+collected**, which are filesystem-specific by necessity (§7).
 
-### Asymmetry 2 — the provisioning basis
+**Because the legs run at different times, this is enforced mechanically rather than by care.** A
+machine-readable **environment contract** is written at the end of Leg A — instance type, region/AZ, AMI,
+kernel, driver and library versions, dataset byte-manifest, script commit — and **Leg B verifies it before its
+first cell.** Fields are split into those that **must match** and those **expected to differ** (everything
+filesystem-specific, which is the variable under test); a verifier ignoring that split would either fail on
+everything or catch nothing. **A mismatch is a fail-loud condition, not a footnote** — without it, "were these
+two legs even comparable?" is unanswerable at exactly the moment it matters most.
 
-**Lustre is provisioned at maximum capability. WEKA is provisioned at a realistic production
-configuration. Cost for both is reported alongside the results as a stated fact.**
+An unrecorded fact is treated as **unverifiable, therefore failed**: a null cannot be shown to have matched.
 
-*Why:* a win against a competitor's best configuration is worth far more than a win against one we
-sized ourselves, and it forecloses the objection that whoever picked the tier picked the winner. It
-also makes the cost comparison meaningful rather than circular. The asymmetry is stated in the headline
-of every result — "WEKA at a typical production configuration vs FSx for Lustre at maximum" — because
-the first question any skeptical reader asks is what the other side was running, and the answer has to
-be already on the page.
+---
 
-"Maximum" is defined per axis, because one axis is capped by the client and the others are not:
+## 4. Measurement: no metric is designated primary
 
-| Axis | Maxed how | Note |
+**Every cell reports the full measurement set.** Throughput, operations per second, latency and its
+percentiles, metadata rates, concurrency scaling, and wallclock — all of it, on every cell where it is
+meaningful.
+
+*Why nothing is designated primary:* **choosing the decisive axis in advance would be a prediction.** These are
+two different architectures, and where they diverge is precisely what the project exists to discover. Naming a
+headline metric up front pre-decides that, and it is story-before-results in the same way that pre-assigning a
+winner is. **Which axis turns out to be decisive is a result.**
+
+### Cost to complete — the derived comparative figure
+
+**Cost and wallclock are measured on every cell, and cost-to-complete is calculated from them** — per cell and
+per leg:
+
+> **cost to complete = (instance $/hr + filesystem $/hr) × measured wallclock**
+
+*Why this matters more than either input alone:* it is the figure the buyer actually faces, and it is the only
+place where the deliberate provisioning asymmetry (§5) stops being a caveat and becomes arithmetic. "Lustre at
+maximum versus WEKA at a realistic production configuration" is a fairness claim a skeptical reader can argue
+with; *what each configuration cost to complete the same pipeline* is a number.
+
+Prices are **fetched from the vendor's current pricing, never recalled, and stamped with the date checked** —
+cloud prices change without notice, and a stale price silently rewrites the conclusion.
+
+---
+
+## 5. Two deliberate asymmetries, stated wherever results appear
+
+A reader's first question is what the other side was running. The answer must already be on the page — naming
+these is what makes the result credible.
+
+### 5.1 Provisioning
+
+**Lustre is provisioned at maximum capability. WEKA is provisioned at a realistic production configuration.
+Cost is reported alongside both.**
+
+*Why deliberately unequal:* beating a competitor's best configuration is worth far more than beating one we
+sized ourselves, and a comparison that under-provisioned the other side would be worthless the moment anyone
+looked. **Cost-to-complete (§4) is what keeps this honest** — the asymmetry is quantified rather than excused.
+
+**Both sides must be sized so that neither is the constraint**, above what the client can drive. A filesystem
+provisioned below the client's capability measures its own sizing rather than its architecture, and any delta
+that follows is a sizing artifact. This is a **provisioning requirement**, not a prediction about results.
+
+### 5.2 Transport and the GPU-direct path
+
+Each filesystem is measured on its intended transport: **WEKA over DPDK, Lustre over EFA.** Both stacks have a
+working lower-performance fallback that engages *without erroring* — a UDP-mode WEKA client, and a Lustre
+client that mounts over TCP when the FSx-specific EFA client configuration is absent.
+
+**A fallback transport is a stop, not a caveat.** It mounts cleanly, serves data, and reports plausible numbers
+for a configuration this project decided not to measure; measuring first and flagging later spends the
+wallclock and the money before anyone can act. Each leg's transport is **evidenced from the client's own
+report** — never inferred from the mount options passed — and recorded per leg.
+
+**The GPU-direct matrix runs both cuFile modes on both filesystems**, so the filesystem effect is separated
+from the transport effect rather than confounded with it. The matrix is designed on the expectation that the
+WEKA leg's transport does not support true GPU-direct and runs in compat mode; **a single Phase-0 cell confirms
+that empirically before the matrix is committed**, because the vendor's materials and the transport analysis do
+not agree, and one cell converts an assumption into evidence.
+
+**Prove the I/O path per cell.** Record cuFile's own accounting of GPU-direct versus bounced bytes as a
+first-class source. **A configuration flag is not proof of behaviour** — a cell that quietly fell back, or
+quietly didn't, silently poisons the comparison.
+
+---
+
+## 6. Cold versus warm is an enforced axis
+
+Both sides carry substantial cache — the client's own RAM, and each filesystem's server-side cache, which
+differ between them. **Any warm cell risks measuring cache rather than storage**, and a corpus genuinely cold
+on one side may be partly warm on the other, producing a **cache-size artifact that looks like a filesystem
+difference.**
+
+So: cache state is **recorded as achieved per cell, not asserted**; the mechanism for reaching a cold state is
+determined and documented per filesystem, including whichever server-side component is outside our control on a
+managed service; and where a corpus must exceed cache, it is sized against **both** filesystems' cache so that
+one identical corpus definition serves both legs. Per-leg corpus sizes would break the held-constant contract
+on exactly the substage most sensitive to it.
+
+---
+
+## 7. Recording is per-filesystem, because the primaries invert
+
+"If it isn't recorded, it didn't happen." Re-running costs hours-to-days and real money; over-capture is cheap.
+Per cell: raw tool output verbatim, run metadata, the exact configuration, results with context, and the cache
+state achieved. **Time series, not point estimates** — capture the timeline and derive aggregates from it.
+
+**A source that is bypassed for the path in use must never be quoted for a throughput, latency or IOPS
+number.** This is the easiest way to publish a confidently wrong figure.
+
+| | Primaries | Diagnostic only |
 |---|---|---|
-| Throughput tier | `PERSISTENT-1000` (top SSD tier: 1000 MBps/TiB disk, 2600 MBps/TiB network) | |
-| Capacity | ≥ 25 TiB | At 1000 MBps/TiB, 25 TiB is where FSx disk throughput reaches the client's ~25 GB/s. Below that FSx is the constraint and any delta is a sizing artifact. |
-| Metadata IOPS | User-provisioned, high (Persistent-2 allows up to 192,000, independent of capacity) | The axis where a maxed Lustre is most formidable — and where the comparison is most informative. |
-| Network | EFA-enabled file system + EFA-mounted client | Also the GDS prerequisite, and what escapes the 5 Gbps-per-OSS cap. |
+| **WEKA (DPDK over ENA)** | the filesystem's own statistics, app-level, and the wire counters for the DPDK path | kernel network counters and the block layer — both bypassed, so they under-report or read near zero; CPU-busy readings, since DPDK cores spin-poll regardless of load |
+| **Lustre (FSx)** | the client's Lustre statistics, the service's own per-target metrics, app-level, **and the client's network counters — which ARE the data path here** | whichever of the above does not match the network layer actually in use; determine it, don't assume |
 
-**Bandwidth is expected to be client-capped for both sides at ~25 GB/s (200 Gbps).** A tie on the pure
-bandwidth cells would therefore reflect the instance, not either filesystem, and must not be presented
-as a finding about either. The axes that respond to provisioning — metadata, IOPS, small-file behavior,
-concurrency, latency — are where the comparison carries information.
+**Note the inversion:** the client's kernel network counters are *diagnostic* on the WEKA leg and *primary* on
+the Lustre leg. "Never quote a bypassed source" cuts in opposite directions per leg, which is why the source
+set is selected by filesystem rather than assumed.
 
-WEKA must still be sized to clear ~25 GB/s so that it, too, is not the constraint. A "realistic
-production configuration" that starves the client would produce a sizing artifact, not a finding.
+**A consistency relation is derived per filesystem and never ported across.** WEKA's erasure coding implies a
+specific wire-versus-application ratio, set by the scheme captured at provisioning. Lustre stripes across
+targets with no default erasure coding, so its relation is different and must be derived from the actual stripe
+layout. **Run the canary after every sweep** — disagreement means the instrumentation is wrong, and every
+subsequent number depends on it, so fix it before continuing.
 
-*(Sources: [FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html),
-[SSD storage performance characteristics](https://docs.aws.amazon.com/fsx/latest/LustreGuide/ssd-storage.html).)*
+---
 
-## Sequencing — two legs, then a synthesis
+## 8. The filesystem is a dimension, not a fork in the code
 
-**Leg A: WEKA.** **Leg B: Lustre.** **Then: the synthesis.** The legs run sequentially, not side by side,
-because the WEKA cluster and the FSx file system are provisioned separately and the instance is rebuilt
-between them.
+One results tree. The filesystem appears as **`--fs {weka|lustre}`**, as a **segment in the run-directory
+name**, and as a **field in each run's metadata**, so aggregators pivot on it and emit head-to-head comparisons
+directly. Scripts resolve the mount through a variable derived from the leg, never a hardcoded path.
 
-This buys simplicity at the cost of a new risk: **the two legs must remain comparable across time.**
-That risk is managed by an explicit **environment contract** — a machine-readable record written at the
-end of Leg A (instance type, region/AZ, AMI ID, kernel, driver and CUDA versions, dataset byte-manifest,
-script commit) that Leg B verifies against before its first cell. Without it, "were these two legs even
-comparable?" becomes unanswerable at exactly the moment it matters most.
+*Why one tree:* **the deliverable is the cross-filesystem delta**; separate trees would force every comparison
+to be assembled by hand, and cross-leg drift is caught by the environment contract instead — made **visible**
+rather than structurally prevented. *Why a variable:* a hardcoded mount makes a Lustre cell silently measure
+WEKA, and the number looks correct.
 
-Within a leg, cells are chained and run unattended, including overnight. Four guards make that safe:
-telemetry syncs to S3 *during* the run rather than only at the end; the consistency canary runs per-cell
-and *aborts the chain* on failure rather than producing a night of contaminated cells; each cell has a
-watchdog timeout; and the chain resumes from checkpoint rather than restarting.
+---
 
-## Results precede story
+## 9. Scope
 
-This project has no thesis about who wins. Every document here records **why we measure something the
-way we do** — the methodology rationale, which is what makes a number evaluable — and records **nothing
-about what the numbers will show**. Sections that will eventually carry interpretation are marked
-`[STORY PENDING RESULTS]` and stay that way until the results exist.
+**In scope:** WEKA versus FSx for Lustre, both over POSIX, across the WSI pipeline at the project's
+magnification contract, on one client instance, with cost measured throughout.
 
-Whatever the benchmark produces is what gets reported, including cells where WEKA loses. Provisioning
-Lustre at maximum raises that possibility, which is the correct trade: a weakness found here is one a
+**Out of scope:** any third filesystem or object/S3 access path; any comparison against results produced on
+different hardware or different code. **This repository has one deliverable: the head-to-head synthesis.**
+
+---
+
+## 10. Framing
+
+**Results precede story.** No document here may contain a predicted outcome, an expected magnitude, a
+pre-assigned headline stage or metric, or a narrative built before the measurement exists. Keep the
+**why-we-measure-it-this-way** — that is what makes a number evaluable, and in a competitive comparison every
+choice is a place a skeptical reader looks for bias. Delete the **what-it-will-show**. An interpretation
+section does not exist until there is something to interpret.
+
+**Report losses.** Provisioning Lustre at maximum raises the chance of them, and a weakness found here is one a
 customer does not find later.
 
-**Each leg is half of an unfinished comparison.** WEKA-leg numbers mean little in a vacuum — their force
-comes entirely from the head-to-head against Leg B. No Leg-A document may imply finality.
+**Each leg is half an unfinished comparison.** A single leg's numbers mean little in isolation; their force is
+the head-to-head. Present single-leg findings as strong but incomplete, leave explicit room for the other leg,
+and state that the consolidated comparison is built later. **This is not a licence to soften findings** —
+record the numbers plainly; it is the *claim* that stays scoped. It is also what stops Leg A being published
+alone, which will be tempting the moment Leg A produces good numbers.
 
-## Environment
-
-All values below are **assumed and subject to change** — tracked in the
-`weka-vs-lustre-cloud-open-decisions` memory, which indexes every place each one is referenced so that
-firming one up is a single complete pass.
-
-| | Value | Note |
-|---|---|---|
-| Compute instance | `g6e.24xlarge` *(subject to change)* | 96 vCPU, 768 GiB, 4× L40S (178 GiB), 200 Gbps, 2× 1900 GB NVMe, EFA-capable. Upgrade: `g6e.48xlarge` (8× L40S, 400 Gbps). Floor: `g6e.12xlarge` (100 Gbps). |
-| WEKA deployment | Self-managed on EC2, provisioned via the company's Port blueprint *(subject to change)* | A managed/marketplace WEKA would be the closer counterpart to managed FSx — standing fairness caveat. |
-| Lustre deployment | AWS managed **FSx for Lustre** *(subject to change)* | Could be self-managed Lustre on EC2; affects the recording adapter and the telemetry available. |
-| Durable store | One private S3 bucket, same region | Datasets, raw telemetry, environment contracts. Makes teardown lossless — see `cloud-setup/SPINUP-CHECKLIST.md`. |
-
-**Revisit trigger for the instance:** if Leg A's synthetic ceiling pins at line rate across block sizes
-*and* the `num_workers` sweep saturates on CPU cores rather than storage, the instance is measuring
-itself rather than the filesystem — move up before Leg B. Pre-committed here so the call isn't made
-later under sunk cost.
-
-## What carries over, and what does not
-
-The WSI workload harness is filesystem-agnostic — Lustre is POSIX, as wekafs is — so the pipeline
-scripts, the dataset manifests, the 20×-by-the-book magnification contract, the model set, and the
-recording architecture all carry over unchanged. What is new is per-filesystem: the recording adapters
-(each filesystem exposes different primary telemetry, and the cross-source consistency relation must be
-re-derived per filesystem rather than assumed), the provisioning, and the tuning.
-
-**Deliberately out of scope:** object/S3 access as a measured path; SMB and NFS; multi-client scale-out
-(this is a single-client study); and any comparison against filesystems other than these two.
+**Write what is true and durable.** Not alternatives considered and dropped, not the state of things today, not
+history. A document that must be updated to stay correct will eventually be wrong.
 
 ---
 
-*Reading order for a fresh session: this file → `runs/STAGES.md` → the relevant `runs/Stage-<N>-*.md`.
-For provisioning: `cloud-setup/SPINUP-CHECKLIST.md`.*
+## 11. What would make this comparison invalid
+
+Each of these produces a *plausible* number, which is what makes them dangerous.
+
+1. A cell that ran against one mount while carrying the other leg's label.
+2. A leg measured on a fallback transport — UDP for WEKA, TCP for Lustre.
+3. Two legs whose environment contract was never written, or never verified.
+4. A throughput, latency or IOPS figure quoted from a source that leg bypasses.
+5. A cell whose cache state was asserted rather than recorded.
+6. A GPU-direct claim resting on a configuration flag rather than on the recorded I/O path.
+7. A cost figure built from a recalled or undated price.
+8. Either side provisioned below what the client can drive, making the delta a sizing artifact.
+9. A Leg-A result published as though the comparison were finished.

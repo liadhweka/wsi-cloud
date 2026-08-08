@@ -57,7 +57,6 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Know what every path / name / variable should be | **`cloud-setup/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
 | Tear down or rebuild the instance | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** (+ `runs/lib/teardown-preflight.sh`) — Claude runs it via **`prompt-teardown-cloud.md`**; the human only commits, pushes, and destroys |
 | Pick up where the last session stopped | **`cloud-setup/HANDOFF-NEXT-SESSION.md`** — written at teardown, because Claude's context does not survive one. *Does not exist until the first teardown.* |
-| Know what the pre-deployment audit found | **`cloud-setup/AUDIT-REPORT.md`** — fixed, raised, and the verdict |
 
 **A fresh Claude session continuing this work** starts with the memories — `cloud-session-open-items` (the
 work list), `weka-vs-lustre-cloud-project` (what this is), `weka-vs-lustre-cloud-open-decisions` (what is
