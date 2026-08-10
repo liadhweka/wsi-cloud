@@ -376,7 +376,23 @@ def extract_cell_summary(run_dir):
         "mode": parsed["mode"],
         "dataset": parsed["dataset"],
         "compat_mode": parsed["compat_mode"],
-        "gds_engaged": "yes" if parsed["compat_mode"] == "off" else "no",
+        # REQUESTED cuFile mode, read off the run-dir name. This says what the
+        # cell was ASKED to do -- never what it did.
+        "cufile_mode_requested": parsed["compat_mode"],
+        # ACHIEVED path. Deliberately left unknown here: this column used to be
+        # derived from `compat_mode` above, i.e. from the run-dir name, i.e.
+        # from the requested configuration -- which is precisely the "a
+        # configuration flag is not proof of behaviour" failure D8 forbids. A
+        # cell that silently fell back to compat, or silently did not, produced
+        # a "gds_engaged" answer that simply restated what was asked for, and it
+        # would have looked identical in the CSV either way.
+        #
+        # The real answer comes from cuFile's own GPU-direct-vs-bounced byte
+        # accounting, recorded per cell. Until that source is wired in
+        # (SCRIPT-TRACKER.md, deferred item D-6), this stays "unknown" rather
+        # than being fabricated: an absent column is visible, a fabricated one
+        # is not.
+        "gds_engaged": "unknown",
         "n_buffer": parsed["n_buffer"],
         "num_threads": parsed["num_threads"],
         "n_processes": parsed.get("n_processes", 1),
@@ -435,7 +451,9 @@ def main():
             continue
         rows.append(row)
         print(f"  {d.name}: tps={row['app_tiles_per_sec']:.0f} GB/s={row['app_gbps']:.2f} "
-              f"weka_R={row['weka_read_mean_MiBps']:.0f}MiB/s gds={row['gds_engaged']}",
+              f"weka_R={row['weka_read_mean_MiBps']:.0f}MiB/s "
+              f"cufile_requested={row['cufile_mode_requested']} "
+              f"gds_achieved={row['gds_engaged']}",
               file=sys.stderr)
 
     if not rows:

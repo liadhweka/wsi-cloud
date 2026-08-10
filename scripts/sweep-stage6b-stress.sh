@@ -18,11 +18,11 @@
 #     = 3 cells
 #
 #   B.2.c — File-size sensitivity (fixed corpus=30K, conc=64, vary file size)
-#     corpus = N=30K × sz ∈ {5, 10, 50} MB × FP32
+#     corpus = N=30K × sz ∈ {5, 10, 50, 200} MB × FP32
 #     concurrency = 64
 #     pattern = random
 #     dtype = fp32
-#     = 3 cells
+#     = 4 cells
 #
 # Total: 25 cells (18 + 3 + 4). Per cell: 5 min ramp + 10 min steady.
 # Total sweep wallclock: ~6 hr.

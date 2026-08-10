@@ -12,8 +12,9 @@ carrying judgements in your head.
 
 ## Read this first — two ways this task fails silently
 
-Both were found by a pre-deployment audit and both **produce perfectly plausible numbers while invalidating the
-comparison.** They are the reason this prompt exists rather than a checklist.
+Both **produce perfectly plausible numbers while invalidating the comparison** — nothing errors, nothing looks
+wrong, and the damage is invisible until someone asks what was actually measured. That is why this is a prompt
+with hard gates rather than a checklist.
 
 **1. Mounting over TCP instead of EFA.** Enabling EFA on the instance, requesting EFA on the file system, and
 installing the *generic* EC2 EFA software does **not** configure the *Lustre client* to use EFA. Without the
@@ -88,7 +89,7 @@ under-configuring it is as damaging as under-configuring the other leg. Every va
 | Deployment type | **Persistent 2** | The generation where metadata performance is provisioned independently of capacity |
 | Throughput per unit of storage | **1000 MB/s/TiB** — the top SSD tier | Deliberately its best configuration |
 | Storage capacity | **≥ 25 TiB** | At 1000 MB/s/TiB this is where disk throughput reaches the client's ~25 GB/s ceiling; below it the file system is the constraint and any delta is a sizing artifact |
-| Metadata IOPS | **User-provisioned, high** | The axis where the two filesystems differ most architecturally |
+| Metadata IOPS | **User-provisioned, high** | Persistent 2 provisions metadata independently of capacity, so leaving it at the default would under-provision the metadata path while the data path runs at maximum (**D7**) |
 | VPC / subnet / security group | **same as this instance**, `wsi-bench-sg` | Cross-AZ traffic would contaminate the comparison |
 | EFA | **Enabled** | Prerequisite for GPUDirect Storage, and it removes a hard per-file-server cap |
 

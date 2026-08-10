@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# sweep-stage1-seqw.sh — Stage 1.0 sequential-write fio sweep.
+# sweep-stage1-seqw.sh — Stage 1.0a sequential-write fio sweep.
 #
 # Grid: bs ∈ {4K, 64K, 256K, 1M, 4M} × jobs ∈ {1, 2, 4, 8, 16, 32, 64}
 #       = 35 cells.
@@ -13,7 +13,7 @@
 # Run with:
 #   scripts/sweep-stage1-seqw.sh
 # Output:
-#   - one runs/<TS>-s1.0-seqw-bs<X>-jobs<N>/ per cell (with full recording)
+#   - one runs/<TS>-<fs>-s1.0a-seqw-bs<X>-jobs<N>/ per cell (with full recording)
 #   - one consolidated log at runs/sweep-logs/<TS>-stage1-seqw.log
 set -uo pipefail
 
@@ -33,7 +33,7 @@ TOTAL=$(( ${#BLOCK_SIZES[@]} * ${#CONCURRENCIES[@]} ))
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 
-log "=== Stage 1.0 seqw sweep starting ==="
+log "=== Stage 1.0a seqw sweep starting ==="
 log "  grid: bs ∈ {${BLOCK_SIZES[*]}} × jobs ∈ {${CONCURRENCIES[*]}}"
 log "  total cells: $TOTAL, runtime per cell: 600s + 60s ramp = ~11 min"
 log "  estimated total: ~$(( TOTAL * 11 / 60 )) hours"
@@ -45,14 +45,14 @@ for bs in "${BLOCK_SIZES[@]}"; do
   for jobs in "${CONCURRENCIES[@]}"; do
     i=$(( i + 1 ))
     name="seqw-bs${bs}-jobs${jobs}"
-    note="Stage 1.0 sweep cell $i/$TOTAL: sequential write, bs=$bs, $jobs jobs, iodepth=1, libaio --direct=1, 600s steady + 60s ramp, --unlink=1 to keep scratch clean."
+    note="Stage 1.0a cell $i/$TOTAL: sequential write, bs=$bs, $jobs jobs, iodepth=1, libaio --direct=1, 600s steady + 60s ramp, --unlink=1 to keep scratch clean."
 
     log ""
     log "=== [cell $i/$TOTAL] $name ==="
 
     "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
-      --stage "1.0" \
+      --stage "1.0a" \
       --note "$note" \
       -- fio \
         --name="$name" \

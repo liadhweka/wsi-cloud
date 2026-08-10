@@ -11,13 +11,17 @@
 #   It does not run individual cells — each sweep driver does that via record-run.sh,
 #   which owns per-cell recording and failure isolation. This orchestrates SWEEPS.
 #
-# THE FOUR GUARDS (without these, an unattended run is not trustworthy)
+# THE FIVE GUARDS (without these, an unattended run is not trustworthy)
 #   1. Abort the chain on any step failure. A 3am failure that gets skipped produces
 #      hours of downstream cells built on missing inputs.
 #   2. Checkpoint + resume: a completed step is skipped on re-run, so a crash re-does
 #      only what is missing.
 #   3. Sync to S3 after every step — both mounts and local scratch are ephemeral.
 #   4. Tee everything. On an overnight run the log is the only forensic record.
+#   5. Refuse a leg whose EVIDENCED transport is not the intended one — WEKA on DPDK,
+#      Lustre on EFA (D16, implemented below). The fallbacks (UDP / TCP) mount cleanly
+#      and report a complete, plausible set of numbers, so nothing downstream can tell
+#      the leg apart from a valid one. Overridable only by a written waiver.
 #
 # USAGE
 #   run-leg.sh --leg weka                 # run the whole leg
@@ -61,15 +65,25 @@ log() { echo "[$(date -u +%FT%TZ)] run-leg: $*"; }
 #    A command of NOT_YET_BUILT is reported and aborts, rather than being skipped —
 #    a silently-skipped step is how you get a leg with a hole in it.
 #
-#    SEVEN of these drivers dispatch on $1 and exit 2 with a usage message when
+#    NINE of these drivers dispatch on $1 and exit 2 with a usage message when
 #    invoked bare, so the target is part of the command and the runner word-splits
 #    it. Which target, and why:
 #      4.C   tier1  — Tier 2 is "adaptive from Tier 1 knees" and Tier 3 is
 #                     conditional (Stage-4-Patching.md § 4.C), so neither can be
 #                     pre-scheduled; run them by hand after reading Tier 1.
 #      5     all    — both blocks are full sweeps over N ∈ {1,2,4}.
-#      6.A   tier1  — Tier 3 gets its own step below; Tier 2 is step 6.A.2.
-#      6.B.3 all    — the three num_workers cells against the model's features.
+#      6.A   tier1  — Tier 3 and Tier 2 get their own steps below.
+#      6.A.3 tier3  — CAMELYON16 cross-dataset, ahead of Tier 2 per the stage's
+#                     sequencing (Stage-6-Feature-Extraction.md).
+#      6.A.2 tier2  — the SWEEP DRIVER, never the chunked orchestrator it calls.
+#                     The orchestrator is one of the four Tier 2 cells and takes its
+#                     --run-dir FROM record-run.sh, so it cannot be a step: bare it
+#                     exits 2 and aborts the leg, and hand-fed the args it wants it
+#                     runs unwrapped — no run dir, no telemetry, no INDEX.md row —
+#                     while the three cuCIM Tier 2 cells (6.B.3's feature source)
+#                     never run at all.
+#      6.B.3 all_models — 3 models x num_workers {4,16,32} = 9 cells, the roadmap's
+#                     grid. `all` would sweep num_workers for ONE model only.
 #      6.B.2 all    — b2a + b2b + b2c. Does NOT include `prep`; corpus generation
 #                     is step 6.B.1, still blocked on the corpus-size decision.
 #      6.C   all     · 7 all — every tier, ascending.
@@ -87,8 +101,13 @@ STEPS=(
   "5|ResNet-50 DDP scaling, both backends, N in {1,2,4}|$LIB/sweep-stage5-training.sh all"
   "6.A|Foundation-model extraction, Tier 1 (GPU-count scaling)|$LIB/sweep-stage6a-extract.sh tier1"
   "6.A.3|Foundation-model extraction, Tier 3 (CAMELYON16 cross-dataset)|$LIB/sweep-stage6a-extract.sh tier3"
-  "6.A.2|Foundation-model extraction, Tier 2 (full cohort, chunked)|$LIB/run-stage6a-tier2-chunked-multimodel.sh"
-  "6.B.3|Attention-MIL on real features|$LIB/sweep-stage6b-mil.sh all"
+  "6.A.2|Foundation-model extraction, Tier 2 (full cohort: 3 cuCIM + 1 chunked multi-model kvikIO)|$LIB/sweep-stage6a-extract.sh tier2"
+  # all_models, NOT all: `all` sweeps num_workers for ONE model (whatever MODEL
+  # defaults to) = 3 cells, whereas the roadmap's 6.B.3 grid is 3 models x
+  # num_workers {4,16,32} = 9 cells per leg. With `all` the leg completed, the
+  # step was marked done, and two thirds of the substage had silently never run —
+  # and the missing models are exactly what makes the result not model-dependent.
+  "6.B.3|Attention-MIL on real features (3 models x num_workers = 9 cells)|$LIB/sweep-stage6b-mil.sh all_models"
   "6.B.1|Synthetic feature corpus generation|NOT_YET_BUILT:needs corpus size decided (open item 5b)"
   "6.B.2|Small-file / metadata stress sweep|$LIB/sweep-stage6b-stress.sh all"
   "6.C|Concurrent multi-workload + endurance|$LIB/sweep-stage6c.sh all"

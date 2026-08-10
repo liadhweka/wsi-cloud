@@ -28,7 +28,9 @@ from pathlib import Path
 
 # Run-name patterns:
 #   tilesread-<dataset>-openslide-N<n>
-#   tilesread-<dataset>-openslide-N<n>-cold      (Tier 3 OpenSlide drop_caches variant, deprecated)
+#   tilesread-<dataset>-openslide-N<n>-cold      (Tier 3 OpenSlide cell; the driver appends
+#                                                 "-cold" on tier3 regardless of whether the
+#                                                 drop_caches step ran -- see variant_from_name)
 #   tilesread-<dataset>-cucim-N<n>-nw<w>-bs<b>
 #   tilesread-<dataset>-cucim-N<n>-nw<w>-bs<b>-sorted  (Tier 5 sort-batches variant)
 RUN_NAME_RE = re.compile(
@@ -72,7 +74,17 @@ def parse_run_dir_name(p):
     }
     out["num_workers"] = int(d["nw"]) if d["nw"] else None
     out["batch_size"] = int(d["bs"]) if d["bs"] else None
-    out["variant"] = d["suffix"][1:] if d["suffix"] else ""  # "", "cold", or "sorted"
+    # REQUESTED variant, read off the run-dir name. This says what the cell was
+    # ASKED to do -- never what it did. It is deliberately NOT called "variant"
+    # and NOT called "cache_state": sweep-stage4b-tilesread.sh appends "-cold"
+    # whenever $TIER is tier3, while the sysctl vm.drop_caches step is gated on
+    # $TIER3_DROP_CACHES, so a run dir can carry "cold" with no cache-clearing
+    # action having occurred. A column named "variant=cold" is then an asserted
+    # cache state, which thesis §6 forbids -- cache state is recorded as
+    # achieved, per cell. Same rule as aggregate-stage4c-kvikio.py's
+    # cufile_mode_requested / gds_engaged split: a name-derived value may be
+    # reported as what was requested, never as what was achieved.
+    out["variant_from_name"] = d["suffix"][1:] if d["suffix"] else ""  # "", "cold", or "sorted"
     return out
 
 

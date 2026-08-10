@@ -50,6 +50,7 @@ import csv
 import json
 import multiprocessing as mp
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -69,10 +70,23 @@ def writer_process(slide_id: str, out_path: Path, bytes_target: int,
     .tmp + rename pattern fixes this — out_path doesn't appear at all until
     the rename completes after fsync.
     """
-    # Compute a pixel grid that lands near bytes_target after compression.
-    # Tiled-TIFF with deflate compression on smooth random RGB is roughly
-    # ~5× compressed. To hit 50 MB compressed we need ~250 MB raw =
-    # ~85 megapixels RGB. sqrt(85e6) ≈ 9220 → use 9216 × 9216 (multiple of 256).
+    # Pixel grid sized from `bytes_target` via an ASSUMED ~5× deflate ratio.
+    #
+    # ⚠ THIS RATIO DOES NOT HOLD FOR THIS CONTENT, AND THE TARGET IS NOT THE
+    # OUTCOME. The pattern below is a 32×32 base tiled up by np.repeat, so it is
+    # enormously more compressible than the ~5× assumed here and the file lands
+    # far under `bytes_target`. `--bytes-per-write` is therefore a *request*,
+    # never a measurement: the achieved size is stat()'d after the write and is
+    # the only size that is ever reported.
+    #
+    # Why this matters rather than being cosmetic: 7.4.b measures how quickly a
+    # just-written heatmap becomes visible to another reader, and that depends
+    # on the artifact's real size and tile structure. An artifact an order of
+    # magnitude smaller than a production heatmap answers the question for a
+    # file nobody writes. Per the Stage 7 decision, the artifact is to be sized
+    # and tiled from a MEASURED 7.3 output on the same leg -- pass that measured
+    # size in, and check the achieved size against it (see the target-vs-achieved
+    # report below) rather than trusting this ratio.
     side = int(np.ceil(np.sqrt(bytes_target * 5 / 3) / 256)) * 256
     rng = np.random.default_rng(hash(slide_id) & 0xFFFFFFFF)
     # Build a smooth-ish pattern (random gradient) so deflate gives realistic
@@ -102,7 +116,8 @@ def writer_process(slide_id: str, out_path: Path, bytes_target: int,
     write_done_queue.put({
         'slide_id': slide_id,
         't_write_done': t_write_done,
-        'bytes_written': bytes_written,
+        'bytes_written': bytes_written,     # ACHIEVED — the only size reported
+        'bytes_target': bytes_target,       # REQUESTED — recorded so the miss is visible
         'write_ms': write_ms,
     })
 
@@ -174,6 +189,7 @@ def main():
 
     consistency_latencies_ms = []
     first_read_latencies_ms = []
+    bytes_written_all = []      # ACHIEVED artifact sizes, for the target-vs-achieved check
 
     t_zero = time.monotonic()
     for i in range(args.n_slides):
@@ -230,6 +246,8 @@ def main():
             consistency_latencies_ms.append(cons_ms)
         if first_read_ms is not None:
             first_read_latencies_ms.append(first_read_ms)
+        if wr.get('bytes_written'):
+            bytes_written_all.append(wr['bytes_written'])
 
         csv_w.writerow({
             'slide_id': slide_id,
@@ -256,11 +274,31 @@ def main():
         idx = int(round((p / 100.0) * (len(s) - 1)))
         return s[idx]
 
+    mean_achieved = (sum(bytes_written_all) / len(bytes_written_all)) if bytes_written_all else None
+    size_ratio = (mean_achieved / args.bytes_per_write) if mean_achieved else None
+    if size_ratio is not None and not (0.5 <= size_ratio <= 2.0):
+        print(f"[read-after-write] WARNING: artifact size missed its target by "
+              f"{1.0 / size_ratio:.1f}× (target {args.bytes_per_write:,} B, achieved "
+              f"{mean_achieved:,.0f} B). Visibility latency depends on the artifact's real "
+              f"size and tile structure, so this cell describes a file unlike a production "
+              f"heatmap. Size it from a MEASURED 7.3 output on this leg.",
+              file=sys.stderr, flush=True)
+
     summary = {
         'n_slides_requested': args.n_slides,
         'n_consistency_samples': len(consistency_latencies_ms),
+        # Target vs achieved, both recorded: the target is a request through an
+        # assumed compression ratio that does not hold, so only the achieved
+        # size describes what was actually measured.
         'bytes_per_write_target': args.bytes_per_write,
+        'bytes_written_mean_achieved': mean_achieved,
+        'bytes_written_target_ratio': size_ratio,
+        # The poll interval IS the resolution floor of every visibility latency
+        # below: the reader can only observe the file on a poll boundary, so any
+        # latency at or under this value is quantisation, not measurement.
+        # Reported so nobody reads a sub-interval p50 as a real number.
         'poll_interval_s': args.poll_interval_s,
+        'visibility_latency_resolution_floor_ms': args.poll_interval_s * 1000.0,
         'consistency_latency_ms_mean': (sum(consistency_latencies_ms) / len(consistency_latencies_ms)
                                          if consistency_latencies_ms else None),
         'consistency_latency_ms_p50': pctile(consistency_latencies_ms, 50),

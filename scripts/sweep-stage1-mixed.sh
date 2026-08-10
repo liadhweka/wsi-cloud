@@ -42,6 +42,16 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SRC=${SCRATCH_DIR}/fpsync-source/tcga-brca/
 WRITE_TARGET=${FS_MOUNT}/data/fpsync-target/mixed
 READ_SCRATCH=${FS_MOUNT}/benchmarks/fio-scratch-mixed
+# Prep and cells MUST pass the same filename_format. fio otherwise derives file
+# names from the JOB name (fio(1) filename=str: "Fio normally makes up a filename
+# based on the job name, thread number, and file number"), and the cells' job name
+# is not the prep's — so each cell silently lays out its OWN 4G-per-job files
+# inside the timed window and then random-reads bytes it wrote seconds earlier
+# (direct=1 skips the client page cache, not the filesystem's server-side cache),
+# while the layout writes land concurrently with the ingest stream as a burst that
+# no source attributes. The cell still reports a perfectly normal randread number.
+READ_FILE_FMT='fio-scratch-mixed.$jobnum.$filenum'
+READ_SIZE=4G
 SHDIR_ROOT=/tmp/fpsync-stage1.6
 LOG_DIR=$REPO/runs/sweep-logs
 mkdir -p "$LOG_DIR" "$WRITE_TARGET" "$SHDIR_ROOT"
@@ -68,14 +78,28 @@ if [[ ! -d "$READ_SCRATCH" ]]; then
   log "  Run the Stage 1.6 prep first to pre-stage 64×4G fio scratch files."
   exit 2
 fi
-SCRATCH_FILES=$(find "$READ_SCRATCH" -type f | wc -l)
+# Count only files the prep actually completed: named to $READ_FILE_FMT and at
+# full $READ_SIZE. A short or missing file is laid out by fio inside the timed
+# window, which is the defect the shared filename_format exists to prevent —
+# arriving by the other route. The highest-concurrency cell needs one file per
+# job, so the whole grid is gated on max(JOBS_LIST) rather than on any count.
+READ_SIZE_BYTES=$(numfmt --from=iec "$READ_SIZE")
+SCRATCH_FILES=$(find "$READ_SCRATCH" -maxdepth 1 -type f -name 'fio-scratch-mixed.*' -size "${READ_SIZE_BYTES}c" | wc -l)
 SCRATCH_BYTES=$(du -sb "$READ_SCRATCH" | awk '{print $1}')
+MAX_JOBS=0
+for j in "${JOBS_LIST[@]}"; do [[ $j -gt $MAX_JOBS ]] && MAX_JOBS=$j; done
+if [[ $SCRATCH_FILES -lt $MAX_JOBS ]]; then
+  log "FATAL: read scratch has $SCRATCH_FILES complete files ($READ_FILE_FMT at $READ_SIZE), need >= $MAX_JOBS"
+  log "  Re-run the Stage 1.6 prep (see comment block at end of this file) — it must"
+  log "  pass the SAME --filename_format, or the cells read files they wrote themselves."
+  exit 2
+fi
 
 log "=== Stage 1.6 mixed sweep starting ==="
 log "  ingest source:  $SRC ($SRC_FILES files, $SRC_BYTES bytes)"
 log "  ingest target:  $WRITE_TARGET (cleaned per-cell)"
 log "  ingest tool:    fpsync -n $INGEST_N (FIXED across all cells)"
-log "  read scratch:   $READ_SCRATCH ($SCRATCH_FILES files, $SCRATCH_BYTES bytes)"
+log "  read scratch:   $READ_SCRATCH ($SCRATCH_FILES complete ${READ_SIZE} files, $SCRATCH_BYTES bytes total)"
 log "  read grid:      bs ∈ {${BS_LIST[*]}} × jobs ∈ {${JOBS_LIST[*]}}"
 log "  total cells:    $TOTAL"
 log "  consolidated log: $SWEEP_LOG"
@@ -86,7 +110,7 @@ for bs in "${BS_LIST[@]}"; do
     i=$(( i + 1 ))
     name="mixed-bs${bs}-jobs${jobs}"
     SHDIR="$SHDIR_ROOT/bs${bs}-jobs${jobs}"
-    note="Stage 1.6 mixed sweep cell $i/$TOTAL: concurrent ingest+read. Ingest = fpsync -n $INGEST_N (fixed, and set as a FRACTION OF THIS LEG'S OWN 1.5 write curve — an absolute rate carried across legs would make the two cells different workloads). Read = fio --rw=randread --bs=$bs --numjobs=$jobs --iodepth=8 --runtime=600 --ramp_time=60 libaio --direct=1 against pre-staged fio scratch ($SCRATCH_FILES files at $READ_SCRATCH). Wrapper: fpsync kicked off in background, fio runs in foreground for the timed window, fpsync killed when fio exits. Per-cell isolation via record-run.sh; any cell failure leaves rest of sweep intact."
+    note="Stage 1.6 mixed sweep cell $i/$TOTAL: concurrent ingest+read. Ingest = fpsync -n $INGEST_N (fixed, and set as a FRACTION OF THIS LEG'S OWN 1.5 write curve — an absolute rate carried across legs would make the two cells different workloads). Read = fio --rw=randread --bs=$bs --numjobs=$jobs --iodepth=8 --runtime=600 --ramp_time=60 libaio --direct=1 --filename_format=$READ_FILE_FMT against pre-staged fio scratch ($SCRATCH_FILES complete files at $READ_SCRATCH; the format matches the prep's, so this cell reads the pre-staged corpus and not files it laid out itself inside the timed window). Wrapper: fpsync kicked off in background, fio runs in foreground for the timed window, fpsync killed when fio exits. Per-cell isolation via record-run.sh; any cell failure leaves rest of sweep intact."
 
     log ""
     log "=== [cell $i/$TOTAL] $name ==="
@@ -128,11 +152,13 @@ for bs in "${BS_LIST[@]}"; do
         echo '[wrapper] fpsync backgrounded in own session, pid='\$FPSYNC_PID
 
         # Foreground: fio. --output-format=json+ writes JSON to stdout (cmd.log).
-        # Files already exist in scratch from prep, so fio skips layout phase.
+        # filename_format matches the prep's, so the files already exist at full
+        # size and fio skips the layout phase — checked before the sweep started.
         fio \\
           --name=read-$name \\
           --directory=$READ_SCRATCH \\
-          --rw=randread --bs=$bs --size=4G \\
+          --filename_format='$READ_FILE_FMT' \\
+          --rw=randread --bs=$bs --size=$READ_SIZE \\
           --numjobs=$jobs --iodepth=8 \\
           --ioengine=libaio --direct=1 \\
           --runtime=600 --ramp_time=60 --time_based --group_reporting \\
@@ -188,7 +214,7 @@ operation. For the timed-window-only duration, use raw/.run_start and raw/.run_e
 ## Cross-source check (post-aggregation)
 
 Run the post-cell cross-source consistency canary using THIS leg's Primary
-sources (docs/RUNBOOK.md § What gets recorded) and THIS leg's consistency
+sources (docs/RUNBOOK.md § The source table) and THIS leg's consistency
 relation, derived per filesystem and never ported across (STAGES.md D12):
 - filesystem-side Write sustained  vs  fpsync app-level
 - filesystem-side Read  sustained  vs  fio app-level
@@ -235,6 +261,7 @@ log "         rm -rf $SHDIR_ROOT/* (fpsync shared dirs, small)"
 #     -- fio \
 #         --name=fio-scratch-layout \
 #         --directory=${FS_MOUNT}/benchmarks/fio-scratch-mixed \
+#         --filename_format='fio-scratch-mixed.$jobnum.$filenum' \
 #         --rw=write --bs=1M --size=4G --numjobs=64 --iodepth=1 \
 #         --ioengine=libaio --direct=1 \
 #         --create_only=1 \

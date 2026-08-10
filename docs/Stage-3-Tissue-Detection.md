@@ -1,16 +1,14 @@
 # Stage 3 — Tissue detection (the 20× coord generator), measured identically on both filesystems
 
-> **STATUS — read first.** Nothing has run. Every number below is **`[PENDING]`** and every
-> interpretation section is **`[STORY PENDING RESULTS]`**.
->
 > **Every substage runs twice — once on WEKA (Leg A), once on FSx for Lustre (Leg B)** — with
-> everything else held constant. The delta is the result.
+> everything else held constant. The delta is the result, and a single leg is half an unfinished
+> comparison.
 >
 > **Stage 3 is also the 20× coord generator.** 3.0 is the single place the 20× contract is implemented;
 > its output coordinate lists gate all of Stages 4/5/6/7 **in both legs**.
 
 For project-wide conventions and recording philosophy see `../CLAUDE.md`; framing and the fairness contract
-`../PROJECT-THESIS.md`; stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`.
+`../PROJECT-THESIS.md`; stage map and the decision register `STAGES.md`; runbook `RUNBOOK.md`.
 
 ---
 
@@ -36,9 +34,9 @@ output tiles.
 **What that makes Stage 3 useful for.** It is the counterpart to Stage 2's metadata stress — a workload
 whose demand on storage is bounded by design while its demand on CPU scales with slide count. Together the
 two stages bracket the pipeline's load profile: one leans on the metadata path, one leans on compute.
-**Whether either filesystem becomes visible in Stage 3, and whether they differ, is `[STORY PENDING
-RESULTS]`** — the recording is nearly free, so we measure rather than assume, and a result showing storage
-materially busier than the algorithm implies would be a finding to chase, not noise to dismiss.
+**Whether either filesystem becomes visible here is measured, not assumed** — the recording is nearly
+free, and storage materially busier than the algorithm implies would be a finding to chase, not noise to
+dismiss.
 
 ---
 
@@ -46,7 +44,7 @@ materially busier than the algorithm implies would be a finding to chase, not no
 
 **Both legs measure POSIX tissue detection via CLAM. Neither measures object-store access** — CLAM's
 `create_patches_fp.py` and the underlying OpenSlide reads expect filesystem paths, and object access is out
-of scope for this project on both sides (`../PROJECT-THESIS.md` § scope).
+of scope for this project on both sides (`../PROJECT-THESIS.md` §9).
 
 **Say "POSIX tissue detection via CLAM" alongside any Stage 3 number**, and name the filesystem and its
 provisioned configuration.
@@ -55,8 +53,8 @@ provisioned configuration.
 
 ## ⚠️ Cross-leg comparability caveat — CPU is not directly comparable across legs
 
-Stage 3 is the first stage whose headline is a **CPU saturation curve**, which makes **D15** immediately
-load-bearing here:
+Stage 3 quotes a CPU curve off its concurrency sweep, which is what makes **D15**'s core accounting
+load-bearing here: a CPU reading computed over *total* cores is invalid across legs.
 
 **The WEKA client reserves CPU cores for its DPDK data path; the Lustre client does not** (it works through
 kernel threads). So the number of cores actually available to the application differs between legs, on the
@@ -66,7 +64,7 @@ throughput-per-core computed against total cores.
 **How this stage handles it (per D15):**
 - Record **cores reserved by the filesystem client**, **cores available to the application**, and **total
   cores** for every cell, on both legs.
-- The compute-saturation headline is computed over **application-available cores** on each leg.
+- Compute-saturation readings are computed over **application-available cores** on each leg.
 - On the WEKA leg, the DPDK cores are excluded from the saturation interpretation, because they busy-poll
   independently of the application's compute. On the Lustre leg there is no equivalent set to exclude —
   **so the exclusion list is a per-filesystem adapter parameter, not a constant.**
@@ -97,8 +95,8 @@ approach, so there is no alternative tool worth a comparison cell.
 
 ## The 20× coord-space contract as implemented here
 
-3.0 generates coords in 20× space, per dataset. Rationale and sources are **D1–D3**; implementation detail
-is in `../SCRIPT-TRACKER.md`, grounded in `lib/sweep-stage3-tissue-detection.sh`.
+3.0 generates coords in 20× space, per dataset. Rationale and sources are **D1–D3**; per-script detail is
+in `SCRIPT-TRACKER.md`.
 
 - **CAMELYON16** (`.tif`, native 20× pyramid level): `--patch_level 1 --patch_size 256 --step_size 256` —
   read the native 20× level directly at 256 px, no resize.
@@ -122,39 +120,36 @@ between legs is a data-integrity gate** — see the completeness note in 3.0 bel
 
 ## Recording approach (Stage 3-specific)
 
-Standard `record-run.sh`, with **per-filesystem source adapters** (**D12**).
+Standard `record-run.sh`. The measurement set every cell records, the cost inputs, the operational source
+table and its per-filesystem inversion are in `RUNBOOK.md` (**D12**, `../PROJECT-THESIS.md` §7) and are not
+restated here. Stage 3 changes that table in one place:
 
-**Stage-3 promotion:** per-core CPU is promoted to a **primary** source here, because the saturation curve
-is the headline. Interpret it per **D15** and the comparability caveat above — the set of cores excluded
-from the interpretation is a per-filesystem parameter.
+- **`sar -u` over application-available cores → Primary.** The CPU curve across the concurrency sweep is
+  what this stage is measuring — where it bends, and whether it saturates inside the grid at all, is the
+  result — so the CPU reading is a number that gets quoted rather than context. The excluded core set is a
+  **per-filesystem parameter** (**D15**), not a constant, and the reserved-core reading stays diagnostic on
+  the WEKA leg — DPDK cores busy-poll independently of the application's compute, so reading them as "the
+  application's CPU" would be wrong in exactly the direction that matters here.
 
-### Primary sources
+**One comparability rule governs how Stage 3's numbers are read.** CLAM's per-slide elapsed time and
+tile-coord counts come from the application itself, so they are comparable across legs by construction.
+Filesystem-reported operation counters are **not** — the two filesystems count operations under their own
+semantics — so treat them as **within-leg only** until counter semantics are verified equivalent and that
+verification is recorded (`Stage-2-Cataloging.md` carries the caveat in full).
 
-| Source | What it captures | Role |
-|---|---|---|
-| **App-level** (CLAM per-slide elapsed time + tile-coord count) | Per-slide detection time, total wallclock, slides/sec, tiles per slide | **The cross-leg headline** — identical work on identical files |
-| **`sar -u` over application-available cores** | Compute saturation curve as concurrency rises | **Primary for Stage 3.** Core set is per-filesystem (**D15**); reserved client cores excluded on the WEKA leg |
-| **Filesystem-side read bytes** (WEKA `Read`; Lustre `/proc/fs/lustre` OSC read) | Client-side bytes/sec | Small by construction; recorded to establish what the workload actually asks of storage |
-| **Filesystem-side operation counters** (WEKA `Ops/s`; Lustre MDC RPC counts) | The open + read pattern | The load-bearing **within-leg** cross-source check, since byte rates are too small to be reliable at 1 Hz. **Not a cross-leg metric** — see `Stage-2-Cataloging.md` comparability caveat |
-| **Filesystem-side write bytes** | HDF5 output volume | Small (~10–100 KB/slide); confirms the write side is not a factor |
-| **Wire counters for the path in use** | WEKA: DPDK-path counters. Lustre: client network counters (**primary on that leg**) | Cross-source consistency |
+### Cross-source canary — Stage 3 specifics
 
-### Diagnostic-only sources
+The general rules and the per-filesystem consistency relation are in `RUNBOOK.md`. Stage 3 adds two things:
 
-| Source | Note |
-|---|---|
-| `sar -u` over filesystem-reserved cores — **WEKA leg only** | DPDK cores busy-poll independently of application compute. Recorded, but never read as "the application's CPU" — and per **D15** their count is reported as part of WEKA's cost |
-| `sar -d` per block device | Network filesystems; expect ~zero for the mount. Confirms we are not hitting local disk |
-| Client network counters — **WEKA leg only** | Control plane only on that leg (DPDK bypass). **Primary on the Lustre leg** |
-| `nvidia-smi` | CLAM tissue detection is CPU-only; captured for completeness, expected idle |
-
-### Cross-source canary
-
-Per **D12**, derived per filesystem. Within each leg: wire counters track the filesystem-side byte counter
-at that filesystem's expected ratio; the application-available-core saturation curve flattens at the
-concurrency knee; and CLAM's reported per-slide time reconciles with `slide_count × per-slide cost ÷
-concurrency` as a basic accounting check. **At Stage 3's small byte rates the operation-count curve is the
-load-bearing check**, since per-second byte values are too small to ratio reliably at 1 Hz.
+- **At Stage 3's small byte rates the operation-count curve is the load-bearing check**, because
+  per-second byte values are too small to ratio reliably at 1 Hz. A byte-based canary tripping on a short
+  cell is the sampling limit documented in `Stage-2-Cataloging.md`, not a consistency failure — record that
+  judgement rather than silently widening the band.
+- **An app-level accounting check:** CLAM's own per-slide elapsed times, summed over the slides the cell
+  processed and divided by the cell's concurrency, must account for the recorded window. It is the one
+  check that the `n` chunks really ran in parallel and that the recorded window covers the work — a
+  serialised launch or a mis-built chunk set yields a complete, plausible cell whose concurrency label is
+  wrong, and nothing on the filesystem side would show it.
 
 ---
 
@@ -173,13 +168,12 @@ load-bearing check**, since per-second byte values are too small to ratio reliab
 | **Why this exists** | Two purposes at once. (1) It is **the 20× coord generator** — the single implementation point of the contract that governs Stages 4–7, so it must run before them in each leg. (2) It is the compute-leaning counterpart to Stage 2's metadata stress, measuring what each filesystem is asked for by a workload whose I/O is bounded by design. |
 | **Why identical on both** | Same CLAM commit, same per-dataset args, same chunking scheme, same concurrency grid, same datasets. Only `$FS_MOUNT` differs. |
 | **Concurrency grid rationale** | {1, 8, 64} — a log-spaced 3-point grid is sufficient to resolve a compute-leaning saturation curve. The top point is chosen relative to the instance's core count so that saturation is reached without thrashing; per **D15** the *effective* parallelism differs between legs because the WEKA client reserves cores, and both the nominal `n` and the available-core count are recorded per cell. |
-| **20× effect on this stage** | The tile *count* per slide changes with magnification, but the dominant segmentation cost is Otsu + morphology **on the thumbnail**, which is magnification-independent — so 20× changes what Stage 3 *emits*, not primarily what it costs. The reduced tile count propagates downstream as smaller inputs for Stages 4–7. Actual runtime `[PENDING]` — recorded, not estimated. |
-| **Sweep driver** | `lib/sweep-stage3-tissue-detection.sh` |
-| **Aggregator** | `lib/aggregate-stage3-tissue-detection.py` — application-available-core CPU headline (reserved-core exclusion list as a per-filesystem parameter, **D15**) plus per-timestamp client-summed filesystem counters; pivoted by `--fs` |
-| **Aggregated output** | `s3.0-tissue-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` — to fill in per cell: compute-saturation curve over application-available cores (sustained + peak across n ∈ {1, 8, 64}, both datasets), throughput (slides/sec), filesystem-side read bytes and operation counts, 20× tiles per slide, output completeness |
-| **Cross-source validation** | `[PENDING]` — expect noisy byte-ratio checks at Stage 3's small per-second volumes; the operation-count curve is the load-bearing check. If a byte-based canary trips on a short cell, treat it as the sub-second sampling limit documented in `Stage-2-Cataloging.md`, not as a consistency failure — and record that judgement rather than silently widening the band |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **20× effect on this stage** | The tile *count* per slide changes with magnification, but the dominant segmentation cost is Otsu + morphology **on the thumbnail**, which is magnification-independent — so 20× changes what Stage 3 *emits*, not primarily what it costs. The reduced tile count propagates downstream as smaller inputs for Stages 4–7. Runtime is recorded, not estimated. |
+| **Sweep driver** | `../scripts/sweep-stage3-tissue-detection.sh` |
+| **Aggregation step** | Roll the cells up into the summary CSV, with the compute-saturation reading taken over application-available cores (**D15**) — `../scripts/aggregate-stage3-tissue-detection.py`; its interface is in `SCRIPT-TRACKER.md`. **Grouping the roll-up on the `fs` field is deferred work** (`RUNBOOK.md`), so until it lands the cross-filesystem view is assembled by hand from the two legs' CSVs |
+| **Aggregated output** | `s3.0-tissue-summary.csv` |
+| **Recorded per cell** | Compute-saturation curve over application-available cores (sustained + peak across n ∈ {1, 8, 64}, both datasets), throughput (slides/sec), filesystem-side read bytes and operation counts, 20× tiles per slide, output completeness — plus the full measurement set and the cost inputs (`RUNBOOK.md`) |
+| **Cross-source check** | Byte-ratio checks are noisy at Stage 3's small per-second volumes; the operation-count curve is the load-bearing check. If a byte-based canary trips on a short cell, treat it as the sub-second sampling limit documented in `Stage-2-Cataloging.md`, not as a consistency failure — and record that judgement rather than silently widening the band |
 | **Expected-completeness note — the zero-tissue DX2 slides** | Two BRCA slides — **`TCGA-A7-A0CD-01Z-00-DX2`** and **`TCGA-A7-A6VX-01Z-00-DX2`** — are known to yield no tissue contours under CLAM's default segmentation parameters (`sthresh=8`). Both are DX2 (secondary diagnostic) slides, typically sparser than DX1 primaries. They open cleanly via OpenSlide; CLAM reports zero contours to process and writes no `.h5` because there are no coordinates. **This is real CLAM behaviour given the slides and the default parameters — not a benchmark failure, and independent of both storage and magnification.** Production CLAM workflows tune segmentation per slide; we accept the resulting completeness rate and record it. |
 | **Coord-equivalence gate between legs (data integrity)** | Because the completeness rate and per-slide tile counts are **storage-independent**, they double as a **data-integrity check across legs**: for a given dataset and concurrency, the set of slides producing coords and the tile count per slide should be **identical on WEKA and on Lustre**. A divergence means the two legs did not process the same inputs — different bytes, a truncated hydration, or a different CLAM commit — and is a **fail-loud condition that invalidates downstream comparison**, not a curiosity. Run this check before consuming 3.0 output in Stage 4 of the second leg. |
 
@@ -193,8 +187,8 @@ load-bearing check**, since per-second byte values are too small to ratio reliab
 | `openslide-python` | record at run time | pip / conda | 3.0 (via CLAM) |
 | `libopenslide` | record at run time | system package | 3.0 (transitively) |
 | `opencv-python`, `h5py`, `numpy`, `pandas` | record at run time | conda env | 3.0 (via CLAM) |
-| `record-run.sh` | live | `lib/record-run.sh` | every substage |
-| `aggregate-stage3-tissue-detection.py` | live | `lib/aggregate-stage3-tissue-detection.py` | 3.0 |
+| `record-run.sh` | live | `../scripts/record-run.sh` | every substage |
+| `aggregate-stage3-tissue-detection.py` | live | `../scripts/aggregate-stage3-tissue-detection.py` | 3.0 |
 | `weka stats realtime` | record at run time | system | WEKA leg recording |
 | `lctl`, `lfs` | record at run time | Lustre client | Lustre leg recording |
 
@@ -207,56 +201,49 @@ load-bearing check**, since per-second byte values are too small to ratio reliab
 
 Byte-verified held-constant inputs, identical in both legs (**D6**).
 
-## Decision log (Stage 3-scoped)
+## Decision register (Stage 3-scoped)
 
-- **2026-07-31 — Tool: CLAM `create_patches_fp.py`.** *Why:* literature standard; its HDF5 coord output is
-  directly consumable by Stages 4–6 with no conversion; reproducible with stock CLAM by anyone checking our
-  numbers.
-- **2026-07-31 — Per-dataset 20× args** (CAMELYON16 `--patch_level 1 --patch_size 256`; TCGA-BRCA
-  `--patch_level 0 --patch_size 512 --step_size 512`). *Why:* matches the published foundation-model
-  protocol and keeps the level-0 coord step at 512 px for both datasets, so the coord→tile divisor is
-  uniform. Full rationale and sources in **D1–D3**.
-- **2026-07-31 — Magnification keyed on mpp, not the `objective-power` tag.** *Why:* the tag is
-  demonstrably unreliable on BRCA, and a mis-keyed slide silently mis-tiles to 10× and halves its coord
-  density — a correctness bug that would propagate into every downstream stage on both legs.
-- **2026-07-31 — Both datasets, reported separately.** *Why:* vendor-format diversity (Aperio SVS vs
-  OME-TIFF) at modest extra runtime; and their differing directory layouts affect metadata-op counts, which
-  should not be averaged away (mirrors the Stage 2 decision).
-- **2026-07-31 — Concurrency grid {1, 8, 64}.** *Why:* a 3-point log-spaced grid resolves a compute-leaning
-  saturation curve; a fourth higher point would mostly measure thrashing. Per **D15**, effective parallelism
-  differs across legs because the WEKA client reserves cores, so both nominal `n` and available cores are
-  recorded.
-- **2026-07-31 — `--stitch` omitted.** *Why:* the stitched visualization is not consumed by any downstream
-  stage, and including it would add per-cell cost unrelated to what the stage measures.
-- **2026-07-31 — Per-core CPU promoted to primary, computed over application-available cores.** *Why:* the
-  saturation curve is the headline for this stage, and honesty about what is being measured requires
-  excluding cores that busy-poll independently of application compute. **The exclusion set is a
-  per-filesystem parameter (D15), not a constant** — this is the clearest case in the project where a
-  recording detail cannot be shared between legs.
-- **2026-07-31 — Single-pass per cell.** *Why:* matches Stage 2, matches how the job is really run, keeps
-  the unit of work identical across legs. Sub-second-cell sampling limits are handled by the resolution
-  chosen in `Stage-2-Cataloging.md`, applied identically to both legs.
-- **2026-07-31 — Output to a separate `tissue-detection/3.0/…` directory.** *Why:* the canonical dataset
-  directory stays read-only so both legs read byte-identical inputs; per-cell output dirs are cleanly
-  removable.
-- **2026-07-31 — Coord equivalence between legs is a fail-loud data-integrity gate.** *Why:* completeness
-  and per-slide tile counts are storage-independent, so any cross-leg divergence proves the legs did not
-  process identical inputs — which would invalidate every downstream comparison. Cheap to check, and it
-  catches a class of error (partial hydration, wrong commit) that is otherwise invisible until the numbers
-  look strange.
-
-## Change log
-
-| When | Change |
-|---|---|
-| 2026-07-31 | Stage 3 roadmap created for the WEKA-vs-Lustre comparison. Methodology (CLAM tool choice, per-dataset 20× args, mpp-keying, chunked concurrency, `--stitch` omission, single-pass, separate output dir, CPU-promoted-to-primary) retained with rationale restated. Added: per-leg framing, the **D15** CPU-comparability caveat and per-filesystem core-exclusion parameter, the **coord-equivalence data-integrity gate** between legs, and per-filesystem recording adapters. Removed all inherited results, wallclock estimates, and outcome expectations; the compute-vs-storage characterisation is now stated as a property of the algorithm, with visibility of either filesystem left `[STORY PENDING RESULTS]`. |
+- **Tool: CLAM `create_patches_fp.py`.** *Why:* literature standard; its HDF5 coord output is directly
+  consumable by Stages 4–6 with no conversion; reproducible with stock CLAM by anyone checking our numbers.
+- **Per-dataset 20× args** (CAMELYON16 `--patch_level 1 --patch_size 256`; TCGA-BRCA `--patch_level 0
+  --patch_size 512 --step_size 512`). *Why:* matches the published foundation-model protocol and keeps the
+  level-0 coord step at 512 px for both datasets, so the coord→tile divisor is uniform. Full rationale and
+  sources in **D1–D3**.
+- **Magnification keyed on mpp, not the `objective-power` tag.** *Why:* the tag is demonstrably unreliable
+  on BRCA, and a mis-keyed slide silently mis-tiles to 10× and halves its coord density — a correctness bug
+  that would propagate into every downstream stage on both legs.
+- **Both datasets, reported separately.** *Why:* vendor-format diversity (Aperio SVS vs OME-TIFF) at modest
+  extra runtime; and their differing directory layouts affect metadata-op counts, which should not be
+  averaged away.
+- **Concurrency grid {1, 8, 64}.** *Why:* a 3-point log-spaced grid resolves a compute-leaning saturation
+  curve; a fourth higher point would mostly measure thrashing. Per **D15**, effective parallelism differs
+  across legs because the WEKA client reserves cores, so both nominal `n` and available cores are recorded.
+- **`--stitch` omitted.** *Why:* the stitched visualization is not consumed by any downstream stage, and
+  including it would add per-cell cost unrelated to what the stage measures.
+- **Per-core CPU is a primary source here, computed over application-available cores.** *Why:* the CPU
+  curve across the concurrency sweep is what this stage measures, so the reading is quoted rather than used
+  as context — and quoting it honestly requires excluding cores that busy-poll independently of
+  application compute.
+  **The exclusion set is a per-filesystem parameter (D15), not a constant** — this is the clearest case in
+  the project where a recording detail cannot be shared between legs.
+- **Single-pass per cell.** *Why:* matches how the job is really run and keeps the unit of work identical
+  across legs. Sub-second-cell sampling limits are handled by the resolution chosen in
+  `Stage-2-Cataloging.md`, applied identically to both legs.
+- **Output to a separate `tissue-detection/3.0/…` directory.** *Why:* the canonical dataset directory stays
+  read-only so both legs read byte-identical inputs; per-cell output dirs are cleanly removable.
+- **Coord equivalence between legs is a fail-loud data-integrity gate.** *Why:* completeness and per-slide
+  tile counts are storage-independent, so any cross-leg divergence proves the legs did not process
+  identical inputs — which would invalidate every downstream comparison. Cheap to check, and it catches a
+  class of error (partial hydration, wrong commit) that is otherwise invisible until the numbers look
+  strange.
 
 ## Cross-references
 
 - `../CLAUDE.md` — project rules: recording philosophy, per-filesystem adapters, framing
 - `../PROJECT-THESIS.md` — the question, held-constant contract, both asymmetries, scope
-- `STAGES.md` — stage map, per-leg plan, decision log **D1–D16** (esp. **D1–D3** magnification, **D15** CPU)
+- `STAGES.md` — stage map, per-leg plan, cross-stage decision register (esp. **D1–D3** magnification,
+  **D15** CPU)
 - `Stage-2-Cataloging.md` — the cross-leg ops-counter comparability caveat and the sub-second-cell open item, both of which apply here
-- `../SCRIPT-TRACKER.md` — per-script reference including the 20× contract implementation
-- `README.md` — operational runbook and both canaries
-- `INDEX.md` — append-only run history (auto-generated)
+- `SCRIPT-TRACKER.md` — per-script reference including the 20× contract implementation
+- `RUNBOOK.md` — the per-cell measurement set, the source table, both canaries
+- `../runs/INDEX.md` — append-only run history (auto-generated)

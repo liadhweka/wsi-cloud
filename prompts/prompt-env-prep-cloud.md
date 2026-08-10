@@ -22,24 +22,25 @@ by `prompts/handoff-cloud.md`.
 
 ## Context you need
 
-**This project compares two filesystems** — WEKA (Leg A, now) and FSx for Lustre (Leg B, later) — on this
-same instance. So the stack you prepare must serve **both**, even though only WEKA is mounted today.
+**This project compares two filesystems** — WEKA (Leg A) and FSx for Lustre (Leg B) — one leg at a time, on
+an identically rebuilt instance. So the stack you prepare must serve **both**, whichever filesystem this
+rebuild will mount.
 
-**GPUDirect Storage is in scope and is NOT optional.** An earlier version of this plan dropped GDS; it was
-reinstated. You need the GDS stack present and working because:
-- The Lustre leg uses **true GDS over EFA**, and
-- the WEKA leg still runs the **same cuFile code path in compat mode**, which needs `libcufile` regardless.
+**GPUDirect Storage is in scope and is NOT optional.** You need the GDS stack present and working because:
+- the Lustre leg uses **true GDS over EFA**, and
+- the WEKA leg runs the **same cuFile code path** — expected to be compat mode, which is settled empirically
+  in the benchmark session and not here — and needs `libcufile` either way.
 
-So: verify the whole GDS stack now, even if this instance's current mount may not use the direct path.
+So: verify the whole GDS stack, even if the filesystem this rebuild mounts may not use the direct path.
 
 ## Do these, in order
 
 0. **Reconcile `env.sh` against what the instance actually is** — first, because everything downstream trusts
    these values and one of them is a `MUST_MATCH` contract field.
 
-   The human typed `INSTANCE_ID`, `AMI_ID`, `INSTANCE_TYPE`, `AWS_REGION` and `AWS_AZ` into
-   `env.sh` by hand at § 4.2. Re-derive all five from instance metadata — reuse the `imds()` helper
-   already in `scripts/env-contract.py` rather than writing another `curl` block — and **compare**:
+   The human typed `INSTANCE_ID`, `AMI_ID`, `INSTANCE_TYPE`, `AWS_REGION` and `AWS_AZ` into `env.sh` by hand
+   when they created it from `env.example.sh`. Re-derive all five from instance metadata — reuse the `imds()`
+   helper already in `scripts/env-contract.py` rather than writing another `curl` block — and **compare**:
 
    - **Agreement** → say so, and move on.
    - **Disagreement** → the metadata wins; **write the metadata value into `env.sh`** and report both values.
@@ -94,9 +95,10 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
 9. **AWS access sanity.** Confirm the instance can reach its S3 bucket **via the IAM instance profile, not
    credentials on disk** — a read and a small write. This is the durable store the whole project depends on;
    if it does not work, everything downstream silently has nowhere safe to land.
-10. **The kernel, running vs pending.** `kernel` is a `MUST_MATCH` contract field, and § 3.2's `apt-get upgrade`
-    can install a newer `linux-image` that is **staged but not yet booted** — so `uname -r` alone can report a
-    kernel this instance will stop running at its next reboot, and there *are* later reboots.
+10. **The kernel, running vs pending.** `kernel` is a `MUST_MATCH` contract field, and the system update the
+    human ran while preparing this instance can install a newer `linux-image` that is **staged but not yet
+    booted** — so `uname -r` alone can report a kernel this instance will stop running at its next reboot,
+    and there *are* later reboots.
     ```bash
     uname -r                                  # running
     ls -1 /boot/vmlinuz-* 2>/dev/null         # is a newer one staged?
@@ -121,11 +123,11 @@ So: verify the whole GDS stack now, even if this instance's current mount may no
 5. **A ready / not-ready verdict** plus a numbered list of anything the human still needs to resolve, each
    with a recommendation.
 
-Then **stop.** The human resumes `docs/cloud-setup/NEW-CLOUD-SETUP.md` at **Part 6** — provision the WEKA
-cluster, record its configuration, mount it, write the first environment contract — and then pastes the
-project handoff (Part 7). Memory restore and the Hugging Face login are Parts 4.3 and 4.4, i.e. **before**
-this prompt; note that `hf` does not exist until Part 7 builds the Python environments, so the human may
-still owe that step.
+Then **stop.** The human resumes `docs/cloud-setup/NEW-CLOUD-SETUP.md` at the filesystem-provisioning part —
+provision this leg's filesystem, record its configuration, mount it, write the first environment contract —
+and then pastes the project handoff, `prompts/handoff-cloud.md`. Restoring Claude's memories and obtaining the
+Hugging Face token both come **before** this prompt; the `hf` CLI does not exist until the project handoff
+builds the Python environments, so the human may still owe the actual login.
 
 **Three things you must hand back explicitly, because later steps refuse to run without them:**
 - the **full path of the system `libcufile`**, which **you** have written into `LIBCUFILE_PRELOAD` in

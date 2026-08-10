@@ -37,10 +37,26 @@ mkdir -p "$SCRATCH"
 
 # One-time scratch layout (unrecorded) so every measured run is pure random-read
 # over the SAME reused files.
-if [ ! -e "$SCRATCH/randr.0.0" ]; then
-  echo "[prep] one-time scratch layout (~128 GB, unrecorded; a few minutes)..."
+#
+# The layout is complete only when ALL $NJOBS files exist at full $SIZE. Testing a
+# single sentinel file accepts a layout that was killed after job 0: fio then creates
+# the missing files during the measured run's own setup, so the cell reads a mix of
+# pre-staged and just-written data while the NOTE recorded below asserts a pure read
+# over reused files — and the working set differs between labels, destroying the
+# label-to-label comparison this script exists to produce. fio's --create_only is
+# idempotent: files already at full size are left untouched (mtime unchanged), while
+# missing or short ones are laid out, so re-running the layout is safe.
+SIZE_BYTES=$(numfmt --from=iec "$SIZE")
+n_laid_out=$(find "$SCRATCH" -maxdepth 1 -name 'randr.*.0' -size "${SIZE_BYTES}c" | wc -l)
+if [ "$n_laid_out" -ne "$NJOBS" ]; then
+  echo "[prep] scratch layout incomplete ($n_laid_out/$NJOBS files at $SIZE); laying out ${NJOBS}×${SIZE} (unrecorded; a few minutes)..."
   fio --name=randr --directory="$SCRATCH" --rw=randread --bs="$BS" \
       --size="$SIZE" --numjobs="$NJOBS" --create_only=1 >/dev/null
+  n_laid_out=$(find "$SCRATCH" -maxdepth 1 -name 'randr.*.0' -size "${SIZE_BYTES}c" | wc -l)
+  if [ "$n_laid_out" -ne "$NJOBS" ]; then
+    echo "[prep] FATAL: layout is $n_laid_out/$NJOBS after fio — refusing to measure a cell whose working set is not the one the recorded note claims" >&2
+    exit 1
+  fi
 fi
 
 TS=$(date -u +%Y-%m-%d-%H%M%S)
@@ -64,4 +80,4 @@ print(f"\n  fio app-level: {gbs:.2f} GB/s  ({gibs:.2f} GiB/s)  {r['iops']:.0f} I
 PY
 echo "  Run dir: $RECORD_RUN_DIR"
 echo "  The primary number is the filesystem-side read for THIS leg — see"
-echo "  docs/RUNBOOK.md § What gets recorded for which source that is."
+echo "  docs/RUNBOOK.md § The source table for which source that is."

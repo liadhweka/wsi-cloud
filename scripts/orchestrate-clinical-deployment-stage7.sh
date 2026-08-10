@@ -52,12 +52,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source env.sh}"
 PY="$CONDA_ENV/bin/python"
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -119,15 +119,38 @@ echo "[orch] ramp=${RAMP}s runtime=${RUNTIME}s" | tee -a "$ORCH_LOG"
 
 PIDS=()
 
-# GPU map for N concurrent inference processes. The instance has 4 GPUs
-# (STAGES.md D10), so N>4 deliberately OVERSUBSCRIBES them — which is the point of
-# the high-concurrency Stage 7.2 cells: they measure storage and queueing, not GPU
+# GPU map for N concurrent inference processes. N greater than the instance's GPU
+# count deliberately OVERSUBSCRIBES them — which is the point of the
+# high-concurrency Stage 7.2 cells: they measure storage and queueing, not GPU
 # throughput.
-# ⏳ D-8: this is plain round-robin over 0..N_GPU-1. Substitute the NUMA/NIC-aware
-# ordering once the topology map is derived on the real instance; on the previous
-# hardware the pinning order measurably mattered for the GPU-direct path, so it is
-# expected to matter here too — but the map itself must be re-derived, never copied.
-N_GPU_TOTAL="${N_GPU_TOTAL:-4}"
+# ⏳ D-8: this is plain round-robin over 0..N_GPU_TOTAL-1. Substitute the
+# NUMA/NIC-aware ordering once the topology map is derived on the real instance; on
+# the previous hardware the pinning order measurably mattered for the GPU-direct
+# path, so it is expected to matter here too — but the map itself must be
+# re-derived, never copied.
+#
+# ── Guard: the GPU count is read from the instance, not assumed ──────────────────
+# A hardcoded default is a hardware fact baked into a script that outlives the
+# instance it was written for. Set too low, gpu_for_proc round-robins over a subset
+# and the remaining GPUs sit idle while the cell reports a complete per-slide
+# latency set for a layout nobody chose. Set too high, CUDA_VISIBLE_DEVICES is
+# handed an index that does not exist and silently DROPS it rather than erroring.
+# Both produce a plausible number, and nothing downstream can detect either. So:
+# default to what is actually present, and refuse an explicit override above it.
+_n_gpus_present="$(nvidia-smi -L 2>/dev/null | wc -l)"
+if [ "${_n_gpus_present:-0}" -eq 0 ]; then
+  echo "FATAL: no GPUs visible (nvidia-smi -L returned nothing) -- Stage 7 runs inference on GPU." >&2
+  exit 1
+fi
+N_GPU_TOTAL="${N_GPU_TOTAL:-$_n_gpus_present}"
+if ! [[ "$N_GPU_TOTAL" =~ ^[1-9][0-9]*$ ]] || [ "$N_GPU_TOTAL" -gt "$_n_gpus_present" ]; then
+  echo "FATAL: N_GPU_TOTAL='$N_GPU_TOTAL', but this instance has $_n_gpus_present GPU(s)" >&2
+  echo "       (valid indices 0..$((_n_gpus_present - 1)))." >&2
+  echo "       gpu_for_proc would hand CUDA_VISIBLE_DEVICES an index that does not exist;" >&2
+  echo "       it is dropped silently and the cell reports latencies for a GPU layout" >&2
+  echo "       nobody chose. Unset N_GPU_TOTAL to use what is present." >&2
+  exit 1
+fi
 gpu_for_proc() {
   local proc_id="$1"; local n="$2"
   echo $(( proc_id % N_GPU_TOTAL ))
@@ -159,7 +182,7 @@ workload_inference() {
 
     # kvikIO cells need the SYSTEM libcufile preloaded; cuCIM cells leave it UNSET
     # (cuCIM segfaults under a preloaded newer libcufile — per
-    # cucim-segfaults-when-libcufile-is-ld-preloaded memory). Scope per-cell here.
+    # `docs/RUNBOOK.md` (mixed-backend sweeps)). Scope per-cell here.
     local preload=""
     if [ "$INFER_BACKEND" = "kvikio" ]; then preload="$LIBCUFILE_SYSTEM"; fi
 

@@ -37,12 +37,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source env.sh}"
 PY="$CONDA_ENV/bin/python"
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -50,7 +50,16 @@ CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 # Default config (override via env)
 EXTRACT_MODEL="${EXTRACT_MODEL:-virchow2}"
 EXTRACT_DATASET_TAG="${EXTRACT_DATASET_TAG:-brca50}"
-EXTRACT_GPUS="${EXTRACT_GPUS:-2,3,6,7}"
+# ⏳ D-8: the SET is valid for a 4-GPU instance; the ORDER is not yet derived.
+# NUMA/NIC-aware ordering needs `nvidia-smi topo -m` on the real instance, so
+# this is deliberately the identity list rather than a carried-over one -- the
+# previous environment's list (2,3,6,7) named GPUs that do not exist here, and
+# CUDA_VISIBLE_DEVICES drops unknown indices silently rather than erroring, so
+# the extract workload ran at half width while the cell claimed full width.
+# The guard below catches a wrong list; it cannot catch a wrong ORDER, which is
+# why D-8 still gates. Kept identical in shape to Stage 6.D's PIPELINE_GPUS so
+# the two sibling orchestrators cannot drift apart.
+EXTRACT_GPUS="${EXTRACT_GPUS:-0,1,2,3}"
 EXTRACT_N_GPUS="${EXTRACT_N_GPUS:-4}"
 MIL_FEATURES_TAG="${MIL_FEATURES_TAG:-brca_full}"
 INGEST_N="${INGEST_N:-4}"
@@ -58,6 +67,35 @@ INGEST_SRC="${INGEST_SRC:-${SCRATCH_DIR:?SCRATCH_DIR is unset -- source env.sh}/
 INGEST_DST="${INGEST_DST:-${FS_MOUNT}/runs-stage6c-ingest-target}"
 VIEWER_N="${VIEWER_N:-4}"
 VIEWER_SCRATCH="${VIEWER_SCRATCH:-${FS_MOUNT}/benchmarks/fio-scratch-6c-viewer}"
+
+# ── Guard: every requested GPU index must actually exist ─────────────────────────
+# CUDA_VISIBLE_DEVICES silently DROPS indices that do not exist rather than
+# erroring, so a stale list does not fail -- the extract workload just runs on
+# fewer GPUs than intended and reports its throughput as though it had them all.
+# In a concurrent-workload cell that is doubly wrong: the number is low, AND the
+# contention the cell exists to measure never happened at the intended level.
+# Nothing downstream can see it, so this refuses up front.
+_n_gpus_present="$(nvidia-smi -L 2>/dev/null | wc -l)"
+if [ "${_n_gpus_present:-0}" -eq 0 ]; then
+  echo "FATAL: no GPUs visible (nvidia-smi -L returned nothing) -- 6.C needs the extract workload." >&2
+  exit 1
+fi
+IFS=',' read -ra _req_gpus <<< "$EXTRACT_GPUS"
+for _g in "${_req_gpus[@]}"; do
+  if ! [[ "$_g" =~ ^[0-9]+$ ]] || [ "$_g" -ge "$_n_gpus_present" ]; then
+    echo "FATAL: EXTRACT_GPUS='$EXTRACT_GPUS' names GPU index '$_g', but this instance has" >&2
+    echo "       $_n_gpus_present GPU(s) (valid indices 0..$((_n_gpus_present - 1)))." >&2
+    echo "       CUDA_VISIBLE_DEVICES would silently drop it and the extract workload would run" >&2
+    echo "       on fewer GPUs than this cell claims. Re-derive the GPU list for THIS instance" >&2
+    echo "       (deferred item D-8) and export EXTRACT_GPUS." >&2
+    exit 1
+  fi
+done
+if [ "${#_req_gpus[@]}" -ne "$EXTRACT_N_GPUS" ]; then
+  echo "FATAL: EXTRACT_GPUS lists ${#_req_gpus[@]} GPU(s) but EXTRACT_N_GPUS=$EXTRACT_N_GPUS." >&2
+  echo "       These must agree, or the extractor's world size will not match its device list." >&2
+  exit 1
+fi
 
 # Args
 WORKLOADS=""
@@ -86,6 +124,18 @@ ORCH_LOG="$RUN_DIR/orchestration.log"
 echo "[orch] $(date -u +%FT%TZ) starting" | tee "$ORCH_LOG"
 echo "[orch] workloads: $WORKLOADS" | tee -a "$ORCH_LOG"
 echo "[orch] runtime=${RUNTIME}s ramp=${RAMP}s" | tee -a "$ORCH_LOG"
+# The resolved workload shape. None of it is recoverable from anywhere else: the
+# command record-run.sh captures is only --workloads/--ramp/--runtime/--run-dir, and
+# metadata.json carries no workload fields. EXTRACT_GPUS sets the concurrency the
+# extract workload actually ran at and MIL_FEATURES_TAG sets which corpus MIL trained
+# from — the two values that most directly determine what this contention cell
+# measured. Without them a 6.C cell cannot be shown to have run the same shape as its
+# other-leg counterpart even by hand, and a contention cell whose shape is unknown is
+# not comparable to anything.
+echo "[orch] extract: model=$EXTRACT_MODEL dataset_tag=$EXTRACT_DATASET_TAG gpus=$EXTRACT_GPUS n_gpus=$EXTRACT_N_GPUS" | tee -a "$ORCH_LOG"
+echo "[orch] mil:     features_tag=$MIL_FEATURES_TAG" | tee -a "$ORCH_LOG"
+echo "[orch] ingest:  n=$INGEST_N src=$INGEST_SRC dst=$INGEST_DST" | tee -a "$ORCH_LOG"
+echo "[orch] viewer:  n=$VIEWER_N scratch=$VIEWER_SCRATCH" | tee -a "$ORCH_LOG"
 
 # Each workload runs in its own background subshell. They each wait for the
 # barrier file to appear before kicking off their steady-state work. Once all

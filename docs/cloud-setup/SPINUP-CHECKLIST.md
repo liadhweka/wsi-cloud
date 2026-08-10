@@ -4,9 +4,10 @@ Everything that must be decided or provisioned when standing up **Leg A (WEKA on
 it comes up. One or two lines each, with the reason — the reason matters, because several of these are
 cheap now and expensive later.
 
-> **Instance size is `g6e.24xlarge` (subject to change)** — `g6e.48xlarge` is the upgrade (8× L40S,
-> 400 Gbps) and `g6e.12xlarge` the budget floor (100 Gbps). Nothing here is locked; see
-> `../runs/STAGES.md` decision log for the revisit trigger.
+> **The compute instance is `g6e.24xlarge`.** It is the single largest held-constant variable and must be
+> identical in both legs. It carries a **pre-committed revisit trigger** — recorded in advance so the call is
+> not made later under sunk cost; the trigger and its consequences are **D10** in
+> [`STAGES.md`](../STAGES.md).
 
 > **How this file relates to [`NEW-CLOUD-SETUP.md`](NEW-CLOUD-SETUP.md).** This one is **what to decide, and
 > why** — hand it to whoever provisions. That one is **how to do it**, click by click, in order. Where a fact
@@ -37,17 +38,21 @@ cheap now and expensive later.
     automate installing a GPU driver (it is a reboot-class task). Launching plain Ubuntu therefore stalls the
     setup before any software work can begin. Use a GPU-bearing image — e.g. the current *AWS Deep Learning
     Base GPU AMI* on Ubuntu — and **confirm the exact name in the console**, because the variants change.
-    *Then record the AMI ID:* `kernel`, `driver_version` and `cuda_version` are held-constant fields in the
-    cross-leg contract, so **Leg B must rebuild from the same image** or the comparison is invalid. This is
-    still an **open decision** — `C10` in the `cloud-session-open-items` memory.
+    *Then pin and record the AMI ID:* `kernel`, `driver_version` and `cuda_version` are held-constant fields
+    in the cross-leg contract, so **Leg B must rebuild from the same image** or the comparison is invalid.
+    "Latest" is not a pin — a newer base image silently changes the kernel and the driver.
 
 3. **Instance type: `g6e.24xlarge`** — 96 vCPU, 768 GiB RAM, 4× NVIDIA L40S (178 GiB GPU memory),
    **200 Gbps** network (2 network cards), 2× 1900 GB local NVMe. This is the *client* in both legs; it
    must be identical across Leg A and Leg B or the comparison isn't valid.
 
 4. **Launch it EFA-capable, even though Leg A doesn't use EFA.** WEKA runs DPDK over ENA, but Leg B's
-   FSx-Lustre needs EFA for GPUDirect Storage and to escape a 5 Gbps-per-OSS cap — and the instance must
-   be the same one in both legs, so EFA capability has to be there from the start.
+   FSx-Lustre needs EFA both for GPUDirect Storage and to escape the **per-client-per-file-server bandwidth
+   cap** that applies without it — a cap that would break the "Lustre at maximum" fairness basis invisibly.
+   The instance must be the same one in both legs, so EFA capability has to be there from the start.
+   *Fetch the current cap figure from
+   [FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html) when
+   sizing — per-client caps change.*
 
 5. **EFA security group rule.** EFA requires a security group with a *self-referencing* rule allowing all
    traffic inbound and outbound within the group; set it up now so Leg B isn't blocked on a networking
@@ -95,6 +100,16 @@ These five are decided at creation time and are expensive to change, so capture 
 12. **Usable capacity: ~20–25 TB.** Covers the datasets (~1.8 TB), the 20× raw-TIFF artifact (~7 TB at
     full cohort), extracted features, heatmaps, and fio scratch, with headroom.
 
+    ⚠ **Two of those are sized by cache, not by convenience, so treat them as capacity inputs rather than
+    scratch** — both must exceed **the larger of the two filesystems' server-side caches** to read genuinely
+    cold (**D13**), and both are *retained* rather than written-and-deleted per cell:
+    - the **Stage-1.0 read corpus** (the ceilings every "% of ceiling" divides by), and
+    - the **Stage 6.B synthetic corpus** (see 13b).
+
+    So the cache figures in 13b are not bookkeeping — they set a floor under this line item. Confirm the
+    total still fits once both are computed, and note that on FSx capacity is simultaneously a performance
+    knob (**D7**), so raising capacity to fit them also changes what is being measured.
+
 13. **Protection / erasure-coding scheme — write down whatever you choose.** The cross-source recording
     canary validates wire-level traffic against application-level throughput using the write
     amplification the EC scheme implies, so the scheme is a required input to verifying that every run is
@@ -102,8 +117,11 @@ These five are decided at creation time and are expensive to change, so capture 
 
 13b. **Also record the backends' aggregate RAM.** Server-side cache determines how large the Stage 6.B
     synthetic corpus must be to read genuinely cold — the corpus has to exceed the client's page cache
-    *plus* the larger of the two filesystems' server caches. Nothing to decide now; just capture the number,
-    because it is the only input that could push the corpus past the planned capacity.
+    *plus* the larger of the two filesystems' server caches, so that **one identical corpus definition serves
+    both legs** rather than a per-leg size that would break the held-constant contract. Nothing to decide now;
+    just capture the number, because it is the only input that could push the corpus past the planned
+    capacity. (The open-items memory, the 6.B corpus-sizing item; rationale in
+    [`STAGES.md`](../STAGES.md) **D13**.)
 
 14. **Client networking mode: DPDK (performance-optimized), not UDP.** DPDK is WEKA's fast path and gives
     the client kernel-bypass; UDP mode trades throughput for CPU and would understate WEKA. **This is a
@@ -119,8 +137,8 @@ These five are decided at creation time and are expensive to change, so capture 
 ## E. Before any teardown
 
 **See [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md)** — the do-every-time checklist for both halves
-(teardown *and* rebuild), plus `runs/lib/teardown-preflight.sh`, which verifies nothing is lost and prints
+(teardown *and* rebuild), plus `scripts/teardown-preflight.sh`, which verifies nothing is lost and prints
 **GO / NO-GO** before you destroy anything.
 
-*The steps used to be duplicated here. They are not any more, deliberately — a teardown checklist that exists
-in two places will drift, and the half you follow will be the stale one.*
+*The teardown steps live in exactly one place, deliberately — a checklist that exists in two will drift, and
+the half someone follows will be the stale one. Point here; do not copy them back.*

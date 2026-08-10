@@ -52,18 +52,49 @@ TILE_SIZE = 256  # output tile footprint at 20× (px); also the block unit for t
 P_NEW_SLIDE = 0.125  # probability per iteration of evicting LRU and opening a new slide
 
 
-def find_slide(svs_dir, slide_id):
+_SLIDE_PATH_INDEX = {}   # svs_dir -> {slide_id: Path}
+
+
+def build_slide_path_index(svs_dir):
+    """Scan `svs_dir` ONCE and return {slide_id: path}. Cached per directory.
+
+    WHY THIS IS NOT DONE LAZILY PER LOOKUP: this resolution sits on the
+    cache-miss branch of 4.B's timed loop, which fires on roughly one iteration
+    in eight (P_NEW_SLIDE). Resolving by walking the corpus each time -- a full
+    `iterdir()` over ~1100 slide directories plus a per-directory `exists()`
+    probe -- put a directory scan INSIDE the measurement window, so 4.B was
+    partly measuring metadata traversal of the corpus rather than the tile-read
+    path it exists to measure. The cost is not incidental: it is a metadata
+    workload, on the axis where the two filesystems differ most, contaminating
+    the read cell that is supposed to isolate the data path.
+
+    Resolution order matches the original probe order exactly, so which file
+    wins for a given slide_id is unchanged: flat `.tif`, then flat `.svs`, then
+    per-subdirectory `.svs`, then `.tif` (`setdefault` = first writer wins).
+
+    Build this BEFORE the timed window opens -- see the callers.
+    """
+    key = str(svs_dir)
+    cached = _SLIDE_PATH_INDEX.get(key)
+    if cached is not None:
+        return cached
+    root = Path(svs_dir)
+    index = {}
     for ext in (".tif", ".svs"):
-        flat = Path(svs_dir) / f"{slide_id}{ext}"
-        if flat.exists():
-            return flat
-    for sub in Path(svs_dir).iterdir():
+        for p in root.glob(f"*{ext}"):
+            index.setdefault(p.stem, p)
+    for sub in sorted(root.iterdir()):
         if sub.is_dir():
             for ext in (".svs", ".tif"):
-                cand = sub / f"{slide_id}{ext}"
-                if cand.exists():
-                    return cand
-    return None
+                for p in sub.glob(f"*{ext}"):
+                    index.setdefault(p.stem, p)
+    _SLIDE_PATH_INDEX[key] = index
+    return index
+
+
+def find_slide(svs_dir, slide_id):
+    """O(1) lookup against the prebuilt index. No filesystem access."""
+    return build_slide_path_index(svs_dir).get(slide_id)
 
 
 def _load_one_coord_h5(h5_path):
@@ -77,21 +108,63 @@ def _load_one_coord_h5(h5_path):
     return (slide_id, coords)
 
 
-def load_coord_pool(coords_dir, pickle_cache_path=None, n_load_workers=32):
-    """Returns list of (slide_id, coords_array) pairs.
+def _coord_pool_provenance(coords_dir):
+    """Identity of the coord set a cached pool must match to be reusable.
 
-    If pickle_cache_path is set and exists, load from it directly.
-    Otherwise: parallel-load from coord HDF5s, optionally write pickle for next time.
+    Cheap stats over the coord HDF5s: which directory, how many files, and the
+    newest mtime. Stage 3 rewrites its coord HDF5s destructively on every re-run
+    (sweep-stage3-tissue-detection.sh removes the cell's save dir first), so a
+    regenerated coord set -- or a different magnification contract, which changes
+    both the coords and their count -- moves at least one of these.
+    """
+    h5_files = sorted(Path(coords_dir).glob("*.h5"))
+    prov = {
+        "coords_dir": str(Path(coords_dir).resolve()),
+        "n_h5_files": len(h5_files),
+        "newest_h5_mtime_ns": max((p.stat().st_mtime_ns for p in h5_files), default=0),
+    }
+    return prov, h5_files
+
+
+def load_coord_pool(coords_dir, pickle_cache_path=None, n_load_workers=32):
+    """Returns (pool, provenance): list of (slide_id, coords_array) pairs, plus the
+    identity of the coord set it came from.
+
+    A cached pool is reused ONLY if the provenance stored inside it matches the
+    current coords dir. Trusting the cache file's existence is the silent-wrong-number
+    case: the cache is keyed on dataset name alone and persists across sweeps, so
+    after a Stage 3 re-run or a magnification-contract change every 4.B cell would
+    read tiles at the OLD coordinates while the run's note names the current coords
+    dir. If the slide files still exist those reads all succeed and NOTHING reports a
+    problem -- errors stays 0, n_slides_in_pool and n_tiles_in_pool look plausible --
+    and 4.B characterises the working-set-vs-cache crossover for a working set that no
+    longer corresponds to anything on disk. The coord HDF5s are the source of truth,
+    so any mismatch (or an unreadable / pre-provenance cache) rebuilds rather than
+    aborts.
+
+    The stats and the rebuild both happen here in the parent, BEFORE the timed window
+    opens -- see the callers -- so validating costs the measurement nothing.
     """
     import pickle
-    if pickle_cache_path and Path(pickle_cache_path).exists():
-        with open(pickle_cache_path, "rb") as f:
-            pool = pickle.load(f)
-        return pool
+    prov, h5_files = _coord_pool_provenance(coords_dir)
 
-    h5_files = sorted(Path(coords_dir).glob("*.h5"))
+    if pickle_cache_path and Path(pickle_cache_path).exists():
+        try:
+            with open(pickle_cache_path, "rb") as f:
+                cached = pickle.load(f)
+        except Exception as e:
+            cached, reason = None, f"unreadable: {e}"
+        if isinstance(cached, dict) and "pool" in cached:
+            if cached.get("provenance") == prov:
+                return cached["pool"], dict(prov, cache="reused")
+            reason = f"provenance mismatch: cached={cached.get('provenance')}"
+        elif cached is not None:
+            reason = "no stored provenance (written before the cache was validated)"
+        print(f"[reader] IGNORING coord-pool cache {pickle_cache_path} -- {reason}; "
+              f"current={prov}. Rebuilding from {coords_dir}", flush=True)
+
     if not h5_files:
-        return []
+        return [], dict(prov, cache="no-coord-h5-files")
 
     # Parallel load via Pool
     with Pool(processes=min(n_load_workers, len(h5_files))) as p:
@@ -101,8 +174,9 @@ def load_coord_pool(coords_dir, pickle_cache_path=None, n_load_workers=32):
     if pickle_cache_path:
         Path(pickle_cache_path).parent.mkdir(parents=True, exist_ok=True)
         with open(pickle_cache_path, "wb") as f:
-            pickle.dump(pool, f, protocol=pickle.HIGHEST_PROTOCOL)
-    return pool
+            pickle.dump({"provenance": prov, "pool": pool},
+                        f, protocol=pickle.HIGHEST_PROTOCOL)
+    return pool, dict(prov, cache="rebuilt")
 
 
 def read_coord_attrs(coords_dir):
@@ -125,6 +199,11 @@ def worker_openslide(args):
     import openslide
     rng = random.Random(seed + worker_id)
     cache = OrderedDict()  # slide_id -> OpenSlide handle
+
+    # Resolve every slide path BEFORE the clock starts. This is the one-off
+    # corpus scan; leaving it to the first cache miss would put it inside the
+    # timed window, which is the defect this exists to avoid.
+    build_slide_path_index(svs_dir)
 
     # Each worker computes its OWN deadline from when it starts (after fork + import overhead)
     t_start = time.monotonic()
@@ -227,6 +306,10 @@ def worker_cucim(args):
     CuImage.cache("per_process", memory_capacity=512)
     rng = random.Random(seed + worker_id)
     cache = OrderedDict()  # slide_id -> CuImage handle
+
+    # Resolve every slide path BEFORE the clock starts — see the OpenSlide
+    # worker; the same contamination applies to this backend.
+    build_slide_path_index(svs_dir)
 
     # Each worker computes its OWN deadline from when it starts (cuCIM import takes seconds)
     t_start = time.monotonic()
@@ -363,11 +446,12 @@ def main():
     print(f"[reader] loading coord pool from {args.coords_dir}"
           + (f" (cache={args.coord_pool_pickle})" if args.coord_pool_pickle else ""), flush=True)
     t_load_start = time.monotonic()
-    pool = load_coord_pool(args.coords_dir, pickle_cache_path=args.coord_pool_pickle)
+    pool, pool_prov = load_coord_pool(args.coords_dir, pickle_cache_path=args.coord_pool_pickle)
     t_load = time.monotonic() - t_load_start
     n_slides = len(pool)
     n_tiles_total = sum(c.shape[0] for _, c in pool)
-    print(f"[reader] loaded {n_slides} slides, {n_tiles_total} total tile coords, in {t_load:.2f}s", flush=True)
+    print(f"[reader] loaded {n_slides} slides, {n_tiles_total} total tile coords, in {t_load:.2f}s "
+          f"(pool cache: {pool_prov['cache']})", flush=True)
 
     # Build slide index (dict + list for sampling)
     slide_index = {slide_id: (slide_id, coords) for slide_id, coords in pool}
@@ -438,6 +522,13 @@ def main():
         "steady_window_s": steady_window_s,
         "n_slides_in_pool": n_slides,
         "n_tiles_in_pool": n_tiles_total,
+        # Pool provenance: which coord set this cell's working set actually came from,
+        # so a cell can be checked against the coords dir its note names rather than
+        # trusting that the two agree.
+        "coord_pool_source_dir": pool_prov["coords_dir"],
+        "coord_pool_n_h5_files": pool_prov["n_h5_files"],
+        "coord_pool_newest_h5_mtime_ns": pool_prov["newest_h5_mtime_ns"],
+        "coord_pool_cache": pool_prov["cache"],
         "tiles_total": tiles_total,
         "tiles_steady": tiles_steady,
         "tiles_per_sec_steady": tiles_per_sec_steady,

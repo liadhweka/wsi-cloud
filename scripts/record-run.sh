@@ -40,8 +40,9 @@ done
 
 [[ -z "$RUN_NAME" ]] && { echo "missing --run-name" >&2; exit 2; }
 [[ -z "$STAGE" ]]    && { echo "missing --stage"    >&2; exit 2; }
-# The sweep drivers take no arguments (see run-leg.sh's plan comment), so they do
-# not pass --fs; they inherit $LEG from the sourced env.sh / from run-leg.sh's
+# The sweep drivers take no ENVIRONMENT arguments — several do take a positional
+# target (see run-leg.sh's plan comment) — so none of them pass --fs; they inherit
+# $LEG from the sourced env.sh / from run-leg.sh's
 # `export LEG`. Falling back to $LEG is NOT a convenience default: it is explicit
 # configuration, and with neither the flag nor LEG set we still refuse.
 if [[ -z "${FS:-}" ]]; then
@@ -66,6 +67,16 @@ if [[ -n "${FS_MOUNT:-}" ]]; then
   esac
 fi
 [[ $# -eq 0 ]]       && { echo "missing command after --" >&2; exit 2; }
+# jq builds metadata.json's command/note fields, and at cleanup the wallclock +
+# cost_inputs block. Without it the heredoc below interpolates EMPTY strings and
+# writes syntactically invalid JSON ("command": ,) for every cell of the leg, while
+# the cost inputs — which thesis §4 says cannot be reconstructed after the fact —
+# are dropped with no error at all. Refuse here rather than corrupt output at the end.
+command -v jq >/dev/null 2>&1 || {
+  echo "FATAL: jq is not installed — metadata.json and the cost inputs cannot be written." >&2
+  echo "       Install it before running any cell (prompts/prompt-env-prep-cloud.md)." >&2
+  exit 2
+}
 
 CMD=("$@")
 
@@ -93,6 +104,13 @@ else
   # `ls runs/` without reading metadata.
   RUN_DIR="$RUNS_ROOT/${TS}-${FS}-s${STAGE}-${RUN_NAME}"
 fi
+# Everything that NAMES this run — INDEX.md's entry and 0_README.md's heading —
+# uses this, never a name rebuilt from ${TS}-${FS}-s${STAGE}-${RUN_NAME}. The
+# rebuilt form is only correct when we chose the dir ourselves: a caller-supplied
+# RECORD_RUN_DIR may legitimately use a different shape — sweep-stage7-clinical.sh
+# names its dirs -s7- while passing --stage 7.1/7.3/7.4/7.6 — and the index would
+# then point at a directory that does not exist on disk.
+RUN_ID="$(basename "$RUN_DIR")"
 
 mkdir -p "$RUN_DIR/pre" "$RUN_DIR/post" "$RUN_DIR/raw/.pids" "$RUN_DIR/plots"
 
@@ -192,7 +210,7 @@ EOF
 # args from the caller. Future humans (or future Claude sessions) can read
 # this and immediately understand what this run was without parsing JSON.
 cat > "$RUN_DIR/0_README.md" <<EOF
-# ${TS}-${FS}-s${STAGE}-${RUN_NAME}
+# ${RUN_ID}
 
 **Filesystem:** ${FS} (mounted at ${FS_MOUNT:-unset})
 **Stage:** ${STAGE}  ·  **Started (UTC):** ${META_TS}
@@ -228,7 +246,7 @@ ${NOTE:-(no note provided)}
 
 This run is part of the WEKA-vs-Lustre WSI storage comparison on AWS.
 - \`CLAUDE.md\` — project rules (docs citation, memory hygiene, recording philosophy).
-- \`${REPO_ROOT}/docs/STAGES.md\` — the \`--stage\` code map, the per-leg plan, and the decision log.
+- \`${REPO_ROOT}/docs/STAGES.md\` — the \`--stage\` code map, the per-leg plan, and the cross-stage decision register.
 - \`${REPO_ROOT}/docs/RUNBOOK.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
 EOF
 
@@ -410,6 +428,51 @@ EOF
     fi
   done
 
+  # ---------- wallclock + cost inputs into metadata.json ----------
+  # cost to complete = (instance $/hr + filesystem $/hr) x measured wallclock,
+  # computed per cell and per leg (PROJECT-THESIS.md section 4). The wallclock is
+  # measured here; the two prices are NOT. They are read from documented
+  # variables, because prices are FETCHED from current vendor pricing and stamped
+  # with the date checked -- never recalled, and never baked into a script. A
+  # stale price silently rewrites the conclusion, and an undated one cannot be
+  # audited, so an absent price is recorded as null and warned about rather than
+  # guessed. A cell with null prices is a cell whose cost cannot be computed --
+  # visible, and fixable by re-running nothing but the arithmetic.
+  # jq is preflighted at the top, so the only way to get here without a wallclock is
+  # an interrupt before the benchmark returned. Say so out loud: a metadata.json with
+  # no cost_inputs block is otherwise indistinguishable from one written before the
+  # block existed, and neither the wallclock nor the prices can be recovered once the
+  # instance is gone.
+  if [[ -n "${WALLCLOCK_S:-}" ]]; then
+    if [[ -z "${INSTANCE_USD_PER_HR:-}" || -z "${FS_USD_PER_HR:-}" || -z "${PRICE_CHECKED_UTC:-}" ]]; then
+      log "  WARN: cost inputs incomplete (INSTANCE_USD_PER_HR / FS_USD_PER_HR / PRICE_CHECKED_UTC)."
+      log "        Cost-to-complete cannot be computed for this cell. Set them in env.sh from CURRENT"
+      log "        vendor pricing, with the date you checked -- do not recall a price."
+    fi
+    jq \
+      --argjson wall "$WALLCLOCK_S" \
+      --arg startts "$START_TS" --arg endts "$END_TS" \
+      --arg inst "${INSTANCE_USD_PER_HR:-}" \
+      --arg fsp  "${FS_USD_PER_HR:-}" \
+      --arg when "${PRICE_CHECKED_UTC:-}" \
+      '. + {
+         wallclock_s: $wall,
+         started_utc: $startts,
+         ended_utc: $endts,
+         cost_inputs: {
+           instance_usd_per_hr:   (if $inst == "" then null else ($inst | tonumber? // $inst) end),
+           filesystem_usd_per_hr: (if $fsp  == "" then null else ($fsp  | tonumber? // $fsp)  end),
+           price_checked_utc:     (if $when == "" then null else $when end),
+           basis: "infrastructure-only; excludes storage-software licensing"
+         }
+       }' "$RUN_DIR/metadata.json" > "$RUN_DIR/metadata.json.tmp" \
+      && mv "$RUN_DIR/metadata.json.tmp" "$RUN_DIR/metadata.json" \
+      || log "  WARN: could not add wallclock/cost inputs to metadata.json"
+  else
+    log "  WARN: no measured wallclock (interrupted before the benchmark returned) —"
+    log "        wallclock and cost_inputs were NOT added to metadata.json for this cell."
+  fi
+
   # Run parser
   if [[ -x "$SCRIPT_DIR/parse-results.py" ]]; then
     log "parsing results..."
@@ -423,8 +486,9 @@ EOF
   ESC_NOTE=$(printf '%s' "$NOTE" | head -c 200 | tr '\n' ' ')
   # The entry must name the run dir EXACTLY, fs segment included — INDEX.md is the
   # run history, and an entry that omits the filesystem loses the one dimension
-  # the whole comparison pivots on.
-  echo "- \`${TS}-${FS}-s${STAGE}-${RUN_NAME}\` (fs $FS, stage $STAGE, $START_TS, rc=$RC, $STATUS) — ${ESC_NOTE}" \
+  # the whole comparison pivots on. $RUN_ID is the dir's real basename, so this
+  # stays true for any caller-supplied RECORD_RUN_DIR.
+  echo "- \`${RUN_ID}\` (fs $FS, stage $STAGE, $START_TS, rc=$RC, $STATUS) — ${ESC_NOTE}" \
     >> "$RUNS_ROOT/INDEX.md"
 
   log "done: $RUN_DIR"
@@ -435,6 +499,7 @@ trap cleanup EXIT INT TERM
 # ---------- run the benchmark ----------
 log "running: ${CMD[*]}"
 START_TS=$(date -u +%FT%TZ)
+START_EPOCH=$(date -u +%s)
 echo "$START_TS" > "$RUN_DIR/raw/.run_start"
 
 # Run the benchmark with stdout+stderr tee'd to cmd.log.
@@ -443,8 +508,11 @@ echo "$START_TS" > "$RUN_DIR/raw/.run_start"
 RC=$?
 
 END_TS=$(date -u +%FT%TZ)
+END_EPOCH=$(date -u +%s)
 echo "$END_TS" > "$RUN_DIR/raw/.run_end"
-log "command exited rc=$RC"
+WALLCLOCK_S=$(( END_EPOCH - START_EPOCH ))
+echo "$WALLCLOCK_S" > "$RUN_DIR/raw/.run_wallclock_s"
+log "command exited rc=$RC after ${WALLCLOCK_S}s"
 
 # Trap fires on EXIT — handles recorder shutdown, conversion, snapshot, verify, parse, INDEX update
 exit $RC

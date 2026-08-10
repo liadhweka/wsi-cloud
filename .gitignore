@@ -42,7 +42,7 @@ weights/
 models/
 
 # ── Benchmark recording outputs ────────────────────────────────────────────────
-# Per CLAUDE.md → Durability & backup: git is authoritative for SMALL TEXT
+# Per CLAUDE.md → Recording → Durability: git is authoritative for SMALL TEXT
 # (results.json, metadata.json, 0_README.md, notes.md, cmd.txt, pre/, post/, and the
 # summary CSVs at the runs/ root — all COMMITTED). S3 is authoritative for the heavy
 # write-once telemetry below, which must NOT enter git.
@@ -50,22 +50,18 @@ runs/*/raw/
 runs/*/cmd.log
 runs/sweep-logs/
 
-# runs/.leg-state/ is deliberately NOT ignored — it is TRACKED.
+# runs/.leg-state/ is deliberately NOT ignored — it is TRACKED, and must stay tracked.
 #
-# It holds run-leg.sh's per-step completion markers, and the earlier reasoning
-# ("per-leg scratch state, recreated by the orchestrator, meaningless on another
-# instance") was wrong in the one case that matters: the instance is rebuilt at least
+# It holds run-leg.sh's per-step completion markers. The instance is rebuilt at least
 # twice, and these markers are the only thing that stops a resumed leg from re-running
-# every completed step. Ignored + not synced to S3 meant they died with the instance,
-# so TEARDOWN-AND-REBUILD.md's "a rebuild mid-leg picks up where it stopped" was false
-# — a rebuilt `run-leg.sh --leg $LEG` would silently redo hours of sweeps and create
-# duplicate timestamped run dirs, polluting the aggregates rather than erroring.
+# steps it already completed: without them a rebuilt `run-leg.sh --leg $LEG` silently
+# redoes hours of sweeps into duplicate timestamped run dirs, polluting the aggregates
+# rather than erroring.
 #
-# git carries them because CLAUDE.md's authority split already says git is
-# authoritative for all small text; S3 was the alternative, but its never-delete
-# archive semantics would resurrect a marker deleted on purpose to force a re-run.
-# The dirty-tree concern is moot: teardown step 5 commits everything anyway, which is
-# exactly the moment these need to be captured.
+# git carries them rather than S3 for two reasons: CLAUDE.md's authority split makes
+# git authoritative for all small text, and S3's never-delete archive semantics would
+# resurrect a marker deleted on purpose to force a re-run. Teardown commits everything
+# anyway, which is exactly the moment these need to be captured.
 
 # Large per-workload telemetry CSVs — per-interval output balloons on long endurance
 # cells (hundreds of MB each), exceeds GitHub per-file limits, and is regenerable from
@@ -84,8 +80,10 @@ runs/sweep-logs/
 credentials*
 .aws/
 
-# The filled-in configuration. env.example.sh IS tracked (it's the template and the
-# documented list of every variable); env.sh holds real values and stays local.
+# The filled-in configuration, at the repo root. env.example.sh IS tracked (it's the
+# template and the documented list of every variable); env.sh holds real values and
+# stays local — which is why the environment contract in S3 is how it is recovered
+# after a rebuild.
 env.sh
 
 # ── Local scratch (mounted outside the repo; defensive) ────────────────────────

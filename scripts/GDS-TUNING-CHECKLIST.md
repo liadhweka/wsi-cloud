@@ -44,8 +44,11 @@ ceiling.** Do not tune blind.
 - `/dev/shm` is mode 1777 (see the env-check note — unrelated to GDS but gates the readers' multiprocessing).
 
 ## Step 2 — instantiate `cufile.json` from the template
-1. Copy `cufile-full-rdma.template.json` → the `CUFILE_ENV_PATH_JSON` target
-   (`~/wsi-debug/p1-gdsio/cufile-full-rdma.json`).
+1. Copy `cufile-full-rdma.template.json` → the `CUFILE_ENV_PATH_JSON` target, which is
+   `$CUFILE_CONFIG_DIR/cufile.json` (`docs/NAMING-AND-VARIABLES.md` Table 1). **Do not
+   type a literal path here** — a config written somewhere `CUFILE_ENV_PATH_JSON` does
+   not point at is a config cuFile never loads, so it silently falls back to stock
+   defaults and the kvikIO cells still report plausible numbers.
 2. **Re-derive + fill `rdma_dev_addr_list`** (BOTH `properties.*` and `fs.weka.*`) = the
    **A100 client's own IB NIC IPs** (the `.102`-style addresses across the IB subnets —
    NOT the backend IPs). Source, in order of preference:

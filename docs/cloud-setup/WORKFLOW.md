@@ -14,29 +14,38 @@ Each is self-contained and **re-runnable on every rebuild** — that is the desi
 
 | # | Paste | When | Leaves behind | Its hard gate |
 |---|---|---|---|---|
-| 1 | `prompt-env-prep-cloud.md` | every build, once the repo is cloned | GPU/CUDA/GDS stack, NVMe scratch, miniforge, `LIBCUFILE_PRELOAD` | stops on a missing driver or a running-vs-pending kernel split |
-| 2a | `prompt-weka-cluster-cloud.md` | every **WEKA** build | the filesystem, the mount, `WEKA_*` + `FS_TRANSPORT` in `env.sh` | **DPDK, or stop** |
-| 2b | `prompt-lustre-cluster-cloud.md` | every **Lustre** build | the mount, `FSX_*`, `LUSTRE_STRIPE_LAYOUT`, `FS_TRANSPORT` | **EFA, or stop** |
-| 3 | `handoff-cloud.md` | every build, to build + benchmark | the environments, the cells, the results | the 13-row blocker gate before the first measured cell |
-| 4 | `prompt-teardown-cloud.md` | end of every leg **and** every pause | `HANDOFF-NEXT-SESSION.md`, the contract, a verified S3 sync | pre-flight **GO / NO-GO** |
+| 1 | `prompts/prompt-env-prep-cloud.md` | every build, once the repo is cloned | GPU/CUDA/GDS stack, NVMe scratch, miniforge, `LIBCUFILE_PRELOAD` | stops on a missing driver or a running-vs-pending kernel split |
+| 2a | `prompts/prompt-weka-cluster-cloud.md` | every **WEKA** build | the filesystem, the mount, `WEKA_*` + `FS_TRANSPORT` in `env.sh` | **DPDK, or stop** |
+| 2b | `prompts/prompt-lustre-cluster-cloud.md` | every **Lustre** build | the mount, `FSX_*`, `LUSTRE_STRIPE_LAYOUT`, `FS_TRANSPORT` | **EFA, or stop** |
+| 3 | `prompts/handoff-cloud.md` | every build, to build + benchmark | the environments, the cells, the results | the blocker gate before the first measured cell |
+| 4 | `prompts/prompt-teardown-cloud.md` | end of every leg **and** every pause | `HANDOFF-NEXT-SESSION.md`, the contract, a verified S3 sync | pre-flight **GO / NO-GO** |
 
-Paste text is always the same shape:
+**The paste line is always the same shape.** One shape everywhere means nothing to remember and nothing to get
+subtly wrong:
 
-> Read the file `cloud-setup/<prompt>.md` and do everything it says, then report back.
+> Read the file `prompts/<prompt>.md` and do everything it says, then report back.
+
+**Why prompt 3 is one file and not a first-build file plus a rebuild file.** Prompt 3 detects which state it is
+in and carries a short table of what differs on a rebuild. Splitting it would remove that detection step, but
+the two files would share nearly all of their content — the reading list, the discovery report, the blocker
+gate, the standing facts — and two files that must be kept in step are exactly how instructions drift apart.
+Worse, splitting moves the choice to the human: pasting the first-build prompt on a rebuild would re-download
+datasets and re-solve the conda environments, which **breaks the held-constant environment contract silently**,
+because it succeeds. The detection is three mechanical checks and costs nothing; the wrong branch costs a leg.
 
 ---
 
 ## 1 — First spin-up (once, ever)
 
-**Read before starting:** [`../PROJECT-THESIS.md`](../../PROJECT-THESIS.md) — the question and the held-constant
-contract. Ten minutes, and it is what makes any number mean something. Then `NEW-CLOUD-SETUP.md` top to bottom.
-[`SPINUP-CHECKLIST.md`](SPINUP-CHECKLIST.md) carries the *reasoning* behind the provisioning choices if you want
-it; the guide carries the procedure.
+**Read before starting:** [`../../PROJECT-THESIS.md`](../../PROJECT-THESIS.md) — the question and the
+held-constant contract. Ten minutes, and it is what makes any number mean something. Then `NEW-CLOUD-SETUP.md`
+top to bottom. [`SPINUP-CHECKLIST.md`](SPINUP-CHECKLIST.md) carries the *reasoning* behind the provisioning
+choices if you want it; the guide carries the procedure.
 
 | Phase | Where | You do | Claude does |
 |---|---|---|---|
 | **Parts 0–2** | browser, no instance yet | region/AZ · GPU quota (**start day 1**, approval is slow) · security group · **S3 bucket § 1.4** · **IAM role § 1.5** · key pair · launch on a **pinned GPU AMI** | *nothing — no session exists* |
-| **Parts 3–4** | on the box | tmux · apt · AWS CLI + bucket smoke test · GitHub SSH · install Claude § 3.5 · clone § 4.1 · `env.sh` § 4.2 · `./cloud-setup/restore-memories.sh` § 4.3 · HF **token** § 4.4 | — |
+| **Parts 3–4** | on the box | tmux · apt · AWS CLI + bucket smoke test · GitHub SSH · install Claude § 3.5 · clone § 4.1 · `env.sh` § 4.2 · `./scripts/restore-memories.sh` § 4.3 · HF **token** § 4.4 | — |
 | **Part 5** | — | paste **prompt 1** | preps the stack; re-derives your five `env.sh` values from instance metadata and reconciles |
 | **Part 6** | — | build the WEKA cluster (Port blueprint), then paste **prompt 2a**; § 6.3 saves the config to S3 | creates + mounts the filesystem, writes the WEKA facts itself |
 | **Part 7** | — | paste **prompt 3**, then HF **login** § 7.2 once the envs exist | builds envs · deferred script work · **verifies the S3 sync semantics** · proves the pipeline on a throwaway cell · blocker gate · runs Leg A |
@@ -56,7 +65,7 @@ yours.
 
 | Step | Who | What |
 |---|---|---|
-| 1–4 | **Claude** | stop cleanly · finish the roadmaps + `PRESENTING.md` + memory · write **`HANDOFF-NEXT-SESSION.md`** · `./backup.sh` · contract + verified sync |
+| 1–4 | **Claude** | stop cleanly · finish the roadmaps + `docs/RESULTS.md` + memory · write **`HANDOFF-NEXT-SESSION.md`** · `./backup.sh` · contract + verified sync |
 | 5 | **you** | `git add -A && git commit && git push` — **never automated**, and it is what carries `runs/.leg-state/` (the resume markers) to the next instance |
 | 6–7 | **Claude** | pre-flight to **GO** · confirm the rebuild inputs |
 | 8 | **you** | destroy: **instance first**, then the filesystem you are finished with. **Never the S3 bucket or the IAM role** |
@@ -64,8 +73,9 @@ yours.
 **Step 2 is the one only Claude can do** — its context is what is being destroyed. The pre-flight NO-GOes if
 that file is missing, undated, or older than a day.
 
-**Cost note:** the filesystem usually costs more per hour than the instance, so stopping the instance alone is
-not much of a pause.
+**Cost note:** stopping the instance is not by itself a cost pause — the filesystem keeps billing. **Compare
+the two line items in current pricing before leaving anything idle**; both are recorded per cell as the cost
+inputs (`../RUNBOOK.md`), so the figures are already to hand and do not need recalling.
 
 ---
 
@@ -78,13 +88,13 @@ not much of a pause.
 |---|---|---|
 | 1 | launch identically | pinned `AMI_ID`, EFA-capable, **IAM profile attached at launch** |
 | 2 | `NEW-CLOUD-SETUP.md` **Parts 3–4 only** | skip 0–2; they are already provisioned |
-| 3 | `./cloud-setup/restore-memories.sh` | **before** ever running `backup.sh` — they move memories in opposite directions |
-| 4 | `env-contract.py env --file <contract>` → paste into `env.sh` | **same leg: uncomment** the leg-specific lines it emits. Do **not** `>>` append — `--check` sits below and would report them missing |
+| 3 | `./scripts/restore-memories.sh` | **before** ever running `backup.sh` — they move memories in opposite directions |
+| 4 | `scripts/env-contract.py env --file <contract>` → paste into `env.sh` | **same leg: uncomment** the leg-specific lines it emits. Do **not** `>>` append — `--check` sits below and would report them missing |
 | 5 | paste **prompt 1** · conda from the pinned `*.conda-explicit.txt` · regenerate the cuFile config · HF login | the env is a held-constant input: reproduce it, don't re-solve it |
 | 6 | paste **prompt 2a/2b** | the cluster survived; **this instance has never mounted it** |
 | 7 | contract `verify` | must be clean on every held-constant field |
 | 8–9 | re-hydrate datasets (byte-verify) · prove the recording pipeline | S3 has the data; the mount is what died |
-| — | `run-leg.sh --leg <leg>` | **resumes** — skips steps whose markers are in `runs/.leg-state/$LEG/` |
+| — | `scripts/run-leg.sh --leg <leg>` | **resumes** — skips steps whose markers are in `runs/.leg-state/$LEG/` |
 
 > ⚠ **If the marker directory is empty on a mid-leg rebuild, stop.** It means the previous teardown never
 > committed them, and running on would silently redo hours of sweeps into duplicate run dirs.
@@ -101,8 +111,8 @@ Same teardown, same rebuild shape. Four differences:
 2. **Now you destroy the WEKA cluster** as well as the instance.
 3. **`env.sh`:** *leave* the previous leg's filesystem lines **commented** — they describe the other
    filesystem — and set `LEG=lustre`.
-4. **Part 8:** you create FSx **at maximum** (Persistent 2 · 1000 MB/s/TiB · ≥ 25 TiB · high metadata IOPS ·
-   EFA), then paste **prompt 2b**, which verifies the contract *before* spending anything.
+4. **Part 8:** you create FSx **at maximum** per **D7**, then paste **prompt 2b**, which verifies the contract
+   *before* spending anything.
 
 Pauses *within* Leg B are scenario 3 with `lustre` substituted.
 
@@ -132,12 +142,14 @@ Everything else, on every build, is a prompt.
 
 | Question | Doc |
 |---|---|
-| Why are we measuring it this way? | [`../PROJECT-THESIS.md`](../../PROJECT-THESIS.md) |
+| Why are we measuring it this way? | [`../../PROJECT-THESIS.md`](../../PROJECT-THESIS.md) |
 | What do I physically do next? | `NEW-CLOUD-SETUP.md` · `TEARDOWN-AND-REBUILD.md` |
 | Where did the last session leave off? | `HANDOFF-NEXT-SESSION.md` *(exists after the first teardown)* |
 | What is still open? | the `cloud-session-open-items` memory |
-| Every methodology decision, with its why | [`../runs/STAGES.md`](../STAGES.md) — decision log **D1–D16** |
+| A cross-stage or project-wide methodology decision, with its why | [`../STAGES.md`](../STAGES.md) — the cross-stage decision register |
+| A decision scoped to one stage | that stage's own register in [`../Stage-<N>-*.md`](../STAGES.md) |
+| What did we find? | [`../RESULTS.md`](../RESULTS.md) |
 | What does this script do, and why? | [`../SCRIPT-TRACKER.md`](../SCRIPT-TRACKER.md) |
-| What should this path / variable be? | [`NAMING-AND-VARIABLES.md`](../NAMING-AND-VARIABLES.md) |
+| What should this path / variable be? | [`../NAMING-AND-VARIABLES.md`](../NAMING-AND-VARIABLES.md) |
 | Where does X live? | [`../FILESYSTEM-MAP.md`](../FILESYSTEM-MAP.md) |
-| How do I run or recover one cell? | [`../runs/README.md`](../RUNBOOK.md) |
+| How do I run or recover one cell? | [`../RUNBOOK.md`](../RUNBOOK.md) |

@@ -202,11 +202,43 @@ def summarize_csv(path: Path):
     return summary
 
 
-def _delta_aggregate(rows, key_col, count_cols):
-    """Generic cumulative-counter -> per-second-delta aggregator.
+def _row_epoch(row):
+    """Seconds-since-epoch from a recorder row's `timestamp`, or None.
 
-    Groups rows by `key_col`, computes per-pair deltas of each `count_col`,
-    aggregates non-negative deltas (negatives = wrap/reset).
+    The recorders write `date -u +%FT%TZ`, so this is second-resolution UTC.
+    Tolerant of a trailing Z, of an offset, and of a bare epoch number, because
+    a rate that silently falls back to a wrong dt is the failure this exists to
+    prevent -- if the stamp cannot be read we drop the pair rather than guess.
+    """
+    ts = (row.get("timestamp") or "").strip()
+    if not ts:
+        return None
+    try:                                   # bare epoch seconds
+        return float(ts)
+    except ValueError:
+        pass
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _delta_aggregate(rows, key_col, count_cols):
+    """Generic cumulative-counter -> per-SECOND rate aggregator.
+
+    Groups rows by `key_col`, then for each consecutive pair computes
+    (delta counter) / (delta timestamp) -- a RATE, not a raw delta.
+
+    WHY THE DIVISION IS LOAD-BEARING: the recorders sleep 1 s *plus* loop
+    overhead, and under load a sample can slip by several seconds. Treating the
+    raw delta as a per-second rate then overstates every wire-counter rate by
+    exactly the slip, and those rates feed the cross-source consistency canary
+    -- so the error inflates the wire side of a ratio check and can either mask
+    a real inconsistency or manufacture a false one.
+
+    Pairs are dropped when dt is missing or non-positive (clock step, duplicate
+    stamp), and when the counter delta is negative (wrap/reset).
+
     Returns {key_value: {col_per_sec: aggregate, ...}, ...}
     """
     by_key = {}
@@ -219,12 +251,20 @@ def _delta_aggregate(rows, key_col, count_cols):
     out = {}
     for k, krows in by_key.items():
         deltas = {f"{c}_per_sec": [] for c in count_cols}
+        dts = []
         for prev, curr in zip(krows, krows[1:]):
+            t0, t1 = _row_epoch(prev), _row_epoch(curr)
+            if t0 is None or t1 is None:
+                continue
+            dt = t1 - t0
+            if dt <= 0:
+                continue
+            dts.append(dt)
             for c in count_cols:
                 try:
                     d = float(curr[c]) - float(prev[c])
                     if d >= 0:
-                        deltas[f"{c}_per_sec"].append(d)
+                        deltas[f"{c}_per_sec"].append(d / dt)
                 except (ValueError, KeyError, TypeError):
                     continue
         agg_set = {}
@@ -232,6 +272,15 @@ def _delta_aggregate(rows, key_col, count_cols):
             agg = aggregate(vals)
             if agg is not None:
                 agg_set[col] = agg
+        if dts:
+            # Surfaced so a reader can see the sampling actually achieved rather
+            # than assuming 1 Hz. Second-resolution stamps quantise dt, so a
+            # sub-second slip is invisible here -- that residual is recorded as
+            # an open item, not silently absorbed.
+            agg_set["_sample_interval_s"] = {
+                "count": len(dts), "mean": sum(dts) / len(dts),
+                "min": min(dts), "max": max(dts),
+            }
         out[k] = agg_set
     return out
 

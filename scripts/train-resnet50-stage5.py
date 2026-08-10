@@ -477,7 +477,7 @@ def make_reader(args, slide_ids, rank):
             seed=args.seed + rank,
             n_buffer=args.n_buffer,
             num_threads=args.num_threads,
-            compat_mode="off",  # GDS-on (Stage 4.C winner)
+            compat_mode=args.compat_mode,
             level=0,
             footprint_level0=footprint_level0,
         )
@@ -746,6 +746,12 @@ def main():
     ap.add_argument("--lru-size", type=int, default=64)
     ap.add_argument("--n-buffer", type=int, default=256, help="kvikIO async pread pipelining depth")
     ap.add_argument("--num-threads", type=int, default=16, help="kvikIO internal thread pool size")
+    ap.add_argument("--compat-mode", choices=["off", "on", "auto"], default="off",
+                    help="kvikIO compat_mode for the kvikio backend: off (GDS), on (POSIX bounce), "
+                         "auto (kvikIO decides). Default 'off' is what 5.A's cells run in; the "
+                         "mode-controlled paired cell (STAGES.md) is requested by passing this "
+                         "explicitly. REQUESTED, not proven — the per-cell cuFile path accounting "
+                         "settles which path actually ran.")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--lr", type=float, default=0.01)
     ap.add_argument("--momentum", type=float, default=0.9)

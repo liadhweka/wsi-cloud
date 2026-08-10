@@ -13,18 +13,18 @@ turns out wrong.
 
 Teardown has seven steps and one of them cannot be done by the human at all: **writing the account of what this
 session did.** Claude's context is the thing being destroyed, so the only moment that account can be written is
-now, by you. A pre-deployment audit found it was also the only one of the seven steps with **no defined file and
-nothing verifying it** — so it could be "done" into a chat message and die with the very context it existed to
-carry. It now has both: `docs/cloud-setup/HANDOFF-NEXT-SESSION.md`, gated by `scripts/teardown-preflight.sh`.
+now, by you. It is also the step most easily skipped, because a handoff "written" into a chat message looks
+done and then dies with the very context it exists to carry. So it has a defined file and something that
+checks it: `docs/cloud-setup/HANDOFF-NEXT-SESSION.md`, gated by `scripts/teardown-preflight.sh`.
 
 **The ordering constraint that shapes this task:** the pre-flight gate checks that git is clean **and pushed**,
 and the human owns commit/push. So this runs in **two phases with a human step between them** — Steps 1–5, then
 they commit and push, then Steps 6–7. Do not try to collapse it.
 
-> **Numbering.** `TEARDOWN-AND-REBUILD.md` § Teardown numbers the same sequence 1–8 for the human, where its
-> step 5 is their commit+push and step 8 the destruction. This file's Steps 1–5 are its steps 1–4 (the record
-> is split out), and this file's Steps 6–7 are its 6–7. Same work, so cite the *content* rather than a number
-> when you report.
+> **Numbering.** `docs/cloud-setup/TEARDOWN-AND-REBUILD.md` § Teardown numbers the same sequence 1–8 for the
+> human, where its step 5 is their commit+push and step 8 the destruction. This file's Steps 1–5 are its steps
+> 1–4 (the record is split out), and this file's Steps 6–7 are its 6–7. Same work, so cite the *content*
+> rather than a number when you report.
 
 ## What only the human can do
 
@@ -59,12 +59,17 @@ if it was already killed, rename the partial dir `-FAILED-interrupted` and say s
 
 This is the part that is cheap now and impossible later. Update **in place**:
 
-- **`docs/Stage-<N>-*.md`** for every stage touched — results, what each substage answered, the decision and
-  change logs. This is the audit trail.
-- **`docs/RESULTS.md`** — any finding or caveat that landed. **Keep single-leg claims scoped as half an
-  unfinished comparison**, and leave `[STORY PENDING RESULTS]` where results genuinely don't exist yet.
-- **`docs/STAGES.md`** — stage statuses, and any project-wide methodology decision (with its *why* and its
-  sources).
+- **`docs/Stage-<N>-*.md`** for every stage touched — the per-cell results, what each substage answered, and
+  the stage's **decision register**: one entry per live decision, overwritten when a decision changes. **Do
+  not keep a change log** — git is the audit trail, and a hand-maintained one is a worse copy of it.
+- **`docs/RESULTS.md`** — any finding that landed, with the caveats that change how it reads. **Numbers live
+  in exactly one place:** per-cell results stay in the stage roadmap beside the methodology that produced
+  them, and this file quotes only a headline figure **with a pointer to the cell it came from**. **Keep
+  single-leg claims scoped as half an unfinished comparison.** Write an interpretation only where there is
+  something to interpret — a section reserved for a finding that does not exist yet is a placeholder, and
+  placeholders rot.
+- **`docs/STAGES.md`** — stage statuses, and any project-wide methodology decision, written into the
+  cross-stage register with its *why* and its sources.
 - **Memory** — durable knowledge only. **Delete every completed entry from `cloud-session-open-items`**; its
   whole value is that it holds only what is still open. Prune anything a fresh session can re-derive from the
   box (mounts, versions, free space) — that is not memory's job.

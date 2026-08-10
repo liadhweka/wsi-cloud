@@ -14,7 +14,16 @@
 #
 # Per-slide event log columns:
 #   slide_idx, slide_id, t_arrived_s, t_inference_start_s, t_inference_done_s,
-#   t_heatmap_written_s, t_viewer_received_s, queued_s, inference_s, end_to_end_s
+#   t_heatmap_written_s, t_viewer_received_s, queued_s, inference_s, end_to_end_s,
+#   status
+#
+# `status` is `ok` only when the worker exited 0 AND the heatmap landed. On any
+# other outcome `end_to_end_s` is written EMPTY, because a slide the pathologist
+# never saw has no scanner-to-pathologist-visibility latency — it has an undefined
+# one. A worker that dies during model load or on a missing raw-TIFF otherwise
+# contributes a SHORT end_to_end_s that drags 7.4.a's headline mean down, and the
+# aggregator (which averages this column) cannot tell the difference. Empty is what
+# makes it skip the row instead of averaging a failure in.
 #
 # WHY warm-cache: production reality — a clinical lab processes many slides
 # per shift, so the page cache is meaningfully warm after the first few.
@@ -33,12 +42,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source env.sh}"
 PY="$CONDA_ENV/bin/python"
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -77,7 +86,8 @@ ORCH_LOG="$RUN_DIR/streaming-loop.log"
 HEATMAP_DIR="$RUN_DIR/heatmaps"
 mkdir -p "$HEATMAP_DIR"
 
-echo "slide_idx,slide_id,t_arrived_s,t_inference_start_s,t_inference_done_s,t_heatmap_written_s,t_viewer_received_s,queued_s,inference_s,end_to_end_s" > "$EVENT_LOG"
+echo "slide_idx,slide_id,t_arrived_s,t_inference_start_s,t_inference_done_s,t_heatmap_written_s,t_viewer_received_s,queued_s,inference_s,end_to_end_s,status" > "$EVENT_LOG"
+N_FAILED=0
 
 # Pre-load the manifest into an array (skipping comment + 'slide_id' header lines)
 mapfile -t ALL_SLIDES < <(grep -vE '^(#|slide_id|$)' "$MANIFEST" | head -n "$N_SLIDES")
@@ -88,7 +98,7 @@ if [ "$N_AVAIL" -lt "$N_SLIDES" ]; then
 fi
 echo "[streaming] $(date -u +%FT%TZ) start; N=$N_SLIDES cadence=${CADENCE_S}s model=$MODEL backend=$BACKEND" | tee "$ORCH_LOG"
 
-# Backend-specific env (LD_PRELOAD scoping per cucim-segfaults-when-libcufile-is-ld-preloaded)
+# Backend-specific env (LD_PRELOAD scoping per `docs/RUNBOOK.md` (mixed-backend sweeps))
 PRELOAD=""
 [ "$BACKEND" = "kvikio" ] && PRELOAD="$LIBCUFILE_SYSTEM"
 
@@ -139,6 +149,7 @@ for ((i=0; i<N_SLIDES; i++)); do
     --per-slide-heatmap-csv "$inf_hm_csv" \
     --summary-json "$inf_summary" \
     >> "$inf_log" 2>&1
+  inf_rc=$?
 
   t_inf_done=$(date +%s.%N)
   t_inf_done_rel=$(awk "BEGIN{printf \"%.6f\", $t_inf_done - $t_zero}")
@@ -174,10 +185,38 @@ for ((i=0; i<N_SLIDES; i++)); do
   inference_s=$(awk "BEGIN{printf \"%.6f\", $t_inf_done - $t_inf_start}")
   end_to_end_s=$(awk "BEGIN{printf \"%.6f\", $t_inf_done - $t_arrived}")
 
-  echo "$i,$sid,$t_arrived_rel,$t_inf_start_rel,$t_inf_done_rel,$t_hm_written_rel,$t_viewer_recv_rel,$queued_s,$inference_s,$end_to_end_s" >> "$EVENT_LOG"
-  echo "[streaming] slide $i ($sid): queued=${queued_s}s inference=${inference_s}s e2e=${end_to_end_s}s viewer_recv=${t_viewer_recv_rel}" | tee -a "$ORCH_LOG"
+  # A slide counts only if the worker succeeded AND the heatmap exists. Either
+  # failure leaves end_to_end_s undefined (empty) rather than short — see the
+  # column note at the top. The raw timestamps stay on the row either way, so no
+  # measurement is lost; only the derived latency is withheld from the mean.
+  if [ "$inf_rc" -ne 0 ]; then
+    status="worker_rc=${inf_rc}"
+    end_to_end_s=""
+    N_FAILED=$((N_FAILED + 1))
+  elif [ -z "$t_hm_written_rel" ]; then
+    status="no_heatmap"
+    end_to_end_s=""
+    N_FAILED=$((N_FAILED + 1))
+  else
+    status="ok"
+  fi
+
+  echo "$i,$sid,$t_arrived_rel,$t_inf_start_rel,$t_inf_done_rel,$t_hm_written_rel,$t_viewer_recv_rel,$queued_s,$inference_s,$end_to_end_s,$status" >> "$EVENT_LOG"
+  if [ "$status" = "ok" ]; then
+    echo "[streaming] slide $i ($sid): queued=${queued_s}s inference=${inference_s}s e2e=${end_to_end_s}s viewer_recv=${t_viewer_recv_rel}" | tee -a "$ORCH_LOG"
+  else
+    echo "[streaming] slide $i ($sid): FAILED ($status) after ${inference_s}s — see $inf_log; excluded from the end-to-end aggregate" | tee -a "$ORCH_LOG"
+  fi
 
   rm -f "$one_manifest"
 done
 
-echo "[streaming] $(date -u +%FT%TZ) done" | tee -a "$ORCH_LOG"
+echo "[streaming] $(date -u +%FT%TZ) done; $((N_SLIDES - N_FAILED))/$N_SLIDES slides ok, $N_FAILED failed" | tee -a "$ORCH_LOG"
+
+# Exit non-zero if any slide failed, so record-run.sh marks the cell INCOMPLETE in
+# INDEX.md. 7.4.a is a 10-slide cell: one or two failures move the headline mean
+# materially, and without this the cell reports rc=0 and looks like a clean run.
+if [ "$N_FAILED" -gt 0 ]; then
+  echo "[streaming] $N_FAILED of $N_SLIDES slides did not complete — this cell is NOT a valid 7.4.a result" | tee -a "$ORCH_LOG"
+  exit 1
+fi

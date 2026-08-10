@@ -100,7 +100,16 @@ def main():
                     print(f"[extract] FAIL {slide_id}: {err}", flush=True)
     t_total = time.monotonic() - t_start
 
-    rate = len(slides) / t_total if t_total > 0 else 0.0
+    # Rate is over slides that actually produced a JSON sidecar, NOT the manifest
+    # length. A failure returns early from extract_one (the open never completes),
+    # so counting the whole manifest inflates the rate twice over: the numerator
+    # includes work never done and the denominator is the shorter wallclock the
+    # failures caused. A partially failing cell would then publish a HIGHER
+    # slides/sec than a fully succeeding one — the headline Stage 2 number
+    # ("cataloged N slides at concurrency n") reading better the more it broke.
+    # Matches aggregate-stage3-tissue-detection.py, which derives its rate from
+    # the artifacts produced (slides_with_h5) rather than the manifest.
+    rate = successes / t_total if t_total > 0 else 0.0
     p_lat_mean = None
     p_lat_p99 = None
     # Quick latency stats from the CSV we just wrote (saves the aggregator a re-read for the cmd.log line)

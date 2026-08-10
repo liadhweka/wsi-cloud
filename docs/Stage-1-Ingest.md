@@ -1,9 +1,5 @@
 # Stage 1 — Ingest (scanner-to-storage), measured identically on both filesystems
 
-> **STATUS — read first.** Nothing has run. Every number below is **`[PENDING]`**, and every
-> interpretation section is **`[STORY PENDING RESULTS]`**. This doc records what we will do, in what
-> order, with which tools, against which datasets, and **why** — not what we expect to find.
->
 > **Every substage here runs twice: once on WEKA (Leg A), once on FSx for Lustre (Leg B), with
 > everything else held constant.** The WEKA-vs-Lustre delta is the result. A single leg's numbers are
 > half an unfinished comparison and must never be presented as final.
@@ -12,8 +8,8 @@
 > counterpart and is excluded from the head-to-head — see below.
 
 For project-wide conventions and recording philosophy, see `../CLAUDE.md`. For the framing and fairness
-contract, `../PROJECT-THESIS.md`. For the stage map, per-leg plan, and decision log **D1–D14**,
-`STAGES.md`. For how to run a benchmark and recover from failures, `README.md`.
+contract, `../PROJECT-THESIS.md`. For the stage map, per-leg plan, and the decision register,
+`STAGES.md`. For how to run and record a cell, both canaries, and failure recovery, `RUNBOOK.md`.
 
 ---
 
@@ -103,57 +99,44 @@ service, not a filesystem, so running it per-leg would burn hours to produce a n
 filesystem — and it would put different bytes on the two sides. Staging once into S3 makes the datasets a
 **held-constant input**, byte-verified, identical in both legs.
 
-**The `% of ceiling` rule (D7 / Phase 0).** Throughput is block-size-dependent, so every downstream
+**The `% of ceiling` rule (Phase 0, `STAGES.md`).** Throughput is block-size-dependent, so every downstream
 "% of ceiling" divides by the Stage-1.0 cell at the **matching block size** — never a mismatched-block
-ceiling, which would make a mid-block workload look artificially high or low.
+ceiling, which would make a mid-block workload look artificially high or low. **The ceiling cell's own cache
+regime is recorded alongside it, because every downstream percentage inherits the denominator's
+contamination:** a cache-inflated ceiling silently deflates every stage that divides by it, and the deflation
+is invisible in the later stage's own numbers, which stay internally consistent. That is why the read
+ceilings (1.0b, 1.0d) are **cold by construction** — see their cache-discipline rows.
 
 ---
 
-## Recording approach (Stage 1-specific)
+## Recording — Stage 1's changes to the source table
 
-Standard `record-run.sh` infrastructure, with **per-filesystem source adapters** (`STAGES.md` **D12**).
-Sources are split **Primary** (headline numbers and cross-source ratios) and **Diagnostic-only** (capture
-for context, never presented as a throughput number). The split is mandatory and **differs per
-filesystem** — using one side's table for the other produces confidently wrong numbers.
+Every cell runs through `record-run.sh`. **`RUNBOOK.md` owns the per-cell measurement set, the cost
+inputs, the operational source table with its per-filesystem split, and both canaries.** That split is
+mandatory and **is not the same on both legs** (**D12**) — using one leg's table for the other produces
+confidently wrong numbers. Stage 1 changes the base table in one place, and names the cells one of its
+exceptions covers:
 
-### Primary sources
+- **The change: client network counters are Primary on *both* legs for 1.7.** The base table has them
+  diagnostic on the WEKA leg because DPDK bypasses the kernel network stack — but 1.7's *source* traffic
+  is S3 over the kernel TCP stack whichever filesystem is the target, so on that cell they measure a real
+  data path on both sides.
+- **Where `sar -d` is not ~zero:** 1.4's smoke `fio`, 1.5's staging prep run and its sweep cells, and
+  1.6's write side — every Stage 1 cell with local NVMe on one end. That is the base table's local-disk
+  exception rather than a change to it: on those cells the block-device counters are how we confirm the
+  **source** — not the filesystem — was not the limit, which is the headroom 1.4 exists to provide.
 
-| Source | What it captures | Applies to |
-|---|---|---|
-| **App-level** (fio JSON, `fpsync`/`aws` output) | Bytes moved, files transferred, app-reported throughput | Both — the customer-facing number |
-| **`weka stats realtime`** | WEKA-side per-process bandwidth, latency, IOPS | WEKA leg |
-| **Wire counters for the DPDK data path** | Wire-level traffic on the WEKA data plane | WEKA leg |
-| **`/proc/fs/lustre` + `lctl get_param`** | Client-side per-OSC/MDC throughput, RPCs in flight, latency | Lustre leg |
-| **CloudWatch per-OST/MDT metrics** | Server-side throughput and metadata ops | Lustre leg |
-| **Client network counters** | The actual data path on a Lustre client (kernel LNet over TCP, or the EFA provider's counters when EFA-mounted) | **Lustre leg — primary here** |
-
-### Diagnostic-only sources
-
-| Source | Why diagnostic-only |
-|---|---|
-| Client network counters (`sar -n DEV`) — **WEKA leg only** | WEKA's DPDK data plane bypasses the kernel network stack, so these show control-plane traffic only. **On the Lustre leg these same counters are a PRIMARY** — this is the clearest example of why the adapter is per-filesystem. |
-| `sar -d` per block device | Both filesystems are network filesystems; these counters are ~zero for the mount. Useful only to confirm we are *not* accidentally writing to the instance's local disk. |
-| `sar -u` per-core CPU | On the WEKA leg, DPDK poll cores show ~100% busy regardless of load. Useful for "is there NEW load on top of baseline?", not for measuring the filesystem's work. |
-
-### Cross-source canary — derived per filesystem, never ported
-
-After every substage, verify the **Primary**-source numbers tell a physically consistent story. **The
-relation itself differs per filesystem and must be derived, not assumed** (**D12**):
-
-- **WEKA:** erasure coding sets a wire-vs-app write amplification determined by the EC scheme captured at
-  provisioning; reads carry no equivalent amplification. Derive the expected ratio from the actual scheme.
-- **Lustre:** data is striped across OSTs with no default erasure coding, so the relation follows from the
-  **actual stripe layout** (`lfs getstripe`) plus replication settings — derive it from the layout in use,
-  and record that layout per cell.
-
-Diagnostic sources never participate in a ratio check. Disagreement means bugged infra and is fixed
-before continuing. On an unattended chain, the canary **aborts the chain** rather than waiting to be seen.
+The cross-source canary's general rules are in `RUNBOOK.md`. Stage 1 adds one: **at the small block sizes
+of 1.0c/1.0d, per-op overhead shifts the wire-vs-app ratio away from its large-block value on both
+filesystems**, so the band is derived at the block size under test rather than inherited from the
+large-block cell. The mixed-phase band (1.6) is a separate derivation again — see the engineering note
+below.
 
 ---
 
 ## Substage roadmap
 
-⏳ planned · 🟡 running · ✅ complete. Every substage below is ⏳ on both filesystems.
+⏳ planned · 🟡 running · ✅ complete.
 
 ### 1.0a — Synthetic upper bound, sequential write
 
@@ -165,11 +148,9 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Methodology** | 5 block sizes (4K, 64K, 256K, 1M, 4M) × 7 concurrency levels (1–64 jobs) = **35 cells**. Each cell: steady state + ramp, libaio + `--direct=1` + `--unlink=1`, iodepth=1 (sequential-bandwidth recipe). |
 | **Why this exists** | Anchors every real-data Stage 1 number against "what does this filesystem's write path absorb from this client, in isolation?" Without it, "real ingest = X GiB/s" is uninterpretable. It is also the **protocol-independent** ceiling that bounds any SMB stack layered on top. |
 | **Why identical on both** | `fio` is filesystem-agnostic — same grid, same flags, same scratch layout, only `$FS_MOUNT` differs. This is the cleanest apples-to-apples cell in the project. |
-| **Sweep driver** | `lib/sweep-stage1-seqw.sh` |
-| **Aggregated output** | `s1.0a-seqw-summary.csv` — pivoted by `--fs` (PENDING) |
-| **Headline results** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` — per-filesystem relation derived per **D12** |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Sweep driver** | `../scripts/sweep-stage1-seqw.sh` |
+| **Aggregated output** | `s1.0a-seqw-summary.csv` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`). |
 
 ### 1.0b — Synthetic upper bound, sequential read
 
@@ -178,14 +159,13 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Status** | ⏳ both legs — anchor first |
 | **Tool** | `fio` |
 | **Source → Target** | filesystem → host RAM |
-| **Methodology** | Same grid as 1.0a (5 bs × 7 jobs = 35 cells), `--rw=read`, iodepth=1. fio creates files in a layout phase before the timed window. |
+| **Methodology** | Same grid as 1.0a (5 bs × 7 jobs = 35 cells), `--rw=read`, iodepth=1, **plus one cold reference cell = 36**. Reads run against a corpus **staged ahead of the timed window and left in place across cells**; the cache-discipline row below sets its sizing and the cell ordering, and both are part of the methodology rather than a refinement of it. |
 | **Why this exists** | The read counterpart to 1.0a. Ingest itself cares little about read-back, but **every later stage is read-dominated**, so the read ceiling is needed up front. Read-vs-write asymmetry is also architecturally informative: WEKA's erasure coding amplifies writes on the wire while reads are not amplified, whereas Lustre's striping behaves differently again — the shape of that asymmetry is a real difference between the two designs. |
-| **Cache discipline (D13)** | Run **cold and warm** variants explicitly. A maxed FSx carries file-server cache RAM comparable to the instance's own, and WEKA caches too, so an unlabelled read number is ambiguous. Cache state is recorded per cell. |
-| **Sweep driver** | `lib/sweep-stage1-seqr.sh` |
-| **Aggregated output** | `s1.0b-seqr-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Cache discipline (D13)** | **Cold by construction** (**D13** route 1) — the strongest discipline available, because this is a cell every downstream "% of ceiling" divides by, and both sides carry substantial server-side cache on top of the client's own RAM, so an unlabelled read number is ambiguous and the ambiguity is asymmetric. Four requirements: **(1) sizing** — the working set exceeds **the larger of the two server-side caches**, per **D13**: FSx's from its documented file-server cache per TiB at the provisioned tier and capacity, WEKA's from the backends' aggregate RAM, **both fetched at provisioning, never recalled**. The requirement binds at **every point in the grid, single-job cells included** — that is where a small per-job set is trivially absorbed — so it is each *cell's* working set that must clear the cache, not the aggregate across the grid. Because the corpus is retained rather than unlinked, **its footprint is a capacity input on both sides** — and on FSx capacity is simultaneously a performance knob (**D7**), so it is settled at provisioning, not discovered mid-sweep. **(2) staging** — the corpus is staged ahead of the timed window and **not unlinked and recreated between cells**, so no cell reads bytes the filesystem absorbed seconds earlier; `--direct=1` reaches only the client's page cache and says nothing about the server's. **(3) evidence** — **one cold reference cell** at a single (block size, concurrency) point (**D13** route 2), as the measurement that the sizing worked, run as cold as the mechanism actually reaches (`RUNBOOK.md` records what each clearing step clears) with the residual server-side uncertainty stated. **(4) ordering** — cell order **reversed or randomised**, so warmth does not rise monotonically with concurrency and the two effects stay separable. Cache state is **recorded as achieved** per cell, never asserted. |
+| **⚠ Standing constraint** | **Do not run `sweep-stage1-seqr.sh` as it stands.** It sizes the read working set at `--size=4G` × jobs and recreates the files under `--unlink=1` in fio's own layout phase immediately before each timed window, so every cell plausibly reads its data back out of the filesystem's write cache — a cache-inflated ceiling that every downstream percentage in the project inherits. The four requirements above are the specification the driver must meet first; tracked in the open-items memory (the read-sweep driver item). |
+| **Sweep driver** | `../scripts/sweep-stage1-seqr.sh` |
+| **Aggregated output** | `s1.0b-seqr-summary.csv` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`), plus the cache state achieved. |
 
 ### 1.0c — Synthetic upper bound, random write IOPS
 
@@ -196,11 +176,9 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Source → Target** | host RAM → filesystem |
 | **Methodology** | 3 block sizes (4K, 16K, 64K) × 7 concurrency = **21 cells**. iodepth=8 (IOPS recipe), `--rw=randwrite`. Same runtime/ramp as 1.0a/b. |
 | **Why this exists** | Sequential and random writes hit the metadata path differently. Stage 2 (cataloging) and Stage 6 (feature extraction) write many small files to distinct paths — closer to random than sequential. **This is also the first cell that probes the metadata architectures against each other:** Lustre concentrates metadata on MDTs with independently provisioned metadata IOPS, while WEKA distributes it — a structural difference that a bandwidth test cannot see. |
-| **Sweep driver** | `lib/sweep-stage1-randw.sh` |
-| **Aggregated output** | `s1.0c-randw-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` — at small block sizes per-op overhead shifts the wire ratio away from the large-block value on both filesystems; derive per side rather than assuming the large-block ratio holds. |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Sweep driver** | `../scripts/sweep-stage1-randw.sh` |
+| **Aggregated output** | `s1.0c-randw-summary.csv` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`) — including the metadata-operation rates this pattern generates. |
 
 ### 1.0d — Synthetic upper bound, random read IOPS
 
@@ -209,14 +187,13 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Status** | ⏳ both legs |
 | **Tool** | `fio` |
 | **Source → Target** | filesystem → host RAM |
-| **Methodology** | Same grid as 1.0c (3 bs × 7 jobs = 21 cells), iodepth=8, `--rw=randread`. fio creates files in a layout phase before reads begin. |
+| **Methodology** | Same grid as 1.0c (3 bs × 7 jobs = 21 cells), iodepth=8, `--rw=randread`, **plus one cold reference cell = 22**. As in 1.0b, reads run against a corpus **staged ahead of the timed window and left in place across cells**; the cache-discipline row below sets its sizing and the cell ordering. |
 | **Why this exists** | **The defining access pattern for Stage 5 (training).** A multi-GPU PyTorch DataLoader does exactly this: random small-block reads at high concurrency across many large WSI files. This ceiling directly bounds Stage 5, and random-vs-sequential read differential at a given block size is a structural property of each filesystem rather than a tuning artifact. |
-| **Cache discipline (D13)** | Cold and warm variants, cache state recorded — most important here, since a small-block random working set is the easiest thing for a large file-server cache to absorb entirely. |
-| **Sweep driver** | `lib/sweep-stage1-randr.sh` |
-| **Aggregated output** | `s1.0d-randr-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Cache discipline (D13)** | **Cold by construction** (**D13** route 1), on 1.0b's four requirements — sizing past **the larger of the two server-side caches** (FSx from its documented file-server cache per TiB at the provisioned tier and capacity, WEKA from the backends' aggregate RAM, both fetched at provisioning), a corpus **staged ahead of the timed window and not unlinked and recreated between cells**, **one cold reference cell** at a single (block size, concurrency) point as the evidence (**D13** route 2), and **reversed or randomised cell order** so warmth does not track concurrency. Cache state **recorded as achieved** per cell. **This is the most exposed cell in Stage 1:** a small-block random working set is the easiest thing for a large file-server cache to absorb entirely, so the sizing requirement does more work here than anywhere else — and it is also a denominator for Stage 5. |
+| **⚠ Standing constraint** | **Do not run `sweep-stage1-randr.sh` as it stands.** Like 1.0b's driver it uses `--size=4G` × jobs with `--unlink=1` and fio's layout phase, so each cell reads back bytes written seconds earlier at a working set a server-side cache holds comfortably — the worst combination of the two failure modes on the cell most vulnerable to both. Meet the cache-discipline requirements above first; tracked in the open-items memory (the read-sweep driver item). |
+| **Sweep driver** | `../scripts/sweep-stage1-randr.sh` |
+| **Aggregated output** | `s1.0d-randr-summary.csv` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`), plus the cache state achieved. |
 
 ### 1.4 — Local NVMe scratch provisioning
 
@@ -224,11 +201,11 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 |---|---|
 | **Status** | ⏳ one-time environment prep per instance build (not a comparison cell) |
 | **Tool** | `mdadm` + `mkfs.xfs` + fstab (via `sudo`, with explicit sign-off) |
-| **Methodology** | The instance's local NVMe devices (2 × 1900 GB on `g6e.24xlarge` *(subject to change)*) in RAID-0 → XFS → mounted at `/data/local-nvme` with `noatime,nofail`, owned by the benchmark user. Subdirs: `conda-envs/ fpsync-source/ staging/ runs/`. |
+| **Methodology** | The instance's local NVMe devices (2 × 1900 GB on `g6e.24xlarge`) in RAID-0 → XFS → mounted at `/data/local-nvme` with `noatime,nofail`, owned by the benchmark user. Subdirs: `conda-envs/ fpsync-source/ staging/ runs/`. |
 | **Why this exists** | Prerequisite for 1.5: a bulk-copy benchmark needs a **local source comfortably faster than the filesystem's write ceiling**, or the source becomes the bottleneck and the cell measures the wrong thing. A smoke `fio` confirms that headroom before 1.5 runs. |
-| **⚠ Ephemeral** | Instance store **dies with the instance** and is re-provisioned on every rebuild — including between legs. Nothing that matters may rest here (`CLAUDE.md` → Durability & backup). It is scratch, not storage. |
+| **⚠ Ephemeral** | Instance store **dies with the instance** and is re-provisioned on every rebuild — including between legs. Nothing that matters may rest here (`../CLAUDE.md` → Durability). It is scratch, not storage. |
 | **Held-constant note** | Because the instance is identical in both legs, the local tier is identical too — so 1.5's source is not a cross-leg variable. Re-run the smoke `fio` per build and record it, to prove that. |
-| **Headline results** | `[PENDING]` (smoke `fio`, per build) |
+| **Recorded per build** | The smoke `fio` result that establishes the source headroom, recorded like any other cell. |
 
 ### 1.5 — Bulk local→filesystem copy sweep (`fpsync`)
 
@@ -240,11 +217,9 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Methodology** | TCGA-BRCA full corpus staged to local NVMe first via its own recorded prep run. Sweep: **`fpsync -n N` ∈ {1, 4, 16, 64}**, full corpus per cell, each cell writing to its own per-N subdir (cleaned pre-cell). Per-cell isolation via `record-run.sh`. |
 | **Why this exists** | The clean write-path benchmark on **real WSI files** with no WAN in the way — the closest analogue to the scanner-to-storage workflow labs actually run. Comparison against the synthetic 1.0a ceiling shows how much of each filesystem's write capability is reachable with real files and real metadata operations rather than a single scratch stream. The concurrency grid spans the saturation curve: `n=1` is single-stream-bound; `n=16/64` tests whether per-worker overhead caps below the storage ceiling. |
 | **Why identical on both** | Same corpus (byte-verified from S3), same `-n` grid, same defaults, same target layout. Only `$FS_MOUNT` differs. |
-| **Sweep driver** | `lib/sweep-stage1-fpsync.sh` · **Aggregator** `lib/aggregate-stage1-fpsync.py` (1-D on `n`, pivoted by `--fs`) |
-| **Aggregated output** | `s1.5-fpsync-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Sweep driver** | `../scripts/sweep-stage1-fpsync.sh` · **Aggregator** `../scripts/aggregate-stage1-fpsync.py` |
+| **Aggregated output** | `s1.5-fpsync-summary.csv` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`), plus files transferred and bytes moved. |
 
 ### 1.6 — Mixed concurrent ingest + read
 
@@ -254,15 +229,14 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Tool** | `fpsync` (concurrent ingest) + `fio` (concurrent read), driven by a per-cell wrapper inside `record-run.sh` |
 | **Source → Target (write side)** | `/data/local-nvme/fpsync-source/tcga-brca/` → `$FS_MOUNT/data/fpsync-target/mixed/` (cleaned per cell) |
 | **Source → Target (read side)** | `$FS_MOUNT/benchmarks/fio-scratch-mixed/` (pre-staged real files, verified non-sparse) → `/dev/null`, `fio` random reads, libaio `direct=1` |
-| **Methodology** | **Fixed** ingest at a moderate `fpsync -n` chosen as a realistic "scanner pace" with headroom (the exact `-n` is set from each leg's own 1.5 curve, so both sides sit at a comparable *fraction* of their own write ceiling rather than an identical absolute rate). **Swept** read: `--rw=randread --iodepth=8`, `bs ∈ {4K, 64K} × jobs ∈ {1, 4, 16, 64}` = 8 cells. Read scratch pre-staged **once** per leg so each cell exercises only the random-read pattern. |
+| **Methodology** | **Fixed** ingest at a moderate `fpsync -n` chosen as a realistic "scanner pace" with headroom (the exact `-n` is set from each leg's own 1.5 curve, so both sides sit at a comparable *fraction* of their own write ceiling rather than an identical absolute rate). **Swept** read: `--rw=randread --iodepth=8`, `bs ∈ {4K, 64K} × jobs ∈ {1, 4, 16, 64}` = 8 cells, **plus one cold reference cell = 9**. Read scratch pre-staged **once** per leg so each cell exercises only the random-read pattern, and cell order reversed or randomised (cache-discipline row below). |
 | **Why this exists** | **Operationally the most realistic Stage 1 cell.** Two customer questions at once: *while a scanner feeds at moderate pace, can pathologists pan/zoom existing slides at viewer-acceptable latency?* (→ read p99 at low `bs`/`jobs`) and *does heavy reader load throttle the scanner?* (→ `fpsync` app-level bandwidth across the read sweep). The "no second tier needed" pitch only holds if both sides survive concurrent stress — and whether the two filesystems degrade differently under mixed load is exactly the kind of QoS difference a bandwidth test cannot surface. |
 | **Why the fixed side is a fraction, not an absolute** | Pinning both legs to the same absolute ingest MB/s would load them unequally if their write ceilings differ — the slower side would be nearer saturation and look worse for a reason that has nothing to do with mixed-workload behaviour. Holding the *fraction* constant isolates the QoS question. **Both the fraction and the resulting absolute rate are recorded per cell**, so either view can be reconstructed. |
-| **Sweep driver** | `lib/sweep-stage1-mixed.sh` · **Aggregator** `lib/aggregate-stage1-mixed.py` (captures read-side `fio` **and** write-side `fpsync` bytes) |
-| **Aggregated output** | `s1.6-mixed-summary.csv` (PENDING) |
-| **Headline results — read side under concurrent ingest** | `[PENDING]` |
-| **Headline results — write side under concurrent read** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` — see the mixed-workload canary note below |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Cache discipline (D13) — recorded exemption + a cold reference cell** | The read grid carries **no cold/warm dimension**, by decision, under **D13** route 4. *The technical ground:* `--direct=1` removes the client page cache from the question, and 1.6 is deliberately a **mixed steady-state** cell — production is warm, so a cold mixed cell would measure a state no lab operates in. What remains is server-side cache, which cannot be cleared on a managed service, so a nominal cold arm would differ from its warm twin only by an **uncontrolled** variable — double the read grid to separate nothing. *And because an exemption must be evidenced rather than asserted, it comes with **one cold reference cell** at a single grid point* (**D13** route 2), cold to the extent the mechanism reaches (`RUNBOOK.md` records what each clearing step clears): if it matches its warm twin the exemption is confirmed cheaply; if it does not, server-side cache is material here and the grid grows. That conditional is what makes the exemption defensible instead of convenient. The read set is the driver's `--size=4G` × jobs, so the **low-concurrency cells are the ones most likely cache-resident**, and cell order is reversed or randomised for the same reason as 1.0b/1.0d — warmth must never track the swept variable. Cache state is **recorded as achieved** per cell (`RUNBOOK.md`), never asserted. |
+| **⚠ Standing constraint** | **`sweep-stage1-mixed.sh` does not yet carry the cold reference cell and runs the grid in ascending `bs`/`jobs` order.** Run as it stands, the exemption is asserted rather than evidenced and warmth rises with concurrency, so a read curve that flattens at high `jobs` cannot be told apart from cache falling away — the exact confound the ordering rule exists to remove. Tracked in the open-items memory (the read-sweep driver item). |
+| **Sweep driver** | `../scripts/sweep-stage1-mixed.sh` · **Aggregator** `../scripts/aggregate-stage1-mixed.py` |
+| **Aggregated output** | `s1.6-mixed-summary.csv` |
+| **Recorded per cell** | **Both sides separately** — read-side throughput and its latency distribution, write-side `fpsync` app-level bandwidth, and the ingest fraction and the absolute rate it resolved to — plus the full measurement set and the cost inputs (`RUNBOOK.md`). A cell that recorded only one side cannot answer either customer question. |
 
 ### 1.7 — S3 → filesystem hydration (the head-to-head ingest cell)
 
@@ -274,11 +248,9 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Methodology** | Full-prefix hydration at a swept `max_concurrent_requests`, byte-verified against the dataset manifest on completion. **Identical tool, identical flags, identical concurrency grid on both filesystems.** |
 | **Why this exists** | This is how the datasets actually get onto each filesystem, so it is a real workload we are running anyway — and it is a legitimate large-write ingest measurement from a **same-region, high-bandwidth source**, which removes the WAN bottleneck that would otherwise dominate. It also doubles as the mechanism that makes the datasets a held-constant input (byte-verified identical bytes in both legs). |
 | **Why the same method on both — load-bearing** | FSx offers a native S3 data-repository import that has no WEKA counterpart. Using it for Lustre and a plain copy for WEKA would compare **two different mechanisms**, not two filesystems. So the head-to-head cell uses plain `aws s3` on both sides, and FSx's native import is measured separately as **1.8**. |
-| **Sweep driver** | *to be written — deferred to the cloud session (needs the real bucket, region, and IAM role)* |
-| **Aggregated output** | `s1.7-hydrate-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` |
-| **Cross-source validation** | `[PENDING]` — note the client's network counters are a **primary** here on both legs, since the source traffic is S3 over the kernel TCP stack regardless of which filesystem is the target |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Sweep driver** | Written on the instance — the driver needs the provisioned bucket, region and IAM role, which do not exist until the environment does; tracked in the deferred table in `SCRIPT-TRACKER.md`. |
+| **Aggregated output** | `s1.7-hydrate-summary.csv` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`), plus the byte-verification result against the dataset manifest — a partial hydration that is not caught here poisons every stage that reads the corpus. |
 
 ### 1.8 — FSx-native S3 import *(Lustre leg only — NOT head-to-head)*
 
@@ -289,8 +261,7 @@ before continuing. On an unattended chain, the canary **aborts the chain** rathe
 | **Methodology** | Import the same S3 dataset prefixes via FSx's native linkage, recorded with the same harness as 1.7 so the two are directly comparable **within** the Lustre leg. |
 | **Why this exists, and why it is excluded from the comparison** | It is a genuine Lustre capability with no WEKA equivalent, so reporting it as part of the head-to-head would be comparing a feature against its absence. But **omitting it entirely would understate Lustre**, which the fairness basis (**D7** — Lustre at maximum capability) forbids. So it is measured, labelled a **single-filesystem capability cell**, and presented as "what FSx can additionally do," never as a delta. |
 | **Presentation rule** | Any chart or table containing 1.8 must visually separate it from head-to-head cells and state that no WEKA counterpart exists. |
-| **Headline results** | `[PENDING]` |
-| **Interpretation** | `[STORY PENDING RESULTS]` |
+| **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`). |
 
 ---
 
@@ -309,8 +280,12 @@ reassigned on reinstall.
 
 > **Per-filesystem caveat:** the *pattern* generalises to both legs, but the *filter* does not — the WEKA
 > and Lustre stats streams have different schemas and different notions of "the client's rows." Each
-> leg's adapter implements the same pattern against its own source. **This is deferred to the cloud
-> session**, which can see the real schemas.
+> leg's adapter implements the same pattern against its own source, and **the filter is written against
+> the live stream on the provisioned instance, never from documentation.** Neither way of getting it
+> wrong raises an error: too broad a filter dilutes the number as above, and one that matches nothing
+> drops the filesystem-side metric altogether — `aggregate-stage1-fpsync.py` returns `None` for the cell,
+> the summary prints a dash, and the ratio check **skips** that cell rather than failing it, so a sweep
+> that lost its filesystem-side source still reports every band clean.
 
 **Mixed-workload canary bands must be wider than single-direction bands, and re-derived per filesystem.**
 In a mixed read+write cell the wire counters carry more than the payload under test — read data plus write
@@ -337,9 +312,9 @@ data is actually fine. **Use `setsid` plus a process-group kill (`kill -- -PGID`
 | `fpsync` / `fpart` | record at run time | system package | 1.5, 1.6 |
 | `aws` CLI | record at run time | pip/system | 1.7, and the one-time dataset staging into S3 |
 | `mdadm`, `mkfs.xfs` | system | system | 1.4 |
-| `record-run.sh` | live | `lib/record-run.sh` | every substage |
-| `parse-results.py` | live | `lib/parse-results.py` | every substage |
-| `aggregate-sweep.py` | live | `lib/aggregate-sweep.py` | 1.0a–d |
+| `record-run.sh` | live | `../scripts/record-run.sh` | every substage |
+| `parse-results.py` | live | `../scripts/parse-results.py` | every substage |
+| `aggregate-sweep.py` | live | `../scripts/aggregate-sweep.py` | 1.0a–d |
 | `weka stats realtime` | record at run time | system | every substage (WEKA leg recording) |
 | `lctl`, `lfs` | record at run time | Lustre client | every substage (Lustre leg recording) |
 
@@ -352,51 +327,72 @@ data is actually fine. **Use `setsid` plus a process-group kill (`kill -- -PGID`
 
 Both are **held-constant inputs**, byte-verified identical in both legs (`STAGES.md` **D6**).
 
-## Decision log (Stage 1-scoped)
+## Decision register (Stage 1-scoped)
 
-- **2026-07-31 — Dataset staging is a one-time pre-leg step into S3, not a per-leg comparison cell.**
-  *Why:* a WAN download measures an external service and a network link, not a filesystem; running it
-  per-leg would spend hours producing a number about neither side, and risks putting different bytes on
-  the two filesystems. Staging once makes the datasets a byte-verified held-constant input.
-- **2026-07-31 — The head-to-head ingest cell is S3 → filesystem hydration (1.7) using the same tool and
-  flags on both sides.** *Why:* it is a real workload we run anyway, it removes the WAN bottleneck via a
-  same-region source, and using the identical mechanism on both sides is what makes it a filesystem
-  comparison rather than a mechanism comparison.
-- **2026-07-31 — FSx-native S3 import is measured but excluded from the head-to-head (1.8).** *Why:*
-  including it would compare a feature against its absence; omitting it would understate Lustre, which
-  **D7** forbids. Measured, labelled a single-filesystem capability cell, never presented as a delta.
-- **2026-07-31 — 1.6's ingest side is pinned to a *fraction* of each leg's own write ceiling, not to an
-  absolute rate.** *Why:* an identical absolute rate would load the two sides unequally if their ceilings
-  differ, confounding the QoS question with a saturation difference. Both the fraction and the absolute
-  rate are recorded so either view is reconstructible.
-- **2026-07-31 — SMB ingest explicitly out of scope on both filesystems.** *Why:* see the protocol-scope
-  caveat — the infrastructure is out of scope, and the two SMB paths would not be architecturally
-  comparable (WEKA has a native SMB stack; Lustre would need a gateway), so it would introduce an
-  asymmetry we could not hold constant.
-- **2026-07-31 — Synthetic-first sequencing retained.** *Why:* real-data numbers need an
+One entry per live Stage 1 decision. Cross-stage decisions live in `STAGES.md`.
+
+- **Dataset staging is a one-time pre-leg step into S3, not a per-leg comparison cell.** *Why:* a WAN
+  download measures an external service and a network link, not a filesystem; running it per-leg would
+  spend hours producing a number about neither side, and risks putting different bytes on the two
+  filesystems. Staging once makes the datasets a byte-verified held-constant input.
+- **The head-to-head ingest cell is S3 → filesystem hydration (1.7), using the same tool and flags on both
+  sides.** *Why:* it is a real workload we run anyway, it removes the WAN bottleneck via a same-region
+  source, and using the identical mechanism on both sides is what makes it a filesystem comparison rather
+  than a mechanism comparison.
+- **FSx-native S3 import is measured but excluded from the head-to-head (1.8).** *Why:* including it would
+  compare a feature against its absence; omitting it would understate Lustre, which **D7** forbids.
+  Measured, labelled a single-filesystem capability cell, never presented as a delta.
+- **1.6's ingest side is pinned to a *fraction* of each leg's own write ceiling, not to an absolute rate.**
+  *Why:* an identical absolute rate would load the two sides unequally if their ceilings differ,
+  confounding the QoS question with a saturation difference. Both the fraction and the absolute rate are
+  recorded so either view is reconstructible.
+- **SMB ingest is out of scope on both filesystems.** *Why:* see the protocol-scope caveat — the
+  infrastructure is out of scope, and the two SMB paths would not be architecturally comparable (WEKA has
+  a native SMB stack; Lustre would need a gateway), so it would introduce an asymmetry we could not hold
+  constant.
+- **The synthetic cells (1.0a–d) run before the real-data cells.** *Why:* real-data numbers need an
   isolated-storage anchor or they are uninterpretable, and every downstream "% of ceiling" divides by a
   **block-size-matched** 1.0 cell.
-- **2026-07-31 — `fio` recipe grounded in each vendor's current performance-testing guidance at run
-  time** (libaio + `--direct=1`; sequential grid at iodepth=1; IOPS grid at iodepth=8). *Why:* recipes and
+- **The `fio` recipe is grounded in each vendor's current performance-testing guidance at run time**
+  (libaio + `--direct=1`; sequential grid at iodepth=1; IOPS grid at iodepth=8). *Why:* recipes and
   recommended flags change between versions, and `../CLAUDE.md` forbids quoting them from memory —
   re-confirm against the live docs before the first cell.
-- **2026-07-31 — Cold-vs-warm is explicit on every read cell (1.0b, 1.0d, 1.6 read side).** *Why:* per
-  **D13**, both filesystems carry substantial cache and they cache differently, so an unlabelled read
-  number is ambiguous and the ambiguity is asymmetric.
-
-## Change log
-
-| When | Change |
-|---|---|
-| 2026-07-31 | Stage 1 roadmap created for the WEKA-vs-Lustre comparison. Substages restructured: WAN cloud-ingest cells replaced by one-time S3 staging plus the **1.7** S3→filesystem head-to-head cell; **1.8** added as a Lustre-only capability cell; 1.0a–d, 1.4, 1.5, 1.6 retained with per-leg framing. Recording section rewritten around per-filesystem source adapters and a per-filesystem canary derivation. Load-bearing engineering notes (per-timestamp client summing, mixed-workload canary bands, process-group kill) carried forward with per-filesystem caveats. All numbers `[PENDING]`; all interpretation `[STORY PENDING RESULTS]`. |
+- **The synthetic read ceilings (1.0b, 1.0d) are cold BY CONSTRUCTION, not by a cold/warm dimension: the
+  working set is sized past the larger of the two server-side caches, staged ahead of the timed window, and
+  retained across cells.** *Why:* both filesystems carry substantial cache and cache differently, so an
+  unlabelled read number is ambiguous and the ambiguity is asymmetric — and these are the cells every
+  downstream "% of ceiling" divides by, so a cache-inflated ceiling makes every percentage in the project
+  wrong in the flattering direction, invisibly, because each later stage's own numbers stay internally
+  consistent. Sizing past cache leaves cache nothing to serve, which is the only route needing no per-leg
+  clearing mechanism (**D13** route 1) and therefore the only one that keeps **one identical corpus
+  definition serving both legs** — a per-leg size would break the held-constant contract on the substage most
+  sensitive to it. **Data written immediately before it is read is server-cache-resident whatever the client
+  does** — `--direct=1` reaches only the client page cache — hence staged, and never unlinked and recreated
+  between cells. Cell order is reversed or randomised because a grid run ascending warms monotonically with
+  concurrency, leaving the two effects inseparable afterwards. *Sizing sources, fetched at provisioning and
+  never recalled:* FSx's documented file-server cache per TiB at the provisioned tier and capacity; the WEKA
+  backends' aggregate RAM.
+- **A cold reference cell is the standard evidence device wherever cache discipline rests on construction or
+  on an exemption — 1.0b, 1.0d and 1.6 each carry one.** One cell at a single grid point, run cold. *Why:*
+  cold-by-construction and a stated exemption are both *arguments*, and **D13** requires the axis to be
+  evidenced rather than asserted. One cell converts the argument into a measurement for a fraction of the
+  cost of a full cold/warm dimension — and it fails usefully: a reference cell that does not match its warm
+  twin says server-side cache is material at that point, which is precisely when the grid should grow.
+- **1.6's read side takes a recorded exemption from the cold/warm dimension, on stated grounds, evidenced by
+  its cold reference cell.** *Why:* `--direct=1` removes the client page cache from the question, and 1.6 is
+  deliberately a **mixed steady-state** cell — production is warm, so a cold mixed cell would measure a state
+  no lab operates in. What remains is server-side cache, which cannot be cleared on a managed service, so a
+  nominal cold arm would differ from its warm twin only by an uncontrolled variable: double the read grid to
+  separate nothing. The exemption is **D13** route 4, which is permitted only alongside the reference cell,
+  and cell order is de-ordered here too so warmth does not track `jobs`.
 
 ## Cross-references
 
-- `../CLAUDE.md` — project rules: recording philosophy, per-filesystem source adapters, durability
 - `../PROJECT-THESIS.md` — the question, the held-constant contract, both deliberate asymmetries
-- `STAGES.md` — stage map, per-leg plan, decision log **D1–D14**
-- `README.md` — operational runbook: how to run a cell, both canaries, failure recovery
-- `../SCRIPT-TRACKER.md` — per-script reference for `lib/`, including deferred cloud-session TODOs
-- `../FILESYSTEM-MAP.md` — where the mounts, S3 prefixes, datasets, and scratch live
-- `INDEX.md` — append-only run history (auto-generated)
+- `../CLAUDE.md` — project rules: recording, durability, how we work
+- `STAGES.md` — stage map, per-leg plan, cross-stage decision register
+- `RUNBOOK.md` — how to run and record a cell, both canaries, failure recovery
+- `SCRIPT-TRACKER.md` — per-script reference for `scripts/`, including the deferred-work table
+- `FILESYSTEM-MAP.md` — where the mounts, S3 prefixes, datasets, and scratch live
+- `../runs/INDEX.md` — append-only run history (auto-generated)
 - Each run dir's `0_README.md` — auto-generated description of that specific run

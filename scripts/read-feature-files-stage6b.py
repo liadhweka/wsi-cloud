@@ -62,21 +62,60 @@ from pathlib import Path
 import torch
 
 
+def _discard_in_child(dir_path):
+    """Runs in a throwaway process: import cucim, discard, exit."""
+    try:
+        from cucim.clara import filesystem as cucim_fs
+        cucim_fs.discard_page_cache(dir_path)
+    except Exception as e:                      # noqa: BLE001 - report, never mask
+        print(f"[discard] discard_page_cache failed: {e}", file=sys.stderr, flush=True)
+        raise SystemExit(1)
+
+
+def discard_page_cache_once(corpus_dir):
+    """Drop the client page cache for `corpus_dir` ONCE, before any reader runs.
+
+    Returns True if the discard is believed to have succeeded.
+
+    WHY A SEPARATE CHILD RATHER THAN THE PARENT: this module is deliberately
+    CUDA-free in the parent (fork start method), and the discard helper lives in
+    cucim, whose import pulls in the CUDA stack. Doing it in a short-lived child
+    keeps that guarantee intact while still completing the drop before the pool
+    is created.
+
+    WHY BEFORE THE POOL AT ALL: a drop issued from inside a pool worker races
+    every other worker. They are already reading by then, so the cache is
+    already warm when it fires and the eviction lands in the middle of their
+    measurement -- the worst of both, since the cell is neither cold nor clean.
+
+    This clears the CLIENT page cache only. It says nothing about the
+    filesystem's server-side cache, which is the other half of the cold-state
+    question (see RUNBOOK.md for what each clearing step does and does not
+    reach, and D13 for how a cell's cache regime is established).
+    """
+    from multiprocessing import Process
+    p = Process(target=_discard_in_child, args=(str(corpus_dir),))
+    p.start()
+    p.join()
+    if p.exitcode != 0:
+        print(f"[reader] page-cache discard did NOT succeed (exit {p.exitcode}); "
+              f"this cell is NOT cold -- record it as such rather than labelling it cold",
+              file=sys.stderr, flush=True)
+        return False
+    return True
+
+
 def _load_one(args_tuple):
     """Worker function (one process). Reads files per pattern until deadline."""
     (worker_id, file_list, pattern, runtime, ramp, seed,
      latency_sample_rate, lru_size, discard_cache) = args_tuple
 
-    # Optional: drop wekafs page cache once per worker on the first file's
-    # directory (helps approximate cold-cache for the whole worker pool).
-    if discard_cache and worker_id == 0:
-        try:
-            from cucim.clara import filesystem as cucim_fs
-            dir_path = str(Path(file_list[0]).parent)
-            cucim_fs.discard_page_cache(dir_path)
-        except Exception as e:
-            print(f"[worker {worker_id}] discard_page_cache failed: {e}", file=sys.stderr, flush=True)
-
+    # NOTE: the page-cache discard does NOT happen here. It is performed once,
+    # in a throwaway child of the parent, BEFORE this pool exists -- see
+    # discard_page_cache_once(). Dropping it from inside worker 0 meant every
+    # other worker had already started reading and warming the cache, so the
+    # cell was neither cold nor undisturbed: the drop landed mid-flight and
+    # evicted data the other workers were actively measuring against.
     rng = random.Random(seed + worker_id)
     t_start = time.monotonic()
     t_steady_start = t_start + ramp
@@ -211,6 +250,13 @@ def main():
                     not args.no_discard_cache)
                    for i in range(args.n_processes)]
 
+    # Cold state is established ONCE, before any worker exists. Recorded as
+    # achieved rather than asserted (D13) -- a cell whose discard failed is a
+    # warm cell that must be labelled warm, not a cold cell with a caveat.
+    cache_discarded = None
+    if not args.no_discard_cache:
+        cache_discarded = discard_page_cache_once(Path(file_list[0]).parent)
+
     print(f"[reader] spawning {args.n_processes} workers...", flush=True)
     t0 = time.monotonic()
     with Pool(processes=args.n_processes) as p:
@@ -249,6 +295,10 @@ def main():
         "n_files_in_corpus": n_files,
         "pattern": args.pattern,
         "n_processes": args.n_processes,
+        # Cache state ACHIEVED, not requested (D13). null = discard not attempted;
+        # false = attempted and failed, so the cell is warm and must be read as
+        # warm. Client page cache only -- the server side is not addressed here.
+        "client_page_cache_discarded": cache_discarded,
         "ramp_s": args.ramp,
         "runtime_s": args.runtime,
         "wall_seconds_total": wall,

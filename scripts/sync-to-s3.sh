@@ -72,7 +72,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# This script lives in <repo>/scripts, so the repo root is ONE level up. It was
+# ../.. when the library lived at runs/lib/; after the restructure that resolved
+# to the repo's PARENT, and every source path below silently pointed outside the
+# repo -- so `--mode full` had nothing to upload and still reported success.
+# That is the worst possible shape for the project's only durability path.
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Fail loudly rather than syncing from a tree that is not this repo.
+[ -d "$REPO_ROOT/runs" ] && [ -d "$REPO_ROOT/scripts" ] || {
+  echo "FATAL: REPO_ROOT='$REPO_ROOT' does not look like the repo (no runs/ + scripts/)." >&2
+  echo "       Refusing to sync: a wrong root uploads nothing and reports success." >&2
+  exit 1
+}
 
 MODE=""
 RUN_DIR=""
@@ -141,7 +152,9 @@ case "$MODE" in
     # ---- Environment contracts ----
     # These are what let Leg B prove it matched Leg A, so several consumers expect
     # them in S3: teardown-preflight.sh NO-GOes without them, and Leg B fetches
-    # Leg A's contract from s3://<bucket>/env-contracts/ (NEW-CLOUD-SETUP.md § 8.7).
+    # Leg A's contract from s3://<bucket>/env-contracts/ before provisioning
+    # anything (prompts/prompt-lustre-cluster-cloud.md, "Verify comparability
+    # against Leg A first"; generic form in TEARDOWN-AND-REBUILD.md, Rebuild step 4).
     # ARCHIVE, not MIRROR, deliberately: a --delete sync run from a checkout that
     # happens not to hold the other leg's contract would remove the one artifact
     # whose loss makes the whole comparison unverifiable. Tiny files; never prune.

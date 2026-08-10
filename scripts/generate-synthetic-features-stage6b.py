@@ -155,7 +155,16 @@ def gen_one_file(args_tuple):
         "features": feats,
     }
     out_path = Path(output_dir) / f"{slide_id}.pt"
-    torch.save(payload, out_path)
+    # Write to .partial, rename only on success. torch.save writes in place, so a kill
+    # or an ENOSPC part-way through leaves a truncated file AT THE FINAL NAME — which
+    # the idempotency scan then counts as present on every later run, so the corpus
+    # stays short and partly corrupt forever. The 6.B reader registers such a file as
+    # one more `errors += 1` against no threshold, and corpus size is precisely the
+    # parameter that must exceed both filesystems' caches: a corpus silently 30% short
+    # measures cache. Same partial-then-rename pattern as the Tier-2 converter.
+    partial_path = Path(str(out_path) + ".partial")
+    torch.save(payload, partial_path)
+    os.replace(partial_path, out_path)
     t1 = time.monotonic()
     return {
         "file_idx": file_idx,
@@ -163,6 +172,29 @@ def gen_one_file(args_tuple):
         "wallclock_s": t1 - t0,
         "file_size_bytes": out_path.stat().st_size,
     }
+
+
+def scan_corpus(output_dir: Path, min_file_bytes: int) -> dict:
+    """One stat pass over the corpus dir: which files are COMPLETE, and what is
+    actually on disk right now.
+
+    A .pt counts as present only at >= min_file_bytes. Membership by filename alone
+    treats a truncated file as done, so a corpus that lost files to a kill or an
+    ENOSPC stays short across every later run — and the shortfall is otherwise
+    invisible, because nothing else reports the corpus's real file count and byte
+    total (the generator's own counters are scoped to the run that wrote them).
+    """
+    complete, n_files, total_bytes, n_incomplete = set(), 0, 0, 0
+    for p in output_dir.glob("*.pt"):
+        size = p.stat().st_size
+        n_files += 1
+        total_bytes += size
+        if size >= min_file_bytes:
+            complete.add(p.stem)
+        else:
+            n_incomplete += 1
+    return {"complete_stems": complete, "n_files_in_corpus": n_files,
+            "corpus_bytes_on_disk": total_bytes, "n_incomplete_files": n_incomplete}
 
 
 def generate_corpus(count: int, file_size_mb: int, dtype: str,
@@ -177,19 +209,39 @@ def generate_corpus(count: int, file_size_mb: int, dtype: str,
           f"(target file size {file_size_mb} MB; {count} files; "
           f"total ~{count * file_size_mb / 1024:.1f} TB)", flush=True)
 
-    # Check for existing files (idempotency)
-    existing = set(p.stem for p in output_dir.glob("*.pt"))
+    # Floor for a complete file: the two tensors' raw bytes. torch.save adds pickle +
+    # zip-container overhead on top, so a complete file is always larger and a
+    # truncated one is smaller. Deriving the floor rather than comparing against a
+    # sibling keeps the check honest when every file in the dir is a stub.
+    min_file_bytes = n_tiles * (EMBED_DIM * DTYPE_BYTES[dtype] + 2 * 8)
+
+    # Check for existing files (idempotency) — by completeness, not by name
+    scan = scan_corpus(output_dir, min_file_bytes)
+    existing = scan["complete_stems"]
+    if scan["n_incomplete_files"]:
+        print(f"[corpus] {name_prefix}: {scan['n_incomplete_files']} file(s) below the "
+              f"{min_file_bytes}-byte floor — regenerating them", flush=True)
     to_generate = [i for i in range(count) if f"{name_prefix}-{i:06d}" not in existing]
     if len(to_generate) < count:
         print(f"[corpus] {len(to_generate)}/{count} files to generate "
-              f"({count - len(to_generate)} already exist)", flush=True)
+              f"({count - len(to_generate)} already complete)", flush=True)
     if not to_generate:
-        print(f"[corpus] {name_prefix}: corpus complete; nothing to do", flush=True)
+        print(f"[corpus] {name_prefix}: corpus complete; nothing to do "
+              f"({scan['n_files_in_corpus']} files, "
+              f"{scan['corpus_bytes_on_disk'] / 1024**4:.2f} TiB on disk)", flush=True)
         return {
             "name": name_prefix, "count": count, "file_size_mb": file_size_mb,
             "dtype": dtype, "n_tiles_per_file": n_tiles,
             "output_dir": str(output_dir), "n_generated_this_run": 0,
-            "wallclock_s": 0.0,
+            "n_existing_skipped": count, "wallclock_s": 0.0,
+            "mean_file_size_mb": 0.0, "total_bytes_written": 0,
+            "min_file_bytes": min_file_bytes,
+            "n_files_in_corpus": scan["n_files_in_corpus"],
+            "corpus_bytes_on_disk": scan["corpus_bytes_on_disk"],
+            "n_incomplete_files": scan["n_incomplete_files"],
+            # Every expected file is complete; any leftover stub in the dir still
+            # counts against the corpus, because the 6.B reader will read it.
+            "corpus_complete": scan["n_incomplete_files"] == 0,
         }
 
     work_args = [(str(output_dir), i, n_tiles, EMBED_DIM, dtype, name_prefix)
@@ -213,6 +265,20 @@ def generate_corpus(count: int, file_size_mb: int, dtype: str,
           f"({len(results) / wallclock:.1f} files/sec write rate). "
           f"Mean file size {np.mean(sizes) / 1024 / 1024:.2f} MB", flush=True)
 
+    # Re-scan: the counters above describe THIS run, not the corpus. What the 6.B
+    # cells actually read is whatever is on disk now, and a corpus short of `count`
+    # measures a working set smaller than the one the cell claims — the cache-vs-
+    # storage question 6.B exists to answer. Report it, per run, either way.
+    final = scan_corpus(output_dir, min_file_bytes)
+    corpus_complete = (final["n_files_in_corpus"] >= count
+                       and final["n_incomplete_files"] == 0)
+    print(f"[corpus] {name_prefix}: on disk {final['n_files_in_corpus']}/{count} files, "
+          f"{final['corpus_bytes_on_disk'] / 1024**4:.2f} TiB"
+          + ("" if corpus_complete else
+             f" — INCOMPLETE ({final['n_incomplete_files']} short file(s)); "
+             f"cells run against this corpus do NOT have the working set they claim"),
+          flush=True)
+
     return {
         "name": name_prefix,
         "count": count,
@@ -225,6 +291,11 @@ def generate_corpus(count: int, file_size_mb: int, dtype: str,
         "wallclock_s": wallclock,
         "mean_file_size_mb": float(np.mean(sizes) / 1024 / 1024) if sizes else 0.0,
         "total_bytes_written": int(sum(sizes)),
+        "min_file_bytes": min_file_bytes,
+        "n_files_in_corpus": final["n_files_in_corpus"],
+        "corpus_bytes_on_disk": final["corpus_bytes_on_disk"],
+        "n_incomplete_files": final["n_incomplete_files"],
+        "corpus_complete": corpus_complete,
     }
 
 

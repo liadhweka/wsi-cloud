@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # Stage 6.A sweep driver — foundation-model feature extraction.
 #
-# Three tiers per `runs/Stage-6-Feature-Extraction.md`:
-#   Tier 1 (scaling): N_GPUs sweep × models × backends on 50-slide cross-stage subset
-#       - 4 N_GPUs × 2 models × kvikio = 8 cells
-#       - 1 N_GPUs (=4) × 2 models × cucim_batched_cpu (comparator) = 2 cells
-#       - Total: 10 cells (UNI2-h adds 5 more if license resolved)
-#   Tier 2 (production-scale): full TCGA-BRCA at peak N=4, both backends, all models
-#       - 2 models × N=4 × kvikio (via chunked raw-TIFF) = 2 cells
-#       - 2 models × N=4 × cucim_batched_cpu (canonical SVS) = 2 cells
-#       - Total: 4 cells (UNI2-h adds 2 more if license resolved)
-#       - kvikio cells require chunked raw-TIFF conversion — invokes
-#         `run-stage6a-tier2-chunked.sh` (pending)
-#   Tier 3 (cross-dataset): CAMELYON16 50-slide subset at peak N=4 × kvikio
-#       - 2 models × N=4 × kvikio × CAM16 = 2 cells (UNI2-h adds 1)
+# Three tiers per `docs/Stage-6-Feature-Extraction.md`. All three foundation models
+# are first-class; UNI2-h cells carry the PENDING-APPROVAL tag (see run_cell), which
+# is a publication filter, not a scope reduction:
+#   Tier 1 (scaling): 50-slide cross-stage subset
+#       - 3 models × N ∈ {1, 2, 4} × kvikio = 9 cells
+#       - 3 models × N=4 × cucim_batched_cpu (data-path comparator) = 3 cells
+#       - Total: 12 cells
+#   Tier 2 (production-scale): full TCGA-BRCA cohort at N=4
+#       - 3 models × N=4 × cucim_batched_cpu (canonical SVS) = 3 cells
+#       - 1 multi-model kvikio cell — all 3 models share one chunked raw-TIFF
+#         conversion, via `run-stage6a-tier2-chunked-multimodel.sh` = 1 cell
+#       - Total: 4 cells
+#   Tier 3 (cross-dataset): CAMELYON16 50-slide subset at N=4 × kvikio
+#       - 3 models × N=4 × kvikio × CAM16 = 3 cells
 #
-# Per-cell LD_PRELOAD scoping (per the cucim-segfaults-when-libcufile-is-ld-preloaded
-# memory — the versions are era-specific, the pattern is durable):
+# Per-cell LD_PRELOAD scoping — the standing rule for every sweep that mixes the two
+# backends (docs/Stage-6-Feature-Extraction.md, "Per-cell LD_PRELOAD scoping"):
 #   - kvikio cells: set LD_PRELOAD to the SYSTEM libcufile ($LIBCUFILE_PRELOAD)
 #   - cucim cells: leave LD_PRELOAD unset (cuCIM links its own bundled copy and
-#     segfaults on an ABI mismatch, even for CPU reads)
+#     segfaults on its first read under the ABI clash, even for CPU reads — a
+#     failure that reads as a multiprocessing bug rather than a preload one)
 #
 # GPU assignment: N ∈ {1, 2, 4} on a 4-GPU instance (STAGES.md D10), matching Stage 5.
 # ⏳ D-8: the index lists in gpu_csv_for_n() are plain 0-based placeholders — replace
@@ -28,10 +30,10 @@
 #
 # Usage:
 #   ./sweep-stage6a-extract.sh smoke              # single-cell validation
-#   ./sweep-stage6a-extract.sh tier1              # 15 cells (Virchow2 + GigaPath + UNI2-h scaling)
-#   ./sweep-stage6a-extract.sh tier1_uni2h        # 5 cells (UNI2-h only)
-#   ./sweep-stage6a-extract.sh tier1_n248         # 12 cells: N=2/4/8 + cuCIM N=4 × 3 models (resume target)
-#   ./sweep-stage6a-extract.sh tier2              # 6 cells (full BRCA at N=4)
+#   ./sweep-stage6a-extract.sh tier1              # 12 cells (Virchow2 + GigaPath + UNI2-h scaling)
+#   ./sweep-stage6a-extract.sh tier1_uni2h        # 4 cells (UNI2-h only)
+#   ./sweep-stage6a-extract.sh tier1_n24          # 9 cells: N=2/4 + cuCIM N=4 × 3 models (resume target)
+#   ./sweep-stage6a-extract.sh tier2              # 4 cells (full BRCA at N=4)
 #   ./sweep-stage6a-extract.sh tier3              # 3 cells (CAM16 cross-dataset)
 #   ./sweep-stage6a-extract.sh all                # tier1 + tier3 (skips tier2)
 set -uo pipefail
@@ -49,12 +51,12 @@ EXTRACTOR="$REPO/scripts/extract-features-foundation-stage6.py"
 RECORD="$REPO/scripts/record-run.sh"
 
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -93,6 +95,49 @@ gpu_csv_for_n() {
   esac
 }
 
+# Refuse a GPU list that cannot be what the cell claims.
+#
+# gpu_csv_for_n is always called inside `$(...)`, which discards its `return 2` and
+# captures only stdout — an unmapped N therefore yields the EMPTY STRING, not an
+# abort. An empty CUDA_VISIBLE_DEVICES hides every device (it is one deleted
+# character away from unset, which exposes ALL of them), so the cell dies inside
+# mp.spawn and the caller's `|| echo "(cell failed; continuing)"` reduces that to a
+# log line while run_cell has already wiped the previous cell's features. A list
+# that merely disagrees with --world-size is worse: CUDA_VISIBLE_DEVICES silently
+# DROPS indices that do not exist rather than erroring, so the cell runs on fewer
+# GPUs than its name and its n_gpus column claim, and reports a plausible tiles/sec.
+# Mirrors the guard in run-multiproc-kvikio.sh and orchestrate-concurrent-stage6c.sh.
+assert_gpu_csv() {
+  local gpu_csv="$1"; local n_gpus="$2"; local ctx="$3"
+  if [ -z "$gpu_csv" ] || [ "${gpu_csv#ERR:}" != "$gpu_csv" ]; then
+    echo "FATAL[$ctx]: no GPU list for N=$n_gpus (gpu_csv_for_n rejected it: ${gpu_csv:-<empty>})." >&2
+    echo "        Valid N on this instance is 1, 2 or 4 (STAGES.md D10)." >&2
+    return 2
+  fi
+  local -a arr
+  IFS=',' read -ra arr <<< "$gpu_csv"
+  if [ "${#arr[@]}" -ne "$n_gpus" ]; then
+    echo "FATAL[$ctx]: gpu_csv='$gpu_csv' lists ${#arr[@]} GPU(s) but N=$n_gpus." >&2
+    echo "        The device list and --world-size must agree." >&2
+    return 2
+  fi
+  local n_present
+  n_present="$(nvidia-smi -L 2>/dev/null | wc -l)"
+  if [ "${n_present:-0}" -eq 0 ]; then
+    echo "FATAL[$ctx]: no GPUs visible (nvidia-smi -L returned nothing)." >&2
+    return 2
+  fi
+  local g
+  for g in "${arr[@]}"; do
+    if ! [[ "$g" =~ ^[0-9]+$ ]] || [ "$g" -ge "$n_present" ]; then
+      echo "FATAL[$ctx]: gpu_csv='$gpu_csv' names GPU index '$g', but this instance has" >&2
+      echo "        $n_present GPU(s) (valid indices 0..$((n_present - 1)))." >&2
+      echo "        Re-derive the GPU list for THIS instance (deferred item D-8)." >&2
+      return 2
+    fi
+  done
+}
+
 # Dataset config → (rawtiff_dir, svs_dir, coords_dir, manifest)
 dataset_config() {
   case "$1" in
@@ -122,6 +167,22 @@ run_cell() {
   local n_gpus="$1"; shift
   local gpu_csv="$1"; shift
   local dataset_tag="$1"; shift
+
+  assert_gpu_csv "$gpu_csv" "$n_gpus" "$model/$backend/$dataset_tag" || return 2
+
+  # kvikIO + brca_full is a refused pairing, not a supported one. dataset_config
+  # pairs the full-cohort manifest with the 50-slide raw-TIFF dir, because the
+  # cohort's raw-TIFF does not exist at rest — it is generated chunk by chunk. A
+  # kvikIO cell here would find ~4% of its slides, log "skip (rawtiff missing)"
+  # for the rest, exit 0, and record a plausible tiles/sec under a cell name, a
+  # note and an n_gpus column that all say full-cohort. Nothing downstream can
+  # tell the difference, so the pairing is refused rather than documented.
+  if [ "$backend" = "kvikio" ] && [ "$dataset_tag" = "brca_full" ]; then
+    echo "FATAL: backend=kvikio with dataset=brca_full is not a valid run_cell combination." >&2
+    echo "       The full-cohort kvikIO path is run_tier2_kvikio_chunked_multimodel" >&2
+    echo "       (targets: tier2, tier2_kvikio_only), which converts chunk by chunk." >&2
+    return 2
+  fi
 
   # Dataset paths
   local cfg
@@ -164,7 +225,7 @@ run_cell() {
   if [ "$model" = "uni2-h" ]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   fi
-  local note="${approval_tag}Stage 6.A cell: model=${model} backend=${backend} N_gpus=${n_gpus} dataset=${dataset_tag} gpus=${gpu_csv} batch=256. WHY: locked Q1-Q9 (Stage-6-Feature-Extraction.md decision log). Foundation-model frozen-eval extraction via mp.spawn DDP; per-rank modulo slide partitioning. AMP autocast FP16 + channels_last + cudnn.benchmark. CLS-token pooling (storage-benchmark universal choice). Per-cell LD_PRELOAD scoping: kvikio cells set the system libcufile, cuCIM cells unset (per the cucim-segfaults-when-libcufile-is-ld-preloaded memory)."
+  local note="${approval_tag}Stage 6.A cell: model=${model} backend=${backend} N_gpus=${n_gpus} dataset=${dataset_tag} gpus=${gpu_csv} batch=256. WHY: docs/Stage-6-Feature-Extraction.md 6.A Tier 1 + that stage's decision register. Foundation-model frozen-eval extraction via mp.spawn DDP; per-rank modulo slide partitioning. AMP autocast FP16 + channels_last + cudnn.benchmark. CLS-token pooling (storage-benchmark universal choice). Per-cell LD_PRELOAD scoping: kvikio cells preload the system libcufile, cuCIM cells leave it unset — cuCIM links its own bundled libcufile and segfaults on its first read under the ABI clash."
 
   local extractor_args=(
     --backend "$backend"
@@ -238,7 +299,7 @@ tier1_uni2h() {
 tier1_cucim_n4_rerun() {
   # Focused re-run for the 2 cuCIM-N=4 cells that failed pre-2026-05-20 cuCIM
   # concat-ndim fix (Virchow2 + GigaPath; UNI2-h cuCIM cell already ran clean
-  # post-fix in the tier1_n248 sweep).
+  # post-fix in the tier1_n24 sweep).
   echo "=== Stage 6.A Tier 1: cuCIM N=4 re-run (Virchow2 + GigaPath) ==="
   for model in virchow2 gigapath; do
     run_cell "$model" cucim_batched_cpu 4 "$(gpu_csv_for_n 4)" brca50 || echo "  (cell failed; continuing)"
@@ -261,17 +322,17 @@ tier1_cucim_scaling_fill() {
   done
 }
 
-tier1_scaling_n248() {
+tier1_scaling_n24() {
   # Re-run target for resuming Tier 1 after a partial completion: re-runs the
-  # N=2/4/8 cells + cuCIM N=4 comparator only (skips N=1). Used 2026-05-20 to
-  # finish Tier 1 after the skip-on-existing bug invalidated the N=2/4/8/cuCIM
-  # cells of the original sweep — the N=1 cells (which ran on cold dirs) had
-  # valid measurements. Each cell still wipes the output dir at start via
-  # run_cell's cleanup, so the existing N=1 features get wiped and the cells
-  # measure their own throughput cleanly.
-  echo "=== Stage 6.A Tier 1: resumed sweep (skip N=1, run N=2/4/8 + cuCIM N=4 × 3 models) ==="
+  # N=2/4 cells + the cuCIM N=4 comparator only (skips N=1), for the case where
+  # the N=1 cells are known-good and the rest must be redone. Each cell still
+  # wipes the output dir at start via run_cell's cleanup, so the retained N=1
+  # features get wiped and every cell measures its own throughput cold.
+  # N tracks gpu_csv_for_n's range (1, 2, 4 — STAGES.md D10), never the tier
+  # names of another instance's GPU count.
+  echo "=== Stage 6.A Tier 1: resumed sweep (skip N=1, run N=2/4 + cuCIM N=4 × 3 models) ==="
   for model in virchow2 gigapath uni2-h; do
-    for n in 2 4 8; do
+    for n in 2 4; do
       run_cell "$model" kvikio "$n" "$(gpu_csv_for_n "$n")" brca50 || echo "  (cell failed; continuing)"
     done
     run_cell "$model" cucim_batched_cpu 4 "$(gpu_csv_for_n 4)" brca50 || echo "  (cell failed; continuing)"
@@ -292,6 +353,8 @@ run_tier2_kvikio_chunked() {
   local n_gpus="${2:-4}"
   local gpu_csv="${3:-$(gpu_csv_for_n 4)}"
   local chunk_size="${4:-200}"
+
+  assert_gpu_csv "$gpu_csv" "$n_gpus" "$model/kvikio/brca_full" || return 2
 
   local cell_name="extract-${model}-kvikio-brca_full-N${n_gpus}"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
@@ -317,7 +380,7 @@ run_tier2_kvikio_chunked() {
 
   local approval_tag=""
   [ "$model" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
-  local note="${approval_tag}Stage 6.A Tier 2 cell: model=${model} backend=kvikio N=${n_gpus} dataset=brca_full (the 1073-slide uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Each chunk: SVS→raw-TIFF conversion → extraction → raw-TIFF cleanup. Per-chunk timing in per-chunk-summary.csv. Outer record-run captures a continuous filesystem-side time series across all chunks (the source differs per leg — see docs/RUNBOOK.md). Per the cucim-segfaults-when-libcufile-is-ld-preloaded memory: kvikIO cells set LD_PRELOAD to the system libcufile."
+  local note="${approval_tag}Stage 6.A Tier 2 cell: model=${model} backend=kvikio N=${n_gpus} dataset=brca_full (the 1073-slide uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Each chunk: SVS→raw-TIFF conversion → extraction → raw-TIFF cleanup. Per-chunk timing in per-chunk-summary.csv. Outer record-run captures a continuous filesystem-side time series across all chunks (the source differs per leg — see docs/RUNBOOK.md). Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
 
   echo ""
   echo "=========================================="
@@ -354,6 +417,8 @@ run_tier2_kvikio_chunked_multimodel() {
   local gpu_csv="${3:-$(gpu_csv_for_n 4)}"
   local chunk_size="${4:-200}"
 
+  assert_gpu_csv "$gpu_csv" "$n_gpus" "multimodel/kvikio/brca_full" || return 2
+
   local cell_name="extract-multimodel-kvikio-brca_full-N${n_gpus}"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.A-${cell_name}"
@@ -384,7 +449,7 @@ run_tier2_kvikio_chunked_multimodel() {
   if [[ ",$models_csv," == *",uni2-h,"* ]]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   fi
-  local note="${approval_tag}Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=$models_csv backend=kvikio N=${n_gpus} dataset=brca_full (the 1073-slide uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL, not a micro-optimisation: full-cohort raw-TIFF does not fit at once and conversion is a large share of per-chunk wallclock. Per the cucim-segfaults-when-libcufile-is-ld-preloaded memory: kvikIO cells set LD_PRELOAD to the system libcufile."
+  local note="${approval_tag}Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=$models_csv backend=kvikio N=${n_gpus} dataset=brca_full (the 1073-slide uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL, not a micro-optimisation: full-cohort raw-TIFF does not fit at once and conversion is a large share of per-chunk wallclock. Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
 
   echo ""
   echo "=========================================="
@@ -498,7 +563,11 @@ smoke() {
 }
 
 all() {
-  echo "=== Stage 6.A: tier1 + tier3 (skipping tier2 until chunked-conversion helper exists) ==="
+  # Tier 2 is deliberately NOT in `all`: it is the stage's long pole and needs its
+  # own capacity check for the transient chunked raw-TIFF before it is committed
+  # (docs/Stage-6-Feature-Extraction.md 6.A Tier 2, "Capacity + hygiene"). Run it
+  # explicitly via the `tier2` target.
+  echo "=== Stage 6.A: tier1 (12 cells) + tier3 (3 cells); tier2 is run explicitly ==="
   tier1_scaling
   tier3_cross_dataset
   echo ""
@@ -509,7 +578,7 @@ case "${1:-}" in
   smoke)                          smoke ;;
   tier1)                          tier1_scaling ;;
   tier1_uni2h)                    tier1_uni2h ;;
-  tier1_n248)                     tier1_scaling_n248 ;;
+  tier1_n24)                      tier1_scaling_n24 ;;
   tier1_cucim_n4_rerun)           tier1_cucim_n4_rerun ;;
   tier1_cucim_scaling_fill)       tier1_cucim_scaling_fill ;;
   tier2)                          tier2_production ;;
@@ -519,7 +588,7 @@ case "${1:-}" in
   tier3)                          tier3_cross_dataset ;;
   all)                            all ;;
   *)
-    echo "usage: $0 {smoke|tier1|tier1_uni2h|tier1_n248|tier1_cucim_n4_rerun|tier1_cucim_scaling_fill|tier2|tier2_kvikio_only|tier2_resume_post_virchow2_cucim|tier2_kvikio_multimodel_smoke|tier3|all}" >&2
+    echo "usage: $0 {smoke|tier1|tier1_uni2h|tier1_n24|tier1_cucim_n4_rerun|tier1_cucim_scaling_fill|tier2|tier2_kvikio_only|tier2_resume_post_virchow2_cucim|tier2_kvikio_multimodel_smoke|tier3|all}" >&2
     exit 2
     ;;
 esac

@@ -398,11 +398,19 @@ def extract_cell_summary(run_dir: Path, model_override: str = None,
     those are the same for all 3 model rows from one multi-model dir.
     """
     if model_override:
+        # n_gpus is reported, never defaulted. It is the column every throughput
+        # figure in the row is read against and the one cost-per-cell arithmetic
+        # keys off, so a fabricated GPU count is a plausible integer that nothing
+        # downstream can detect. Missing stays missing, loudly.
+        if not n_gpus_override:
+            print(f"  WARN: {run_dir.name}: no GPU count recorded (world_size absent from "
+                  f"extraction-summary.json and not in the run-dir name) — n_gpus left empty",
+                  file=sys.stderr)
         parsed = {
             "model": model_override,
             "backend": backend_override or "kvikio",
             "dataset": dataset_override or "brca_full",
-            "n_gpus": n_gpus_override or 8,
+            "n_gpus": n_gpus_override or None,
         }
     else:
         parsed = parse_run_dir_name(run_dir)
@@ -414,8 +422,13 @@ def extract_cell_summary(run_dir: Path, model_override: str = None,
     if tsum_path.exists():
         try:
             tsum = json.loads(tsum_path.read_text())
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            # Say which file could not be read. Swallowed, an unparseable summary
+            # emits a row whose throughput columns are all empty, which reads as
+            # "this cell produced no throughput" rather than "this file is
+            # truncated" — the second is fixable, the first is a false finding.
+            print(f"  ERROR: {run_dir.name}: could not parse {tsum_path.name}: {e}",
+                  file=sys.stderr)
 
     steps = parse_extraction_steps_csv(run_dir, suffix=tsum_suffix) or {}
     per_slide = parse_per_slide_csv(run_dir, suffix=tsum_suffix) or {}
@@ -490,6 +503,7 @@ def main():
     print(f"# Aggregating Stage 6.A cells matching: {pattern}", file=sys.stderr)
 
     rows = []
+    n_hard_errors = 0
     for path in sorted(glob.glob(pattern)):
         d = Path(path)
         if not d.is_dir():
@@ -507,9 +521,27 @@ def main():
             if outer_path.exists():
                 try:
                     outer = json.loads(outer_path.read_text())
-                except json.JSONDecodeError:
-                    pass
+                except json.JSONDecodeError as e:
+                    print(f"  ERROR: {d.name}: could not parse extraction-summary.json: {e}",
+                          file=sys.stderr)
+            else:
+                print(f"  ERROR: {d.name}: extraction-summary.json is missing",
+                      file=sys.stderr)
             models = outer.get("models") or []
+            if not models:
+                # The outer summary names the models, so without it this run dir
+                # contributes ZERO rows — the single most expensive cell in the
+                # project disappearing from the table with no message. A missing
+                # row is the absence nobody notices, so it exits non-zero instead.
+                # The orchestrator writes this file at the very end of a multi-hour
+                # run, which is exactly when a truncated write is plausible; the
+                # per-model summaries and CSVs beside it are still intact and the
+                # cell can be re-aggregated by hand once `models` is restored.
+                print(f"  ERROR: {d.name}: multi-model cell lists no models — "
+                      f"emitting NO rows for it. Repair extraction-summary.json "
+                      f"(its `models` key) and re-run.", file=sys.stderr)
+                n_hard_errors += 1
+                continue
             backend = outer.get("backend") or mm.group("backend")
             n_gpus = outer.get("world_size") or int(mm.group("n"))
             dataset = mm.group("dataset")
@@ -559,6 +591,13 @@ def main():
         for r in rows:
             w.writerow(r)
     print(f"# Wrote {len(rows)} rows to {out_path}", file=sys.stderr)
+    # The CSV is written first, then the exit code reports the dropped cells: the
+    # rows that did parse are still worth having, but a zero exit on a table that
+    # is silently short a cell is the failure this aggregator must not produce.
+    if n_hard_errors:
+        print(f"# FAILED: {n_hard_errors} cell(s) contributed no rows (see ERROR lines above). "
+              f"{out_path.name} is INCOMPLETE.", file=sys.stderr)
+        return 1
     return 0
 
 

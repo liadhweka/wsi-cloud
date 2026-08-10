@@ -11,11 +11,17 @@
 #   - Per CLAUDE.md memory-hygiene rule + project preference for recording any
 #     measurable WSI workload.
 #
-# WHY 4-way parallelism (PARALLEL, override-able):
+# WHY PARALLEL is a slide count (override-able):
 #   - convert-rawtiff-20x.py is single-threaded per slide (OpenSlide tile reads
-#     + tifffile write), so PARALLEL = slides converted concurrently. 4 is
-#     conservative on a 256-core box; raise it (PARALLEL=8/16) if conversion
-#     wallclock matters at Tier-2 scale — tune at the Step-5 pre-flight.
+#     + tifffile write), so PARALLEL is the number of slides converted
+#     concurrently. Its ceiling is set by the cores this instance actually has
+#     and by the raw-TIFF write footprint resident at once — both properties of
+#     the leg being run, so raising it is a tuning call that needs THIS target's
+#     measured conversion rate, not an inference from the default below.
+#   - It is workload shape for a write-heavy phase measured against the
+#     filesystem, so whatever value is used must be the SAME on both legs:
+#     changing it between legs makes the write pattern, not the filesystem, the
+#     variable under test.
 #
 # WHY output tile-size 256 @ 20×:
 #   - Keeps the Stage 4.C tile grid apples-to-apples with 4.A/4.B and matches
@@ -23,8 +29,12 @@
 #     foundation-model protocol).
 #
 # WHY idempotent skip on existing output:
-#   - Per project memory `feedback_accuracy_safety_dependability.md`: idempotent
-#     scripts let us resume cleanly without double-converting.
+#   - Keeping scripts idempotent is a project dependability default (CLAUDE.md):
+#     a conversion killed part-way resumes cleanly without double-converting.
+#   - The cost is a silent-skip hazard, which is why SKIP-EXISTS is a distinct
+#     status in $LOG_TSV and in the summary counts: a run that converted nothing
+#     because output was already present must be visible, not indistinguishable
+#     from a run that did the work.
 #
 # Usage:
 #   ./scripts/convert-stage4c-rawtiff.sh           # convert all 100 slides

@@ -2,12 +2,12 @@
 
 > The single-page answer to "where is X?" — the repo, both filesystem mounts, the S3 durable store, local
 > scratch, datasets, stage outputs, tools, and memory.
-> **Status: build phase.** The repo exists; **the cloud environment does not yet.** Paths under the mounts,
-> S3, and local scratch are the *intended* layout the scripts expect — confirm and correct them against the
-> real environment during setup, then update this file.
+> **Paths under the mounts, S3, and local scratch are the layout the scripts expect.** Confirm and correct
+> them against the real environment during setup, and update this file whenever a load-bearing path changes.
 
-For *what* each stage is see `runs/STAGES.md`; for what each script does `SCRIPT-TRACKER.md`; for how to run
-a cell `runs/README.md`; for the rules `CLAUDE.md`.
+For *what* each stage is see `STAGES.md`; for what each script does `SCRIPT-TRACKER.md`; for how to run and
+record a cell `RUNBOOK.md`; for every name and its recommended value `NAMING-AND-VARIABLES.md`; for **what we
+measure and why** `../PROJECT-THESIS.md`; for the rules `../CLAUDE.md`.
 
 ---
 
@@ -19,58 +19,62 @@ a cell `runs/README.md`; for the rules `CLAUDE.md`.
 | **Lustre (FSx)** | `/mnt/lustre` |
 | **What scripts use** | **`$FS_MOUNT`**, resolved from `$LEG` (`weka` \| `lustre`) in `env.sh` |
 
-**Scripts never hardcode a mount path.** The filesystem is a *dimension* (**D11**), so every path in this
-document that a benchmark touches is written relative to `$FS_MOUNT`. A hardcoded `/mnt/weka` in a script is
-a bug — it silently makes a Lustre cell measure WEKA.
+**Scripts never hardcode a mount path.** The filesystem is a *dimension, not a fork in the code*
+(`../PROJECT-THESIS.md` §8, **D11**) — so every path in this document that a benchmark touches is written
+relative to `$FS_MOUNT`. A hardcoded `/mnt/weka` is a bug: it silently makes a Lustre cell measure WEKA, and
+the number still looks correct.
 
-Both legs use the **identical directory layout beneath their mount**, so the only difference between a
-WEKA run and a Lustre run is which mount `$FS_MOUNT` points at.
+Both legs use the **identical directory layout beneath their mount**, so the only difference between a WEKA
+run and a Lustre run is which mount `$FS_MOUNT` points at.
 
 ---
 
 ## Repo layout (in git)
 
 ```
-~/wsi-cloud/
-├── CLAUDE.md                  # project rules: 11 Rules, recording philosophy, durability,
-│                              #   docs cadence, framing, memory hygiene
-├── PROJECT-THESIS.md          # the question, held-constant contract, both asymmetries, scope
-├── PRESENTING.md              # per-stage presentation script (methodology until results land)
-├── SCRIPT-TRACKER.md          # per-script reference for runs/lib/
-├── FILESYSTEM-MAP.md          # THIS FILE
+<repo>/                        # $REPO_DIR — recommended value in NAMING-AND-VARIABLES.md
+├── PROJECT-THESIS.md          # SOURCE OF TRUTH: the question, the held-constant contract, both
+│                              #   asymmetries, measurement, recording, sequencing, scope, framing
+├── CLAUDE.md                  # how we work: the rules, docs cadence, durability, memory hygiene
 ├── README.md                  # repo entry point
-├── backup.sh                  # memories → mirror, then S3 sync (delegates to runs/lib/sync-to-s3.sh)
+├── env.example.sh             # → env.sh (gitignored — real values); carries a --check validator
+├── backup.sh                  # the single durability entry point: memories → mirror, then S3
 ├── .gitignore                 # excludes datasets, heavy raw telemetry, secrets, caches
-├── .claude/settings.json      # permission rules (committed)
+├── .claude/settings.json      # permission rules (committed; settings.local.json is per-machine)
 │
 ├── claude-memory-mirror/      # git-tracked copy of the Claude memories (disaster recovery)
 │   ├── MEMORY.md              #   the index
 │   └── *.md                   #   one file per memory
 │
-├── cloud-setup/               # provisioning + handoff artifacts
-│   ├── WORKFLOW.md            #   ⭐ ONE-PAGE ROUTER: what to read/paste when, per scenario
-│   ├── NEW-CLOUD-SETUP.md     #   the human-facing walkthrough: empty AWS account → running benchmark
-│   ├── SPINUP-CHECKLIST.md    #   what to tell the person provisioning the environment
-│   ├── TEARDOWN-AND-REBUILD.md#   the do-every-time checklist for both halves
+├── docs/                      # what we decided
+│   ├── STAGES.md              #   stage map, per-leg plan, cross-stage decision register
+│   ├── RUNBOOK.md             #   how to run and record a cell; both canaries; recovery
+│   ├── RESULTS.md             #   findings and their story
+│   ├── SCRIPT-TRACKER.md      #   per-script reference for scripts/, plus the deferred-work table
+│   ├── FILESYSTEM-MAP.md      #   THIS FILE
 │   ├── NAMING-AND-VARIABLES.md#   every path/name/variable, with its recommended value
-│   ├── env.example.sh         #   → env.sh (gitignored); has a --check validator
-│   ├── restore-memories.sh    #   mirror → live memory dir, verified (run on EVERY build)
-│   ├── prompt-env-prep-cloud.md      # Claude prompt 1 (Part 5): system stack + local scratch
-│   ├── prompt-weka-cluster-cloud.md  # Claude prompt 2 (Part 6): create + mount WEKA (Leg A)
-│   ├── handoff-cloud.md              # Claude prompt 3 (Part 7): build + run the leg
-│   ├── prompt-lustre-cluster-cloud.md# Claude prompt 4 (Part 8): create + mount FSx Lustre (Leg B)
-│   ├── prompt-teardown-cloud.md      # Claude prompt 5 (end of a leg): close out + GO/NO-GO
-│   ├── HANDOFF-NEXT-SESSION.md#   written at teardown by prompt 5; the next session reads it FIRST.
-│   │                          #   Absent until the first teardown; gated by teardown-preflight.sh
+│   ├── Stage-{1..7}-*.md      #   per-stage roadmaps (the audit trail)
+│   └── cloud-setup/           #   human-facing procedure, one file per lifecycle event
+│       ├── WORKFLOW.md        #     ⭐ ONE-PAGE ROUTER: what to read/paste when, per scenario
+│       ├── NEW-CLOUD-SETUP.md #     the walkthrough: empty AWS account → running benchmark
+│       ├── SPINUP-CHECKLIST.md#     the reasoning behind the provisioning choices
+│       ├── TEARDOWN-AND-REBUILD.md# the do-every-time checklist for both halves
+│       └── HANDOFF-NEXT-SESSION.md# written at teardown; the next session reads it FIRST.
+│                              #     Absent until the first teardown; the teardown pre-flight gates on it
+│
+├── prompts/                   # paste-to-Claude task prompts, re-runnable on every rebuild:
+│                              #   env prep · WEKA cluster · Lustre cluster · build+run · teardown
+│
+├── scripts/                   # what we run with — the script library, the cuFile config template
+│   │                          #   and GDS-TUNING-CHECKLIST.md, plus:
+│   ├── manifests/             #   dataset manifests
 │   └── env-specs/             #   conda env specs for rebuilding the Python stack
 │
-└── runs/                      # benchmark records — ONE tree, filesystem as a dimension
-    ├── README.md              #   operational runbook + both canaries
-    ├── STAGES.md              #   stage map, per-leg plan, decision log D1–D16
+└── runs/                      # what we got — ONE tree, filesystem as a dimension
     ├── INDEX.md               #   one line per run — AUTO-GENERATED, never hand-edit
-    ├── Stage-{1..7}-*.md      #   per-stage roadmaps (the audit trail)
-    ├── lib/                   #   the script library (+ GDS-TUNING-CHECKLIST.md, cuFile template)
-    ├── manifests/             #   dataset manifests
+    ├── env-contract-leg-<leg>.json  # the environment contract; Leg B verifies Leg A's
+    ├── .leg-state/            #   per-leg resume markers — tracked in git deliberately, because
+    │                          #   they are what stops a rebuilt leg redoing completed steps
     ├── sweep-logs/            #   tee'd driver output (gitignored)
     └── <UTC>-<fs>-s<stage>-<name>/   # one dir per run
 ```
@@ -97,15 +101,18 @@ s3://<bucket>/                          # private, same region as everything els
 │   ├── tcga-brca/                      # downloaded once from GDC, reused by BOTH legs
 │   └── camelyon16/                     # mirror of the open-data pull
 ├── runs/<leg>/<run-dir>/raw/           # heavy telemetry — synced during and after each run
-└── env-contracts/                      # uploaded by sync-to-s3.sh --mode full
-    ├── env-contract-leg-weka.json      # written at end of Leg A (name set by env-contract.py)
-    └── env-contract-leg-lustre.json    # Leg B verifies against Leg A's before its first cell
+├── runs/<leg>/sweep-logs/              # that leg's tee'd driver logs
+├── repo/                               # reflection of the memory mirror + the manifests; git stays
+│                                       #   authoritative for both
+└── env-contracts/                      # one per leg, the leg carried in the filename
 ```
 
-**Two sync semantics, deliberately different:** mirror-with-delete for docs and memories (git backs them
-independently, so an exact reflection is safe); **add-and-update, never delete** for telemetry and datasets
-— we will want to reclaim local disk by cleaning old raw telemetry, and a delete-sync would then destroy the
-only remaining copy.
+**Two sync semantics, deliberately different:** mirror-with-delete for the small text git backs
+independently, so an exact reflection is safe; **add-and-update, never delete** for telemetry, datasets and
+the environment contracts. We will want to reclaim local disk by cleaning old raw telemetry, and a
+delete-sync would then destroy the only remaining copy — and a sync run from a checkout that happens not to
+hold the other leg's contract would delete the one artifact whose loss makes the whole comparison
+unverifiable. `backup.sh` is the single entry point, and the sync is **verified, not assumed.**
 
 ---
 
@@ -122,7 +129,7 @@ Everything below is **created per leg** on `$FS_MOUNT`, using the identical layo
 | Stage 4.A pre-extracted tiles | `$FS_MOUNT/patches/4.A/<ds>/n<N>/<slide-id>.h5` | Per-slide tile HDF5 (subset); consumed by nothing downstream |
 | Stage 2 property sidecars | `$FS_MOUNT/cataloging/2.0/<ds>/n<N>/<slide-id>.json` | Reproducible; cleaned per cell |
 | Stage 6.A features | `$FS_MOUNT/features/6.A/<model>/<dataset>/<slide-id>.pt` | model ∈ {virchow2, gigapath, uni2-h}; dataset ∈ {brca50, brca_full, cam16}. Consumed by 6.B.3 and 7.3 |
-| Stage 6.B synthetic corpora | `$FS_MOUNT/features-6.B-synthetic/…` | Deliberately sized **past cache** — see the cold-cache problem in the Stage 6 roadmap |
+| Stage 6.B synthetic corpora | `$FS_MOUNT/features-6.B-synthetic/…` | Sized past **both** filesystems' caches so one identical corpus definition serves both legs (**D13**; `Stage-6-Feature-Extraction.md`) |
 | Stage 7 heatmaps | `$FS_MOUNT/heatmaps/7.x/<cell>/<slide-id>.{tiff,png}` | Render output; cleanable after presentation |
 | fio scratch (ephemeral) | `$FS_MOUNT/benchmarks/fio-scratch/` | Cleaned per cell |
 | Stage 7 ingest target (transient) | `$FS_MOUNT/runs-stage7-ingest-target/` | 7.5 mixed workload |
@@ -178,7 +185,7 @@ GPU-direct-vs-bounced byte accounting** — a configuration flag is not proof of
 | Tool | Location | Notes |
 |---|---|---|
 | CLAM | `~/wsi-tools/CLAM/` | Tissue detection (3.0) + tile coords; commit recorded per run |
-| conda environments | `/data/local-nvme/conda-envs/` | Rebuilt from `cloud-setup/env-specs/` on each instance |
+| conda environments | `/data/local-nvme/conda-envs/` | Rebuilt from `../scripts/env-specs/` on each instance |
 | `gdc-client`, `aws` CLI | `~/.local/bin/` | Dataset staging into S3 (once, pre-leg) and 1.7 hydration |
 | `fpart` / `fpsync` | system | 1.5 bulk copy, 1.6 mixed, 6.C ingest workload. **One package:** `fpsync` ships inside `fpart` |
 | `fio` | system | 1.0 synthetic ceilings, viewer patterns in 1.6 / 6.C / 7.5 |
@@ -191,22 +198,24 @@ GPU-direct-vs-bounced byte accounting** — a configuration flag is not proof of
 
 ## Memory (Claude's persistent context — NOT in git; mirrored into it)
 
-Live: `~/.claude/projects/<slug>/memory/`, where `<slug>` is the repo path with `/` → `-`
-(for the recommended cloud paths: `-home-ubuntu-wsi-cloud`). **Derive it, never type it** — the command
-below does. `MEMORY.md` indexes the rest.
-
-`backup.sh` mirrors it into `claude-memory-mirror/` — **derive the slug rather than hardcoding it** (the
-script does). To restore on a fresh instance:
+Live: `~/.claude/projects/<slug>/memory/`, where `<slug>` is the repo path with `/` → `-`. **Derive it, never
+type it** — the command below does, so a change to `REPO_DIR` needs no edit anywhere. `MEMORY.md` indexes the
+rest.
 
 ```bash
 SLUG=$(printf '%s' "$PWD" | sed 's#^/#-#; s#/#-#g')   # derived from the repo path
-mkdir -p ~/.claude/projects/$SLUG/memory
-rsync -a claude-memory-mirror/ ~/.claude/projects/$SLUG/memory/
+ls ~/.claude/projects/$SLUG/memory/
 ```
 
-**Load-bearing memories:** `weka-vs-lustre-cloud-project` (what this is), `cloud-session-open-items` (the
-running tracker of everything to resolve, build, or watch), `weka-vs-lustre-cloud-open-decisions` (what is
-still assumed, with a reference index), plus the framing, MIL, cuCIM, and UNI2-h memories.
+`backup.sh` mirrors the live directory into `claude-memory-mirror/`; `../scripts/restore-memories.sh` runs it
+back the other way, verified, on **every** instance build. **Restore before you ever run `backup.sh` on a
+fresh build** — the two move memories in opposite directions, and the wrong order points a mirror-with-delete
+at an empty source.
+
+**The two live memories:** `cloud-session-open-items` — the running work list of everything to resolve before
+the first measured cell and everything to watch during benchmarking; and `uni2h-conditional-use-status` —
+UNI2-h is internal-only, so those rows are filtered out of anything that leaves the building. Everything
+else that is durable lives in the docs, not in memory.
 
 ---
 
@@ -214,23 +223,25 @@ still assumed, with a reference index), plus the framing, MIL, cuCIM, and UNI2-h
 
 | Looking for… | Path |
 |---|---|
-| Project rules | `CLAUDE.md` |
-| The question + fairness contract | `PROJECT-THESIS.md` |
-| Stage map, plan, decision log | `runs/STAGES.md` |
-| Operational runbook + canaries | `runs/README.md` |
+| What we measure and why | `../PROJECT-THESIS.md` |
+| Project rules | `../CLAUDE.md` |
+| Stage map, plan, decision register | `STAGES.md` |
+| Run + record a cell, canaries, recovery | `RUNBOOK.md` |
 | Per-script reference | `SCRIPT-TRACKER.md` |
-| Script library | `runs/lib/` |
-| Dataset manifests | `runs/manifests/` |
-| Run history | `runs/INDEX.md` (auto-generated) |
+| Findings | `RESULTS.md` |
+| Names, paths and variables | `NAMING-AND-VARIABLES.md` · `../env.example.sh` |
+| Script library | `../scripts/` |
+| Dataset manifests | `../scripts/manifests/` |
+| Run history | `../runs/INDEX.md` (auto-generated) |
 | **Start here / what do I do next** | **`cloud-setup/WORKFLOW.md`** — the one-page router |
 | Provisioning checklist | `cloud-setup/SPINUP-CHECKLIST.md` |
-| Filesystem setup prompts | `cloud-setup/prompt-{weka,lustre}-cluster-cloud.md` |
-| Leg close-out / teardown | `cloud-setup/prompt-teardown-cloud.md` → `HANDOFF-NEXT-SESSION.md` |
+| Filesystem setup prompts | `../prompts/prompt-{weka,lustre}-cluster-cloud.md` |
+| Leg close-out / teardown | `../prompts/prompt-teardown-cloud.md` → `cloud-setup/HANDOFF-NEXT-SESSION.md` |
 | The two mounts | `/mnt/weka` · `/mnt/lustre` — via `$FS_MOUNT` |
 | Datasets (per leg) | `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
 | Coords · raw-TIFF | `$FS_MOUNT/tissue-detection/3.0/…` · `$FS_MOUNT/data/<ds>-rawtiff/` |
 | Features | `$FS_MOUNT/features/6.A/…` · `$FS_MOUNT/features-6.B-synthetic/…` |
 | Durable telemetry + datasets | `s3://<bucket>/runs/…` · `s3://<bucket>/datasets/…` |
-| Environment contracts | `s3://<bucket>/env-contracts/` |
+| Environment contracts | `../runs/env-contract-leg-<leg>.json` · `s3://<bucket>/env-contracts/` |
 | Local scratch | `/data/local-nvme/` |
 | Memory | `~/.claude/projects/<slug>/memory/` (mirrored in `claude-memory-mirror/`) |

@@ -219,6 +219,8 @@ def mode_faithful(args):
     cell_t0 = time.monotonic()
     n_skipped_missing = 0
     n_skipped_timecap = 0
+    n_discard_attempted = 0
+    n_discard_failed = 0
 
     # WHY --max-duration: at slow configs (e.g. n_buffer=1 + POSIX-compat) reading
     # the full 50-slide BRCA subset could take many hours (extrapolating from
@@ -240,8 +242,18 @@ def mode_faithful(args):
             continue
 
         # Cold cache between slides — critical for the "cold WEKA Read" customer story.
+        # The result is RECORDED, not assumed: cuCIM reports a failed discard by
+        # RETURNING False rather than raising (docs.rapids.ai/api/cucim/stable/api/
+        # — "Returns: True if succeed, False otherwise"), so discarding the return
+        # value leaves a slide that was read WARM inside a cell whose recorded note
+        # calls it cold, with nothing in the output able to tell them apart
+        # (thesis §11.5 — a cache state asserted rather than recorded).
         if not args.warm_cache:
-            cucim_fs.discard_page_cache(str(path))
+            n_discard_attempted += 1
+            if not cucim_fs.discard_page_cache(str(path)):
+                n_discard_failed += 1
+                print(f"[faithful] DISCARD-FAILED: {slide_id} — read WARM, not cold",
+                      file=sys.stderr)
 
         with TiffFile(str(path)) as tif:
             if args.level >= len(tif.pages):
@@ -303,6 +315,19 @@ def mode_faithful(args):
         "n_slides_missing": n_skipped_missing,
         "n_slides_skipped_timecap": n_skipped_timecap,
         "max_duration_s": args.max_duration,
+        # Cache state: what was REQUESTED (the --warm-cache flag) and what the
+        # discard ACHIEVED. Without the achieved half, a cell that never dropped
+        # a single page still reports as the cold arm of the 4.C matrix, and the
+        # compat=on / compat=off arms have different page-cache behaviour, so the
+        # matrix could not be corrected for it after the fact.
+        "warm_cache_requested": bool(args.warm_cache),
+        "n_page_cache_discards_attempted": n_discard_attempted,
+        "n_page_cache_discards_failed": n_discard_failed,
+        # Client page cache only. Neither filesystem's server-side cache is
+        # addressed by this discard and the per-filesystem cold mechanism is still
+        # open (A.5 / D13), so the end-to-end cold state is stated as unknown
+        # EXPLICITLY rather than left to be inferred from a missing field.
+        "cache_state_achieved": "unknown",
         "total_tiles": total_tiles,
         "total_bytes_aligned": total_bytes,
         "cell_wallclock_s": cell_wall,
@@ -439,14 +464,26 @@ def mode_random(args):
         slide_cache[slide_id] = entry
         return entry
 
+    n_discard_attempted = 0
+    n_discard_failed = 0
+
     # Pre-discard caches on initial slides to ensure first iterations are cold.
     # (Subsequent same-slide reads will reuse the kernel page cache via warm
     # path; that's realistic for production DataLoaders too.)
+    # RECORDED, not assumed — same reason as faithful mode: cuCIM signals failure
+    # by returning False, so an ignored return value turns "cold on first LRU
+    # fill" into a claim with no evidence behind it (thesis §11.5). It matters
+    # more here than in faithful mode, because this loop is the ONLY cold step in
+    # a cell that then re-reads the same LRU-resident slides for the full runtime.
     if not args.warm_cache:
         for sid, _coords in coord_pool[:LRU_SIZE]:
             path = find_rawtiff(args.rawtiff_dir, sid)
             if path is not None:
-                cucim_fs.discard_page_cache(str(path))
+                n_discard_attempted += 1
+                if not cucim_fs.discard_page_cache(str(path)):
+                    n_discard_failed += 1
+                    print(f"[random] DISCARD-FAILED: {sid} — entered the pool WARM",
+                          file=sys.stderr)
 
     n_tiles_done_total = 0
     n_tiles_done_steady = 0
@@ -482,17 +519,31 @@ def mode_random(args):
         in_flight.append((fut, t_call, sid, tile_idx))
 
         if len(in_flight) >= args.n_buffer:
-            now = time.monotonic()
+            # Per-tile latency is stamped INSIDE the drain, once each future has
+            # actually returned. Sampling a single timestamp before the drain --
+            # as this once did -- subtracts the submit time from a clock read
+            # taken before any I/O had been waited on, so the recorded latency
+            # EXCLUDED the I/O wait entirely. That is the headline latency of the
+            # GPU-direct path, so the number was not merely optimistic: it
+            # measured submit overhead and nothing else.
+            #
+            # What this measures: submit -> observed completion, which includes
+            # queueing behind earlier futures in the same batch. For a pipelined
+            # reader that is the honest customer-facing quantity; it is not the
+            # isolated service time of one read, and must not be quoted as one.
+            latencies_this_batch = []
             for f, tc, _sid_done, _tile_done in in_flight:
                 f.get()
+                latencies_this_batch.append(time.monotonic() - tc)
+            now = time.monotonic()
             if now >= t_steady_start:
                 # Count entire batch as steady-state tiles
                 n_tiles_done_steady += len(in_flight)
                 bytes_steady += sum(rbc for _ in in_flight)  # close enough — all same size for uncompressed raw TIFF
                 # Sample per-tile latency
-                for i, (_f, tc, _s, _t) in enumerate(in_flight):
+                for lat in latencies_this_batch:
                     if rng.random() < (1.0 / LATENCY_SAMPLE_RATE):
-                        per_tile_latencies.append(now - tc)
+                        per_tile_latencies.append(lat)
             n_tiles_done_total += len(in_flight)
             in_flight = []
 
@@ -547,6 +598,16 @@ def mode_random(args):
         "manifest": args.manifest,
         "rawtiff_dir": args.rawtiff_dir,
         "coords_dir": args.coords_dir,
+        # Cache state: REQUESTED (the --warm-cache flag) and what the pre-discard
+        # ACHIEVED. attempted is bounded by the LRU fill, not the pool — a random
+        # cell is cold only for its first pass over those slides, and reporting
+        # both numbers is what keeps that legible instead of implied.
+        "warm_cache_requested": bool(args.warm_cache),
+        "n_page_cache_discards_attempted": n_discard_attempted,
+        "n_page_cache_discards_failed": n_discard_failed,
+        # Client page cache only; server-side cache and the per-filesystem cold
+        # mechanism are open (A.5 / D13). Stated, not left to omission.
+        "cache_state_achieved": "unknown",
         "n_slides_in_pool": len(coord_pool),
         "n_tiles_total": n_tiles_done_total,
         "n_tiles_steady": n_tiles_done_steady,

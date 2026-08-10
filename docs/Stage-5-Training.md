@@ -1,17 +1,14 @@
 # Stage 5 — Training data pipeline, measured identically on both filesystems
 
-> **STATUS — read first.** Nothing has run. Every number below is **`[PENDING]`** and every interpretation
-> section is **`[STORY PENDING RESULTS]`**.
->
 > **Every cell runs on both filesystems** — WEKA (Leg A) then FSx for Lustre (Leg B) — with everything else
-> held constant. The delta is the result.
+> held constant. The delta is the result, and **a single leg is half an unfinished comparison.**
 >
 > Stage 5 builds directly on Stage 4's two production data paths, so **Stage 4's closeout is load-bearing
 > here**: 4.C supplies the kvikIO path's characterisation, 4.B the cuCIM-CPU path's, and Stage 1.0 supplies
 > the block-size-matched ceilings every "% of ceiling" divides by.
 
-For project-wide conventions see `../CLAUDE.md`; framing and the fairness contract `../PROJECT-THESIS.md`;
-stage map and decision log **D1–D16** `STAGES.md`; runbook `README.md`.
+For project-wide conventions see `../CLAUDE.md`; what we measure and why `../PROJECT-THESIS.md`; the stage
+map and the decision register `STAGES.md`; how to run and record a cell `RUNBOOK.md`.
 
 ---
 
@@ -26,14 +23,15 @@ WSI on storage → reader opens → DataLoader workers → random tile sampling 
 ```
 
 Stage 4 measures what each filesystem can **deliver**. Stage 5 measures whether a real training loop can
-**consume** it, and how that holds up as GPU count rises. The two questions are genuinely different: a
-filesystem can supply tiles faster than any single model consumes them and still stall a multi-GPU job,
-because what matters at scale is per-step latency distribution, not aggregate bandwidth.
+**consume** it, and how that holds up as GPU count rises. The two questions are genuinely different: a step
+cannot begin until its whole batch has arrived and, under DDP, cannot finish until every rank's has — so a
+filesystem can supply tiles at a high aggregate rate and still stall a multi-GPU job. That is why this stage
+records the per-step latency **distribution** and not only the rate.
 
-The customer pain point: legacy NAS deployments running CNN DDP training on WSI data plateau at a handful
-of GPUs of useful scaling because DataLoader workers stall waiting for storage, and GPU utilisation drops.
-Stage 5 produces the hard numbers — GPU utilisation and scaling efficiency under real training load — for
-each filesystem.
+The customer pain point it is modelled on: legacy NAS deployments running CNN DDP training on WSI data
+plateau at a handful of GPUs of useful scaling because DataLoader workers stall waiting for storage. Stage 5
+puts that pattern under measurement on each filesystem — a real training loop, real storage, and the
+per-step evidence needed to say where any scaling loss actually lives.
 
 **Concurrency comes from `num_workers` and rank count, not batch size.** That is the axis that varies
 storage pressure, and it is the one swept.
@@ -106,9 +104,10 @@ backend is faster" but **whether the ranking changes with rank count** — and a
 across scale from a single point. Since the same question is then asked on a second filesystem, the full
 curve is what makes the cross-leg comparison meaningful.
 
-**GPU count sweep: N ∈ {1, 2, 4}** — the instance has 4 GPUs *(subject to change; `g6e.48xlarge` would
-extend this to {1,2,4,8})*. **NUMA-aware GPU assignment**, with the topology map re-derived on the real
-instance rather than assumed (**D15**; deferred item `D-9`).
+**GPU count sweep: N follows the instance's GPU count** — N ∈ {1, 2, 4} on `g6e.24xlarge` (**D10**, which
+also carries the pre-committed trigger for revisiting the instance). **NUMA-aware GPU assignment**, with
+the topology map re-derived on the real instance rather than assumed — a **D10** consequence, tracked as
+deferred item `D-8` against this stage's sweep driver.
 
 ### cuFile mode scoping for 5.A — a deliberate reduction
 
@@ -131,85 +130,88 @@ closeout.
 
 ## Recording approach (Stage 5-specific)
 
-Standard `record-run.sh` with **per-filesystem source adapters** (**D12**), plus three Stage-5 additions:
+The per-cell measurement set, the cost inputs, the operational source table and both canaries are in
+[`RUNBOOK.md`](RUNBOOK.md); the primaries **invert between legs** (`../PROJECT-THESIS.md` §7, **D12**).
+Only Stage 5's **changes** to that base are recorded here.
 
-1. **Per-training-step CSV — PRIMARY.** The trainer emits one row per step to
-   `<run-dir>/training-steps.csv`: `step_idx, t_step_start, t_step_end, step_duration_ms, t_dataload_ms,
-   t_forward_ms, t_backward_ms, t_optimizer_ms, samples, loss`. Everything customer-facing derives from
-   this — samples/sec, GPU stall time (step duration minus compute phases), and the **dataload latency
-   distribution (p50/p95/p99)** that the attribution discipline depends on.
-2. **`nvidia-smi` — PRIMARY.** GPU utilisation under training load *is* the customer-facing story: a fed
-   pipeline holds utilisation high, a stalled one does not.
-3. **NCCL collective times** — secondary, but **load-bearing for attribution**: an efficiency loss that
-   lives in collectives is a DDP effect, not a storage effect, and without this the two are
-   indistinguishable.
+**Added — per-training-step CSV, Primary.** The trainer emits one row per step to
+`<run-dir>/training-steps.csv`: `step_idx, t_step_start, t_step_end, step_duration_ms, t_dataload_ms,
+t_forward_ms, t_backward_ms, t_optimizer_ms, samples, loss`. *Why primary:* everything this stage measures
+derives from it — samples/sec, GPU stall time (step duration minus the compute phases), and the **dataload
+latency distribution (p50/p95/p99)** the attribution discipline runs on. A mean dataload time cannot
+separate queueing from saturation; the distribution can.
 
-### Primary sources
+**Added — NCCL collective times.** Not a storage number and never quoted as one, but **load-bearing for
+attribution**: an efficiency loss that lives in collectives is a DDP-communication effect, and without this
+stream it is indistinguishable from a storage stall.
 
-| Source | What it captures | Role |
-|---|---|---|
-| **Per-step training CSV** | Per-step wallclock and phase split, samples, loss | **The cross-leg headline** plus the attribution evidence |
-| **`nvidia-smi`** (1 Hz per GPU) | Utilisation, memory, power, temperature | GPU-fed-vs-stalled demonstration |
-| **Filesystem-side read bytes** | WEKA `Read`; Lustre `/proc/fs/lustre` OSC + CloudWatch OST | Confirms the delivery rate implied by app-level metrics |
-| **Filesystem-side operation counters** | WEKA `Ops/s`; Lustre MDC RPCs | Matters most early in a cell, when few slide handles are cached and open/close traffic is higher. **Within-leg only** |
-| **Wire counters for the path in use** | WEKA: DPDK-path counters. Lustre: client network counters (**primary on that leg**) | Cross-source consistency |
-| **`sar -u` over application-available cores** | Per-core CPU, reserved set excluded per **D15** | cuCIM cells: the decode-CPU saturation curve. kvikIO cells: expected low, and *how* low is part of the path's value |
+**`nvidia-smi`** is already Primary from Stage 4 onward; under training load it carries the fed-vs-stalled
+reading that the attribution discipline arbitrates against the per-phase split.
 
-### Diagnostic-only
+**`sar -u` over application-available cores is Primary on both blocks** (**D15**), with the excluded core
+set differing per leg. *Why on the kvikIO block too, not only the CPU backend:* on the cuCIM path the
+decode CPU is what supplies the GPU, so its saturation curve over application-available cores is part of
+what 5.B measures; on the kvikIO path CPU is not on the data path, so the same reading measures what that
+path costs in CPU — a figure comparable across legs only over application-available cores, which is what
+**D15** exists to make possible.
 
-`sar -d`; client network counters **on the WEKA leg only** (primary on the Lustre leg);
-filesystem-reserved cores on the WEKA leg (count reported as cost per **D15**).
+**cuFile path accounting is Primary on every 5.A cell** (**D8**). A 5.A cell without recorded
+GPU-direct-vs-bounced bytes is incomplete: the cuFile mode a cell was configured with does not prove which
+path its reads actually took.
 
-### Cross-source consistency canary
+**Filesystem-reported operation counters are within-leg only.** App-level metrics are comparable across legs
+by construction; operation counts are not, because the two filesystems count operations under their own
+semantics — so treat them as within-leg until the counter semantics are verified equivalent and that
+verification is recorded. They matter most early in a cell, when few slide handles are cached and
+open/close traffic is higher.
 
-Per **D12**, derived per filesystem. Within each leg:
-- App-level samples/sec × per-tile bytes reconciles with filesystem-side read bytes, with an allowance for
-  cache effects and decode buffering — **the allowance is stated per cell, not applied silently.**
-- Wire counters track filesystem-side reads at that filesystem's derived read relation.
-- GPU utilisation at N=1 establishes the no-DDP-overhead reference; behaviour at higher N is the signal.
-- Collective time rising with rank count is expected and is *not* a storage finding.
+### Cross-source consistency canary — Stage 5 specifics
 
-**Cache caveat that will bite here (D13):** on a long cell the working set warms, which can depress
-filesystem-side read means and inflate ratio checks. Label cells and record cache state; do not "fix" a
-ratio by widening a band without saying so.
+The general rules are in `RUNBOOK.md`. What is particular to this stage:
+
+- **The app-side reconstruction is samples/sec × per-tile bytes**, reconciled against filesystem-side read
+  bytes with an allowance for cache warming and decode buffering — **the allowance is stated per cell, not
+  applied silently.**
+- **A cell is long enough for its own working set to warm** (5 min ramp + 20 min steady state), which **can**
+  depress the filesystem-side read mean later in the cell and inflate the ratio. Record cache state as
+  achieved (**D13**) and state the allowance — never make a ratio pass by moving a band.
+- **N=1 is the no-DDP-overhead reference** for GPU utilisation; the behaviour at higher N is what the sweep
+  exists to capture. **Collective time rising with rank count is expected and is not a storage finding.**
 
 ---
 
 ## Substage roadmap
 
-⏳ planned · 🟡 running · ✅ complete. All cells are ⏳ on both legs.
+⏳ planned · 🟡 running · ✅ complete. Every substage runs once per filesystem.
 
 ### 5.A — kvikIO/cuFile + raw-TIFF + ResNet-50 DDP scaling
 
 | | |
 |---|---|
 | **Status** | ⏳ both legs — needs 4.D raw-TIFF, 3.0 coords, Phase 0 ceilings |
-| **Tool** | PyTorch + an in-process DataLoader reusing the random-mode reader logic from `lib/read-tiles-kvikio.py`; `torchvision` ResNet-50 (no pretrained weights — throughput, not convergence); AMP autocast + GradScaler; `cudnn.benchmark=True`; `channels_last`. Versions recorded at run time |
+| **Tool** | PyTorch + an in-process DataLoader reusing the random-mode reader logic from `../scripts/read-tiles-kvikio.py`; `torchvision` ResNet-50 (no pretrained weights — throughput, not convergence); AMP autocast + GradScaler; `cudnn.benchmark=True`; `channels_last`. Versions recorded at run time |
 | **Source → Target** | `$FS_MOUNT/data/tcga-brca-rawtiff/` (the 50-slide subset from 4.D) → GPU memory via kvikIO → model step. No persistent output |
 | **Methodology** | **PyTorch DDP**, trainer self-launches N ranks via `torch.multiprocessing.spawn` with `MASTER_ADDR=127.0.0.1` and a free port. Each rank runs one in-process kvikIO reader — **not** forked DataLoader workers, because kvikIO's internal async pipelining already supplies that parallelism and forking would split cuFile handles for no supply-side gain. Random tile sampling from the same 20× coord pool 4.C uses. Per-rank batch 256 → effective batch 256 × N. AMP FP16 → cross-entropy against a synthetic position-derived label → backward (DDP AllReduce folded into backward) → SGD step. Per-phase timing via **CUDA events** (no host syncs between phases; one sync per step). **5 min ramp + 20 min steady state per cell.** NUMA-aware GPU assignment, map re-derived per instance |
 | **Why `mp.spawn` rather than `torchrun`** | `torchrun`'s rendezvous binds its store to the resolved hostname, which on many hosts (cloud instances included) maps to an address not bound to any local interface — producing an opaque "no route to host". Self-launching with an explicit loopback master address removes that failure mode entirely. **`spawn`, not `fork`**, because forked CUDA workers inherit a partially-initialised CUDA context. Environment-independent robustness choice, so it carries to any instance |
 | **Trainer-correctness requirements (all three are load-bearing)** | `cudnn.benchmark=True`, `channels_last` memory format, and **CUDA-event phase timing rather than per-phase `cuda.synchronize()`**. *Why they matter for a storage benchmark:* without them the compute phase runs several times slower than optimal, which **understates the demand a production pipeline places on storage** — the measurement would flatter both filesystems and compress the difference between them |
 | **cuFile mode** | Best available mode per filesystem, plus one mode-controlled paired cell — see the scoping note above |
 | **⚠ `LD_PRELOAD` scoped per cell** | Set only on kvikIO cells, never on cuCIM cells (ABI clash segfaults cuCIM's first read). Since 5.A and 5.B run in the same sweep, this sweep is mixed by construction |
-| **Sweep driver** | `lib/sweep-stage5-training.sh` · **Trainer** `lib/train-resnet50-stage5.py` · **Aggregator** `lib/aggregate-stage5-training.py` |
-| **Aggregated output** | `s5-training-summary.csv` (PENDING) |
-| **Headline results** | `[PENDING]` — samples/sec aggregate and per-rank, scaling vs N=1, scaling efficiency, GPU stall %, filesystem-side read mean/peak, GPU utilisation mean/min, and the per-phase CUDA-event split at each N |
-| **Cross-source validation** | `[PENDING]` |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Sweep driver** | `../scripts/sweep-stage5-training.sh` · **Trainer** `../scripts/train-resnet50-stage5.py` · **Aggregator** `../scripts/aggregate-stage5-training.py` |
+| **Aggregated output** | `../runs/s5.A-training-summary.csv` — the aggregator rolls 5.A and 5.B cells into that one file, tagged by a `substage` column |
+| **Recorded per cell** | samples/sec aggregate and per-rank, scaling vs N=1, scaling efficiency, GPU stall %, filesystem-side read mean/peak, GPU utilisation mean/min, and the per-phase CUDA-event split at each N — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
 
 ### 5.B — cuCIM CPU batched + ResNet-50 DDP scaling
 
 | | |
 |---|---|
 | **Status** | ⏳ both legs — needs 3.0 coords, Phase 0 ceilings |
-| **Tool** | Same trainer with `--backend cucim_batched_cpu`. In-process reader uses cuCIM's batched CPU `read_region(locations_list, batch_size, num_workers, device='cpu', prefetch_factor)` with within-batch coord sorting for read locality |
+| **Tool** | Same trainer, cuCIM CPU-batched reader backend. The in-process reader uses cuCIM's batched CPU `read_region(locations_list, batch_size, num_workers, device='cpu', prefetch_factor)` with within-batch coord sorting for read locality |
 | **Source → Target** | `$FS_MOUNT/data/tcga-brca/` canonical SVS → host RAM (cuCIM CPU decode) → device copy → model. Same 50-slide subset, same 20× coord pool |
 | **Methodology** | Identical DDP setup, model, AMP, `channels_last`, and cell duration as 5.A. Differences: the reader backend; **no `LD_PRELOAD`** (ABI clash); reads canonical SVS rather than raw-TIFF. Reader configured at the Stage 4.B peak `(batch_size, num_workers)` for that filesystem, **recorded per cell** — a peak config found on one filesystem is not assumed optimal on the other |
 | **Why this exists** | It is the path most existing WSI pipelines run today, so it answers the migration question directly: *what would moving to the GPU-direct path actually gain?* The migration has real cost — converting slides to raw TIFF and engineering a custom reader — so the per-N comparison against 5.A is what tells a customer whether that cost is worth paying. Asking it on two filesystems additionally reveals whether the answer is filesystem-dependent |
 | **Why the reader config is re-tuned per filesystem rather than copied** | The peak `(batch_size, num_workers)` reflects an interaction between decode concurrency and storage latency. Copying one filesystem's optimum onto the other would handicap whichever side has a different optimum — a fairness bug that would look like a filesystem difference |
-| **Headline results** | `[PENDING]` — cuCIM samples/sec per N, paired 5.A samples/sec, the kvikIO/cuCIM ratio at every N, efficiency curves for both backends, GPU stall %, per-phase split, application-available-core CPU |
-| **Cross-source validation** | `[PENDING]` — note that slide-header page-cache warming can depress the filesystem-side read mean on later steps and inflate ratio checks; record cache state rather than widening bands silently |
-| **Head-to-head** | `[STORY PENDING RESULTS]` |
+| **Recorded per cell** | cuCIM samples/sec per N, paired 5.A samples/sec, the kvikIO/cuCIM ratio at every N, efficiency curves for both backends, GPU stall %, per-phase split, application-available-core CPU — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
+| **Cross-source check** | slide-header page-cache warming can depress the filesystem-side read mean on later steps and inflate ratio checks; record cache state rather than widening bands silently |
 
 ---
 
@@ -221,9 +223,9 @@ ratio by widening a band without saying so.
 | `kvikio` | record at run time | RAPIDS conda | 5.A |
 | `cuCIM` | record at run time | RAPIDS conda | 5.B |
 | `cupy`, `tifffile` | record at run time | conda | 5.A |
-| `train-resnet50-stage5.py` | live | `lib/` | 5.A, 5.B |
-| `sweep-stage5-training.sh` · `aggregate-stage5-training.py` | live | `lib/` | full stage |
-| `record-run.sh` | live | `lib/` | every cell |
+| `train-resnet50-stage5.py` | live | `../scripts/` | 5.A, 5.B |
+| `sweep-stage5-training.sh` · `aggregate-stage5-training.py` | live | `../scripts/` | full stage |
+| `record-run.sh` | live | `../scripts/` | every cell |
 
 **Environment per cell** (set by the sweep driver): the conda env prefix; `LD_PRELOAD` of the system
 libcufile **on kvikIO cells only**; the cuFile config path; thread caps (`OMP_NUM_THREADS`,
@@ -238,65 +240,62 @@ instance** — none are portable constants.
 | TCGA-BRCA **20× raw-TIFF** subset | produced by 4.D per leg (50 slides) | 5.A |
 | TCGA-BRCA canonical SVS | hydrated per leg (1.7); 50-slide subset sampled | 5.B |
 | **20× CLAM coords (BRCA)** | produced by 3.0 per leg | both — random (slide, coord) sampling |
-| 50-slide subset manifest | `manifests/tcga-brca-stage4a-subset.tsv` (seed=42) | both — defines the sampled slides |
+| 50-slide subset manifest | `../scripts/manifests/tcga-brca-stage4a-subset.tsv` (seed=42) | both — defines the sampled slides |
 
-## Decision log (Stage 5-scoped)
+## Decision register (Stage 5-scoped)
 
-- **2026-07-31 — Two backends head to head (kvikIO/cuFile and cuCIM CPU batched), full sweep on both.**
-  *Why:* they are Stage 4's two production paths, and the migration question ("what does moving to
-  GPU-direct buy?") is only answerable with both curves. A single comparator point cannot show whether the
-  ranking changes with scale.
-- **2026-07-31 — 5.A runs each filesystem in its best available cuFile mode, plus one mode-controlled
-  paired cell.** *Why:* Stage 4.C already characterises the GDS-vs-compat delta across the full mode ×
-  filesystem grid; repeating it at every rank count would multiply cells for information we already have.
+One entry per **live** decision scoped to this stage, with its why. Cross-stage decisions live in
+`STAGES.md`.
+
+- **Two backends head to head (kvikIO/cuFile and cuCIM CPU batched), full sweep on both.** *Why:* they are
+  Stage 4's two production paths, and the migration question ("what does moving to GPU-direct buy?") is only
+  answerable with both curves. A single comparator point cannot show whether the ranking changes with scale.
+- **5.A runs each filesystem in its best available cuFile mode, plus one mode-controlled paired cell.**
+  *Why:* Stage 4.C already characterises the GDS-vs-compat delta across the full mode × filesystem grid
+  (**D8**); repeating it at every rank count would multiply cells for information that grid already carries.
   The paired cell preserves the link back to 4.C so a cross-leg training difference can be checked against
   the read-level mode difference. Recorded as a scoping choice so it is not mistaken for an omission.
-- **2026-07-31 — ResNet-50, not a larger model.** *Why:* it is the **storage-stressing** choice — small
-  model, fast steps, high demand per unit compute. A compute-dominant model gives storage slack and
-  actively *reduces* discrimination between two filesystems, which is the opposite of what this project
-  needs. Larger-model compute is covered in Stage 6.
-- **2026-07-31 — GPU sweep N ∈ {1, 2, 4}** *(subject to change with the instance)*. *Why:* the instance has
-  4 GPUs; the scaling *shape* is the signal, so the range follows the hardware. A larger instance would
-  extend it to {1,2,4,8}.
-- **2026-07-31 — Custom in-process DataLoader reusing the Stage 4 readers, not a higher-level pipeline
-  framework.** *Why:* a framework layer sits between us and the storage path and would add its own
-  scheduling behaviour to every measurement. Reusing the validated Stage 4 reader code keeps the storage
-  path direct and minimises new, unaudited engineering.
-- **2026-07-31 — One rank = one in-process reader, not forked DataLoader workers (5.A).** *Why:* kvikIO's
-  internal async pipelining already provides read parallelism; forking would split cuFile handles and force
-  a different multiprocessing start method for no supply-side gain.
-- **2026-07-31 — TCGA-BRCA only.** *Why:* cross-vendor consistency on the storage path is established
-  elsewhere (Stage 4, 6.A, 7.6); adding a second dataset here doubles cells without changing the scaling
-  conclusion.
-- **2026-07-31 — No convergence training; synthetic label.** *Why:* the measurement is throughput. Stated
-  explicitly so the loss curve is never read as a result.
-- **2026-07-31 — `cudnn.benchmark`, `channels_last`, and CUDA-event phase timing are mandatory.** *Why:*
-  without them compute runs several times slower than optimal, which **understates the demand placed on
-  storage** — flattering both filesystems and compressing the difference between them. A
-  trainer-correctness issue with direct consequences for the storage measurement.
-- **2026-07-31 — `mp.spawn` with an explicit loopback master, not `torchrun`.** *Why:* avoids rendezvous
-  binding to a hostname that may not resolve to a local interface — an opaque failure that costs debugging
-  time on any new host. `spawn` rather than `fork` because forked CUDA workers inherit a broken context.
-- **2026-07-31 — cuCIM reader config re-tuned per filesystem, not copied across legs.** *Why:* the optimum
-  reflects an interaction between decode concurrency and storage latency; imposing one side's optimum on the
-  other would create a fairness bug that reads as a filesystem difference.
-- **2026-07-31 — Attribution discipline (above) is non-negotiable.** *Why:* this is the easiest place in the
-  project to produce a confident, plausible, wrong conclusion, and a wrong attribution here would propagate
-  into the customer story for both filesystems.
-
-## Change log
-
-| When | Change |
-|---|---|
-| 2026-07-31 | Stage 5 roadmap created for the WEKA-vs-Lustre comparison. Retained: two-backend head-to-head design, full sweep on both blocks, ResNet-50 rationale, single-dataset scope, throughput-not-convergence framing, the three trainer-correctness requirements, `mp.spawn` launch, per-cell `LD_PRELOAD` scoping, per-step CSV as primary. **Added:** per-leg framing; the **attribution discipline** section (generalised from what was a stage-specific re-derivation protocol into a standing rule about measured-vs-narrative causes); cuFile-mode scoping for 5.A with its rationale; per-filesystem reader re-tuning as a fairness requirement; per-filesystem recording adapters; **D13** cache caveat; **D15** core accounting. **Changed:** GPU sweep is now N ∈ {1,2,4} to match the 4-GPU instance. **Removed:** all inherited results, outcome buckets, and magnitude expectations. |
+- **ResNet-50, not a larger model.** *Why:* it is the **storage-stressing** choice — small model, fast
+  steps, high demand per unit compute. A compute-dominant model gives the storage path slack and actively
+  *reduces* discrimination between two filesystems, which is the opposite of what this project needs.
+  Larger-model compute is covered in Stage 6.
+- **GPU sweep N follows the instance's GPU count** — {1, 2, 4} on `g6e.24xlarge` (**D10**). *Why:* the
+  scaling *shape* is the signal, so the range is set by the hardware rather than chosen; if **D10**'s
+  revisit trigger fires and the instance changes, the range follows it.
+- **Custom in-process DataLoader reusing the Stage 4 readers, not a higher-level pipeline framework.**
+  *Why:* a framework layer sits between us and the storage path and would add its own scheduling behaviour
+  to every measurement. Reusing the validated Stage 4 reader code keeps the storage path direct and
+  minimises new, unaudited engineering.
+- **One rank = one in-process reader, not forked DataLoader workers (5.A).** *Why:* kvikIO's internal async
+  pipelining already provides read parallelism; forking would split cuFile handles and force a different
+  multiprocessing start method for no supply-side gain.
+- **TCGA-BRCA only.** *Why:* cross-vendor consistency on the storage path is established elsewhere (Stage 4,
+  6.A, 7.6); adding a second dataset here doubles cells without changing what the scaling curve says.
+- **No convergence training; synthetic label.** *Why:* the measurement is throughput. Stated explicitly so
+  the loss curve is never read as a result.
+- **`cudnn.benchmark`, `channels_last`, and CUDA-event phase timing are mandatory.** *Why:* without them
+  compute runs several times slower than optimal, which **understates the demand placed on storage** —
+  flattering both filesystems and compressing the difference between them. A trainer-correctness issue with
+  direct consequences for the storage measurement.
+- **`mp.spawn` with an explicit loopback master, not `torchrun`.** *Why:* `torchrun`'s rendezvous can bind
+  to a hostname that does not resolve to a local interface — an opaque failure that costs debugging time on
+  any new host. `spawn` rather than `fork` because forked CUDA workers inherit a partially-initialised
+  context.
+- **cuCIM reader config re-tuned per filesystem, not copied across legs.** *Why:* the optimum reflects an
+  interaction between decode concurrency and storage latency; imposing one side's optimum on the other would
+  create a fairness bug that reads as a filesystem difference.
+- **The attribution discipline (above) is non-negotiable.** *Why:* this is the easiest place in the project
+  to produce a confident, plausible, wrong conclusion, and a wrong attribution here would propagate into the
+  customer story for both filesystems.
 
 ## Cross-references
 
-- `../CLAUDE.md` — project rules: recording philosophy, per-filesystem adapters, framing
-- `../PROJECT-THESIS.md` — the question, held-constant contract, both asymmetries, scope
-- `STAGES.md` — stage map, per-leg plan, decision log (esp. **D8** GPU-direct, **D13** cache, **D15** cores)
+- `../PROJECT-THESIS.md` — what we measure and why: held-constant contract, both asymmetries, framing
+- `../CLAUDE.md` — project rules
+- `STAGES.md` — stage map, per-leg plan, cross-stage decision register (**D8** GPU-direct, **D10** instance,
+  **D13** cache, **D15** cores)
+- `RUNBOOK.md` — the per-cell measurement set, the cost inputs, the source table, both canaries
 - `Stage-4-Patching.md` — supplies both data paths, the raw-TIFF artifact, and the full cuFile-mode grid this stage reduces from
 - `Stage-1-Ingest.md` — the block-size-matched ceilings every "% of ceiling" divides by
-- `lib/read-tiles-kvikio.py` · `lib/read-tiles-onthefly.py` — the readers whose logic the trainer reuses
-- `../SCRIPT-TRACKER.md` — per-script reference and deferred cloud-session TODOs
-- `README.md` — operational runbook and both canaries
+- `../scripts/read-tiles-kvikio.py` · `../scripts/read-tiles-onthefly.py` — the readers whose logic the trainer reuses
+- `SCRIPT-TRACKER.md` — per-script reference and the deferred-work table

@@ -54,7 +54,7 @@ echo "backup.sh: mirrored $(find "$DST" -type f | wc -l | tr -d ' ') memory file
 
 # ---- Second half: push everything teardown-critical to S3 ---------------------
 # git covers all the small text; S3 covers the heavy write-once telemetry and the
-# datasets. Delegated to runs/lib/sync-to-s3.sh, which implements the two distinct
+# datasets. Delegated to scripts/sync-to-s3.sh, which implements the two distinct
 # sync semantics (mirror-with-delete vs archive-never-delete) — see its header.
 #
 # Degrades gracefully: if S3_BUCKET isn't set we've still done the memory mirror,
@@ -67,5 +67,5 @@ if [ -z "${S3_BUCKET:-}" ]; then
 fi
 
 echo "backup.sh: syncing to s3://$S3_BUCKET/ (leg: ${LEG:-unset}) ..."
-./runs/lib/sync-to-s3.sh --mode full "$@"
+"$(dirname "${BASH_SOURCE[0]}")/scripts/sync-to-s3.sh" --mode full "$@"
 echo "backup.sh: memory mirror + S3 sync both complete."

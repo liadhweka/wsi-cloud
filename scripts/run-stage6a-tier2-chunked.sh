@@ -34,7 +34,7 @@
 #
 # Usage (typically invoked by sweep-stage6a-extract.sh tier2):
 #   ./run-stage6a-tier2-chunked.sh \\
-#       --model virchow2 --n-gpus 4 --gpu-csv 2,3,6,7 \\
+#       --model virchow2 --n-gpus 4 --gpu-csv 0,1,2,3 \\
 #       --output-dir ${FS_MOUNT}/features/6.A/virchow2/brca_full \\
 #       --extraction-steps-csv <run-dir>/extraction-steps.csv \\
 #       --per-slide-csv <run-dir>/per-slide.csv \\
@@ -61,7 +61,22 @@ BRCA_FULL_MANIFEST=$REPO/scripts/manifests/tcga-brca-full40x-stage4a-format.tsv
 
 # Conversion: TRUE 20× raw-TIFF via convert-rawtiff-20x.py (see CONVERTER above).
 # BRCA-only here → read-level 0, read-size 512 (set in convert_one_inline).
-CONVERT_PARALLEL=4
+#
+# CONVERT_PARALLEL = how many slides convert concurrently. convert-rawtiff-20x.py is
+# single-threaded per slide (OpenSlide tile reads + tifffile write), so the knob is a
+# count of concurrent slide conversions, bounded by the cores available and by the
+# raw-TIFF write footprint a chunk holds at once. It is workload shape for a
+# write-heavy phase measured against the filesystem, so it must be IDENTICAL on both
+# legs: set it once in the environment for the whole comparison rather than editing a
+# literal per leg, and it is recorded in the cell's summary JSON below so a cross-leg
+# mismatch is visible instead of silently reshaping the write pattern being compared.
+CONVERT_PARALLEL="${CONVERT_PARALLEL:-4}"
+# Now that it comes from the environment, refuse a non-numeric value here rather than
+# letting it reach `xargs -P` (which fails per chunk, after the run has started) and
+# the summary JSON below (which interpolates it as a Python literal, at the very end).
+case "$CONVERT_PARALLEL" in
+  ''|*[!0-9]*|0) echo "CONVERT_PARALLEL must be a positive integer; got '$CONVERT_PARALLEL'" >&2; exit 2 ;;
+esac
 
 # Args
 MODEL=""
@@ -234,15 +249,31 @@ for ((CHUNK_IDX=0; CHUNK_IDX<N_CHUNKS; CHUNK_IDX++)); do
        'convert_one_inline "$1" "'"$BRCA_SVS"'" "'"$CHUNK_RAWTIFF_DIR"'"' _ {} || true
 
   CONVERT_OK_COUNT=$(ls "$CHUNK_RAWTIFF_DIR"/*.tiff 2>/dev/null | wc -l)
+
+  # convert_status is DERIVED from the count, never asserted. The xargs above ends in
+  # `|| true` (it exits non-zero whenever any child failed, which is expected and
+  # already counted), so nothing else carries the conversion's outcome. Hardcoding "OK"
+  # lets a chunk that converted 12 of 200 slides proceed to extraction, record OK, and
+  # contribute its (short) conversion wallclock to the cell's cost-to-complete — while
+  # the one column that exists to answer "did this chunk convert?" says it did, and only
+  # cross-reading n_slides_converted_ok against n_slides_in_chunk reveals otherwise.
+  if [ "$CONVERT_OK_COUNT" -eq "$N_IN_CHUNK" ]; then
+    CONVERT_STATUS="OK"
+  elif [ "$CONVERT_OK_COUNT" -eq 0 ]; then
+    CONVERT_STATUS="FAIL"
+  else
+    CONVERT_STATUS="PARTIAL"
+  fi
+
   T_CONVERT_END=$(date +%s.%N)
   CONVERT_WALL=$(awk "BEGIN{print $T_CONVERT_END - $T_CHUNK_START}")
-  echo "[chunk $CHUNK_IDX] convert: $CONVERT_OK_COUNT/$N_IN_CHUNK slides ok in ${CONVERT_WALL}s"
+  echo "[chunk $CHUNK_IDX] convert: $CONVERT_STATUS — $CONVERT_OK_COUNT/$N_IN_CHUNK slides ok in ${CONVERT_WALL}s"
 
   if [ "$CONVERT_OK_COUNT" -eq 0 ]; then
     echo "[chunk $CHUNK_IDX] FATAL: no slides converted; aborting chunk"
     printf "%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%d\n" \
       "$CHUNK_IDX" "$N_IN_CHUNK" "$T_CHUNK_START" "$T_CONVERT_END" "$T_CONVERT_END" "$T_CONVERT_END" \
-      "$CONVERT_WALL" "0" "0" "FAIL" "SKIP" "0" "0" >> "$PER_CHUNK_SUMMARY"
+      "$CONVERT_WALL" "0" "0" "$CONVERT_STATUS" "SKIP" "0" "0" >> "$PER_CHUNK_SUMMARY"
     rm -rf "$CHUNK_RAWTIFF_DIR"
     continue
   fi
@@ -280,7 +311,7 @@ for ((CHUNK_IDX=0; CHUNK_IDX<N_CHUNKS; CHUNK_IDX++)); do
   # Per-chunk row
   printf "%d,%d,%s,%s,%s,%s,%s,%s,%s,%s,%s,%d,%d\n" \
     "$CHUNK_IDX" "$N_IN_CHUNK" "$T_CHUNK_START" "$T_CONVERT_END" "$T_EXTRACT_END" "$T_CLEANUP_END" \
-    "$CONVERT_WALL" "$EXTRACT_WALL" "$CLEANUP_WALL" "OK" "$EXTRACT_STATUS" \
+    "$CONVERT_WALL" "$EXTRACT_WALL" "$CLEANUP_WALL" "$CONVERT_STATUS" "$EXTRACT_STATUS" \
     "$CONVERT_OK_COUNT" "$N_EXTRACTED" >> "$PER_CHUNK_SUMMARY"
 done
 
@@ -326,6 +357,7 @@ summary = {
     'orchestrator': 'run-stage6a-tier2-chunked.sh',
     'n_chunks': $N_CHUNKS,
     'chunk_size_target': $CHUNK_SIZE,
+    'convert_parallel': $CONVERT_PARALLEL,
     'n_slides_manifest': $N_TOTAL,
     'n_slides_extracted_total': $N_TOTAL_EXTRACTED,
     'cell_wallclock_s': $TOTAL_WALL,

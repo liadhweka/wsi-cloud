@@ -7,8 +7,8 @@ copy-pasted, and every step says what it does and how to tell it worked.
 the hardware-dependent software work** (GPU stack, GDS, scratch disks, Python environments, datasets, tuning)
 and then runs the benchmark. **You hand off to Claude four times**, at clearly marked steps: system prep
 (Part 5), the WEKA filesystem (Part 6), the benchmark itself (Part 7), and — later — the Lustre filesystem
-(Part 8). Each handoff is a self-contained prompt in `cloud-setup/`, reusable on every rebuild. (A fifth,
-`prompt-teardown-cloud.md`, closes a leg out — that one lives in
+(Part 8). Each handoff is a self-contained prompt in `prompts/`, reusable on every rebuild. (A fifth,
+`prompts/prompt-teardown-cloud.md`, closes a leg out — it is driven from
 [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md), not here.)
 
 **Order of the project.** **WEKA is Leg A and runs first** (Parts 1–7). **FSx for Lustre is Leg B and comes
@@ -19,7 +19,7 @@ now.**
 > Anything in `<angle brackets>` is a value you paste in.
 >
 > **When a step in Parts 1–2 says *note this down*, it means exactly that — a scratch note, not a file.**
-> `cloud-setup/env.sh` does not exist yet: it is created **on the instance** at § 4.2, which is also where you
+> `env.sh` does not exist yet: it is created **on the instance** at § 4.2, which is also where you
 > enter these values. Parts 1–2 happen in a browser on your laptop, before the instance even has the repo.
 > Keep a scratch note with four things: **region, AZ, bucket name, and (after launch) the AMI and instance
 > IDs.** § 4.2 collects them, and shows you how to read the last few off the instance instead of transcribing
@@ -158,7 +158,7 @@ chmod 400 ~/.ssh/wsi-bench-key.pem      # SSH refuses to use a key others can re
 
 ### 2.2 — Launch
 
-> ## ⚠ READ THIS BEFORE YOU TOUCH THE WIZARD — the image choice is the first field, and an OPEN DECISION
+> ## ⚠ READ THIS BEFORE YOU TOUCH THE WIZARD — the image choice is the first field
 > A stock Ubuntu image ships **no NVIDIA driver, no CUDA toolkit, no `nvidia-fs`, no `libcufile`**, and the
 > env-prep session in Part 5 is instructed to **stop and report** rather than install a GPU driver (that is a
 > reboot-class task, deliberately not automated). So launching plain Ubuntu **dead-ends this guide at Part 5.**
@@ -167,10 +167,9 @@ chmod 400 ~/.ssh/wsi-bench-key.pem      # SSH refuses to use a key others can re
 > exact image name in the console rather than trusting a remembered title**, because the variants and titles
 > change. Architecture must be **64-bit (x86)**.
 >
-> **This is an open decision, not a settled one** — tracked in the
-> `cloud-session-open-items` memory. Whatever you pick, **pin its AMI ID** (2.3): Leg B rebuilds from it, and
-> `kernel`, `driver_version` and `cuda_version` are all held-constant contract fields, so a different image at
-> rebuild time invalidates the comparison.
+> **Whatever you pick, pin its AMI ID** (2.3). `kernel`, `driver_version` and `cuda_version` are all
+> held-constant contract fields and **Leg B rebuilds from this image**, so a different image at rebuild time
+> invalidates the comparison.
 >
 > **Two other fields in this wizard cannot be changed after launch** — the EFA interface type and the IAM
 > instance profile. Getting either wrong means rebuilding. They are called out in the table.
@@ -253,7 +252,8 @@ then check `uname -r` again — a pending kernel only takes effect after the reb
 
 > ⚠ **If the kernel changed, that is fine on Leg A but must be recorded.** `kernel` is a `MUST_MATCH` field, so
 > the value that ends up in the contract is the one **Leg B must reproduce**. The hazard is doing this
-> *differently* on the rebuild: see open item `D-17` and the same warning on Part 8.4's Lustre-client install.
+> *differently* on the rebuild: see the deferred entry **D-17** in
+> [`../SCRIPT-TRACKER.md`](../SCRIPT-TRACKER.md) and the same warning on Part 8.4's Lustre-client install.
 > Note both `uname -r` values now and tell Claude in Part 5 — it records them.
 
 ### 3.3 — Install the AWS CLI and confirm the bucket works
@@ -310,22 +310,23 @@ cd /home/ubuntu
 git clone git@github.com:liadhweka/wsi-cloud.git
 cd wsi-cloud && ls
 ```
-You should see `CLAUDE.md`, `PROJECT-THESIS.md`, `runs/`, `cloud-setup/`, and others.
+You should see `CLAUDE.md`, `PROJECT-THESIS.md`, `README.md`, `env.example.sh`, `backup.sh`, `docs/`,
+`prompts/`, `scripts/`, `runs/`, and `claude-memory-mirror/`.
 
 ### 4.2 — Create the configuration file
 
 > **What `env.sh` is, since you have only ever seen `env.example.sh`.**
-> `cloud-setup/env.example.sh` is the **tracked template** — it lives in GitHub, contains every variable name
-> with safe defaults, and no real values. You copy it to `cloud-setup/env.sh`, which is **your private copy on
-> this instance**: it is in `.gitignore`, so it never goes to GitHub and you never commit it. That is
-> deliberate — it is the one file that may hold environment-specific values, and it is also why **it does not
-> survive a rebuild**, which is what the contract in § 6.3 is for.
+> `env.example.sh` is the **tracked template** — it lives in GitHub, contains every variable name with safe
+> defaults, and no real values. You copy it to `env.sh`, which is **your private copy on this instance**: it is
+> in `.gitignore`, so it never goes to GitHub and you never commit it. That is deliberate — it is the one file
+> that may hold environment-specific values, and it is also why **it does not survive a rebuild**, which is
+> what the contract in § 6.3 is for. Both sit at the **repo root**.
 >
 > You edit it with a text editor **on the instance**, over SSH. Not in the GitHub web UI, not on your laptop.
 
 ```bash
 cd /home/ubuntu/wsi-cloud
-cp cloud-setup/env.example.sh cloud-setup/env.sh
+cp env.example.sh env.sh
 ```
 
 **First, let the instance tell you about itself.** Four of the five values are already knowable here, so
@@ -356,7 +357,7 @@ done
 Now edit the file:
 
 ```bash
-nano cloud-setup/env.sh
+nano env.sh
 ```
 
 | Fill in now | From |
@@ -384,12 +385,12 @@ Save in nano with **Ctrl+O**, Enter, then **Ctrl+X**.
 > Of the five values, only `S3_BUCKET` is genuinely undiscoverable; the rest come from the instance itself. So
 > **Part 5 re-derives them from instance metadata and cross-checks them against what you typed here**, and
 > tells you about any disagreement. This step is the bootstrap, not the source of truth — and § 6.3's
-> `./cloud-setup/env.sh --check` is what proves nothing was missed.
+> `./env.sh --check` is what proves nothing was missed.
 
 ```bash
-source cloud-setup/env.sh
+source env.sh
 echo "$FS_MOUNT"                     # should print /mnt/weka
-echo 'source /home/ubuntu/wsi-cloud/cloud-setup/env.sh' >> ~/.bashrc   # automatic next login
+echo 'source /home/ubuntu/wsi-cloud/env.sh' >> ~/.bashrc   # automatic next login
 ```
 
 > `env.sh` is deliberately **not** in GitHub (it's per-machine), so it does **not** survive a rebuild — which is
@@ -400,13 +401,12 @@ The project's accumulated knowledge lives in files Claude reads at startup. With
 know the methodology, the decisions, or what's already been done.
 ```bash
 cd /home/ubuntu/wsi-cloud
-./cloud-setup/restore-memories.sh
+./scripts/restore-memories.sh
 ```
 > It's a script rather than a few `rsync` lines because it runs on **every** build and its failure mode is
 > silent — copying into the wrong directory succeeds, and a fresh session then starts amnesiac with no error.
-> The script derives the directory name from the repo path instead of trusting a typed one, refuses to
-> "restore" an empty mirror, and **verifies** the result. It prints `OK — N memory file(s) live` when it
-> worked; anything else is a real failure, so don't continue past it.
+> So it derives the destination rather than trusting a typed path, and **verifies** the result instead of
+> assuming it. Anything other than the success line it prints is a real failure — don't continue past it.
 
 ### 4.4 — Get your Hugging Face token ready *(you cannot log in yet)*
 One of the three AI models is access-gated, so a token is required — but the `hf` command **does not exist
@@ -430,14 +430,14 @@ claude
 ```
 Paste **exactly this**:
 
-> Read the file `cloud-setup/prompt-env-prep-cloud.md` and do everything it says, then report back.
+> Read the file `prompts/prompt-env-prep-cloud.md` and do everything it says, then report back.
 
 Claude checks the GPU drivers, CUDA, the GPUDirect Storage stack and the network setup; installs missing tools;
 formats the fast NVMe scratch disks (**it asks first** — that step erases them); and installs the Python
 package manager (**not** the Python environments themselves — those come in Part 7).
 
-It also reports the full path of the system `libcufile`. **Paste that into `LIBCUFILE_PRELOAD` in
-`cloud-setup/env.sh`** — the GPU-direct sweeps read it and refuse to start without it.
+It also reports the full path of the system `libcufile`. **Paste that into `LIBCUFILE_PRELOAD` in `env.sh`** —
+the GPU-direct sweeps read it and refuse to start without it.
 
 **Expect 20–40 minutes.** It may need a reboot — `sudo reboot`, SSH back, `tmux new -A -s wsi`, relaunch
 `claude`.
@@ -465,8 +465,9 @@ itself.
    type and count, usable capacity, protection/EC scheme, and client networking mode.
 
 Sizing, and **why** — full reasoning in [`SPINUP-CHECKLIST.md`](SPINUP-CHECKLIST.md) § D:
-- **Enough backends to comfortably exceed ~25 GB/s** to one client. WEKA must not be the bottleneck, or a
-  measured difference is a sizing artifact rather than a real finding.
+- **Enough backends to comfortably exceed ~25 GB/s** to one client — the instance's 200 Gbps line rate. WEKA
+  must not be the constraint, or a measured difference is a sizing artifact rather than a filesystem property.
+  **Both sides are sized above what the client can drive** (**D7**); this is the WEKA half of that rule.
 - **~20–25 TB usable.**
 - **Client networking: DPDK** (the "performance" option), not UDP.
 
@@ -487,20 +488,20 @@ claude
 ```
 Paste **exactly this**:
 
-> Read the file `cloud-setup/prompt-weka-cluster-cloud.md` and do everything it says, then report back.
+> Read the file `prompts/prompt-weka-cluster-cloud.md` and do everything it says, then report back.
 
 Then **give it the four things from 6.1** when it asks.
 
 Claude inspects the cluster read-only first and reports what it found; **asks before the destructive step**
 (cloud deployments ship a default filesystem holding all the capacity, so room has to be made); creates the
 filesystem group and filesystem; installs the client and mounts it at `/mnt/weka`; verifies with a real write;
-and **writes the WEKA values into `cloud-setup/env.sh` itself** rather than asking you to transcribe them.
+and **writes the WEKA values into `env.sh` itself** rather than asking you to transcribe them.
 
 **Expect to approve several steps.** Resizing a filesystem, `curl | sh`, `sudo`, and mounting all pause for you
 by design — read what it proposes rather than waving it through, especially the resize.
 
 **When it reports back**, check three things: the mount is `wekafs` and writable, it is on **DPDK and not UDP**
-(it must show you evidence, not an inference), and `./cloud-setup/env.sh --check` passes. Then `/exit`.
+(it must show you evidence, not an inference), and `./env.sh --check` passes. Then `/exit`.
 
 > **Why DPDK-versus-UDP is worth your attention:** UDP trades throughput for CPU and would understate WEKA,
 > which corrupts the comparison exactly as silently as under-configuring Lustre would.
@@ -513,18 +514,19 @@ by design — read what it proposes rather than waving it through, especially th
 ### 6.3 — Save the configuration to S3
 
 ```bash
-source cloud-setup/env.sh
-./cloud-setup/env.sh --check          # must pass; fix anything it flags
-runs/lib/env-contract.py write --leg weka
-runs/lib/sync-to-s3.sh --mode full
+source env.sh
+./env.sh --check                      # must pass; fix anything it flags
+scripts/env-contract.py write --leg weka
+scripts/sync-to-s3.sh --mode full
 ```
 > This records the whole environment into S3. **It's also how you recover `env.sh` after a rebuild**, since that
 > file isn't in GitHub.
 >
-> `env-contract.py write` **exits non-zero and lists any held-constant field it could not record.** At this
-> point in the setup that is expected for anything the Python environments supply — they don't exist until
-> Part 7. Note what it lists and move on; what matters is that the contract is **complete before teardown**,
-> which `runs/lib/teardown-preflight.sh` checks against the contract's own field list.
+> The contract write **reports every held-constant field it could not record, and fails on them** — an
+> unrecorded fact is unverifiable, therefore failed, because a null cannot be shown to have matched
+> ([`../../PROJECT-THESIS.md`](../../PROJECT-THESIS.md) § 3). At this point in the setup that is expected for
+> anything the Python environments supply; they don't exist until Part 7. Note what it lists and move on. What
+> matters is that the contract is **complete before teardown**, which `scripts/teardown-preflight.sh` gates on.
 
 ---
 
@@ -539,7 +541,7 @@ claude
 ```
 Paste **exactly this**:
 
-> Read the file `cloud-setup/handoff-cloud.md` and follow it.
+> Read the file `prompts/handoff-cloud.md` and do everything it says, then report back.
 
 ### 7.2 — Log in to Hugging Face, once the environments exist
 
@@ -547,7 +549,7 @@ Claude builds the Python environments early in its plan. **As soon as it reports
 deferred at 4.4 — in a second terminal, or after Claude pauses for sign-off:
 
 ```bash
-source cloud-setup/env.sh
+source env.sh
 "$CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/hf" auth login     # paste your read token
 ```
 (Plain `hf auth login` works too if that environment is on your `PATH`.)
@@ -583,7 +585,7 @@ hard gates rather than a checklist.
 ### 8.1 — Finish Leg A properly first
 
 Work through [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md) § Teardown, including
-`runs/lib/teardown-preflight.sh`, which must print **GO**. Then rebuild the instance from the **same `AMI_ID`**,
+`scripts/teardown-preflight.sh`, which must print **GO**. Then rebuild the instance from the **same `AMI_ID`**,
 same type, same AZ, and bootstrap it per that document's § Rebuild.
 
 ### 8.2 — What only you can do
@@ -595,12 +597,17 @@ same type, same AZ, and bootstrap it per that document's § Rebuild.
 
    | Setting | Value | Why |
    |---|---|---|
-   | Deployment type | **Persistent 2** | Current generation, and the only one where metadata performance is provisioned independently of capacity |
-   | Throughput per unit of storage | **1000 MB/s/TiB** — the highest | We deliberately give Lustre its **best** configuration; beating a competitor's best is worth far more than beating a weak setup |
-   | Storage capacity | **at least 25 TiB** | At 1000 MB/s/TiB, 25 TiB is where Lustre's disks can finally saturate the instance's network. Below that, Lustre is the bottleneck and we'd be measuring our own sizing choice |
-   | Metadata configuration | **User-provisioned**, a high value | Metadata is where the two filesystems differ most architecturally |
+   | Deployment type | **Persistent 2** | The generation where metadata performance is provisioned independently of capacity |
+   | Throughput per unit of storage | **1000 MB/s/TiB** — the highest | We deliberately give Lustre its **best** configuration (**D7**); beating a competitor's best is worth far more than beating a weak setup |
+   | Storage capacity | **at least 25 TiB** | At 1000 MB/s/TiB, 25 TiB provisions ~25 GB/s — the instance's 200 Gbps line rate. Below that Lustre is the constraint and the delta would be our own sizing choice, not a filesystem property |
+   | Metadata configuration | **User-provisioned**, a high value | Provisioned independently of capacity, so leaving it at the default under-provisions that axis while the throughput axis is at maximum — the same sizing rule, applied to metadata |
    | VPC / subnet / security group | **Same as the instance**, `wsi-bench-sg` | Cross-AZ would distort results |
    | EFA | **Enabled** | Required for GPUDirect Storage, and it removes a hard per-server bandwidth cap |
+
+   **Confirm the deployment types and the per-TiB throughput figure in the console before you click** —
+   tiers, per-TiB figures and limits change, so the durable instruction is *highest tier, and capacity sized
+   above what the client can drive*, not these particular numbers. *(Source:
+   [FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html).)*
 
    Creation takes ~10 minutes.
 
@@ -616,7 +623,7 @@ claude
 ```
 Paste **exactly this**:
 
-> Read the file `cloud-setup/prompt-lustre-cluster-cloud.md` and do everything it says, then report back.
+> Read the file `prompts/prompt-lustre-cluster-cloud.md` and do everything it says, then report back.
 
 Claude verifies the environment contract against Leg A **before** anything is provisioned (a mismatch found then
 costs nothing); installs the EFA software and the Lustre client; **configures the Lustre client for EFA**;
@@ -635,22 +642,24 @@ mounts; captures the stripe layout; proposes tuning; and writes the FSx values i
 >
 > **If it shows only `tcp`, Claude is instructed to stop right there — before mounting, before any cell — and
 > report to you.** Leg B does not start, and it does not get measured-then-flagged; per **D16** the transport is
-> a precondition of the measurement. Tracked as `D-16`.
+> a precondition of the measurement, and `scripts/run-leg.sh` refuses to start a leg without an evidenced
+> `FS_TRANSPORT`. The client-side EFA configuration itself is deferred entry **D-16** in
+> [`../SCRIPT-TRACKER.md`](../SCRIPT-TRACKER.md).
 
 > ## ⚠ 2. The kernel must not drift
 > `kernel` is a held-constant field in the environment contract. The documented Lustre client install pulls
 > `linux-aws`, the *latest* AWS kernel — so run naively it can invalidate the comparison the contract exists to
 > protect. Claude will ask you to choose: **pin the kernel** and install the matching
 > `lustre-client-modules-$(uname -r)` (preferred), or accept the change and **re-baseline both legs**.
-> Tracked as `D-17`.
+> The policy call is deferred entry **D-17** in [`../SCRIPT-TRACKER.md`](../SCRIPT-TRACKER.md).
 
-**Also confirm before you let it move on:** `./cloud-setup/env.sh --check` passes, `LUSTRE_STRIPE_LAYOUT` is
-recorded (the consistency check derives Lustre's expected wire-vs-application relation from it), and
-`env-contract.py verify` comes back clean on every held-constant field.
+**Also confirm before you let it move on:** `./env.sh --check` passes, `LUSTRE_STRIPE_LAYOUT` is recorded (the
+consistency check derives Lustre's expected wire-vs-application relation from it), and
+`scripts/env-contract.py verify` comes back clean on every held-constant field.
 
 ### 8.5 — Then hand off to the benchmark
 
-Same as Part 7 — `cloud-setup/handoff-cloud.md`. Claude re-hydrates the datasets from S3, applies the remaining
+Same as Part 7 — `prompts/handoff-cloud.md`. Claude re-hydrates the datasets from S3, applies the remaining
 Lustre-leg work, and runs the same cells against the new mount.
 
 ---
@@ -672,5 +681,5 @@ Lustre-leg work, and runs the same cells against the new mount.
 
 1. **EFA interface type at launch** (2.2) — cannot be added later; Lustre needs it.
 2. **The S3 bucket and IAM role** (1.4, 1.5) — without them, deleting the instance destroys all results.
-3. **`env-contract.py write`** (6.3) — it's how you prove the two legs were comparable, *and* how you recover
-   `env.sh` after a rebuild.
+3. **`scripts/env-contract.py write`** (6.3) — it's how you prove the two legs were comparable, *and* how you
+   recover `env.sh` after a rebuild.

@@ -27,7 +27,7 @@
 #
 # Usage (typically invoked by sweep-stage6a-extract.sh tier2):
 #   ./run-stage6a-tier2-chunked-multimodel.sh \\
-#       --models virchow2,gigapath,uni2-h --n-gpus 4 --gpu-csv 2,3,6,7 \\
+#       --models virchow2,gigapath,uni2-h --n-gpus 4 --gpu-csv 0,1,2,3 \\
 #       --output-dir-base ${FS_MOUNT}/features/6.A \\
 #       --run-dir <run-dir-from-record-run> \\
 #       [--chunk-size 200] [--max-slides N] [--keep-rawtiff]

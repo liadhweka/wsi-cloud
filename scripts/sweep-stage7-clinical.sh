@@ -31,12 +31,12 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source env.sh}"
 PY="$CONDA_ENV/bin/python"
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -91,18 +91,23 @@ run_single_inference_cell() {
   local approval_tag=""
   [ "$model" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
 
-  # Per-cell LD_PRELOAD scoping (per cucim-segfaults-when-libcufile-is-ld-preloaded memory)
+  # Per-cell LD_PRELOAD scoping (per `docs/RUNBOOK.md` (mixed-backend sweeps))
   local preload=""
   [ "$backend" = "kvikio" ] && preload="$LIBCUFILE_SYSTEM"
-
-  local heatmap_dir="${FS_MOUNT}/heatmaps/stage7/${cell_name}"
-  mkdir -p "$heatmap_dir"
 
   local stage_tag="7.1"
   case "$cell_name" in
     *7.3*) stage_tag="7.3" ;;
     *7.6*|*cam16*) stage_tag="7.6" ;;
   esac
+
+  # Heatmaps go under the documented per-substage tree, $FS_MOUNT/heatmaps/7.x/<cell>/
+  # (docs/FILESYSTEM-MAP.md). A flat stage-wide dir puts this stage's write output
+  # outside the 7.x glob that capacity accounting and post-presentation cleanup walk —
+  # on the filesystem under test, in the one stage whose write volume is a measured
+  # result — and breaks the by-substage grouping 7.3's three format cells are read by.
+  local heatmap_dir="${FS_MOUNT}/heatmaps/${stage_tag}/${cell_name}"
+  mkdir -p "$heatmap_dir"
 
   local note="${approval_tag}Stage 7 single-process inference cell: backend=${backend} model=${model} cache=${cache} heatmap=${heatmap_format} N_slides=${max_slides}. WHY: per-slide inference latency baseline with per-phase decomposition (tissue/extract/MIL/heatmap-write). The clinical-deployment-decisive 'T seconds per inference' customer number."
 
@@ -218,7 +223,9 @@ tier2_concurrent() {
   # Virchow2 kvikIO warm-cache; per-process bs scales DOWN with N per Q8.
   # Each cell: 5 min ramp + 25 min steady = 30 min.
   # MANIFEST REVISION (2026-05-27): Tier 7.2 uses the FULL BRCA manifest
-  # (1131 slides) rather than the 50-slide subset used by 7.1. Reason: at
+  # (1073 slides — the uniform 40×-base cohort, STAGES.md D5; not the 1131-slide
+  # pre-mpp-filter set, which is a different file in the same dir) rather than
+  # the 50-slide subset used by 7.1. Reason: at
   # N=64 with the 50-slide subset, modulo partition leaves 14 of 64 procs
   # with 0 slides (idle), making N=64 throughput numbers asymmetric vs
   # N=1/4/16. Full manifest gives every proc at N=64 ~17 unique slides;
@@ -261,7 +268,7 @@ tier4_streaming() {
   "$RECORD" --run-name "7.4.b-read-after-write" --stage 7.4 \
     --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: read-after-write visibility is a CONSISTENCY property, not a bandwidth one, and the two filesystems have different metadata architectures — so there is no reason to assume they behave the same. SCOPE: single-client (writer and reader are processes on one instance); cross-client consistency would need a second instance and is out of scope." \
     -- "$PY" "$RAW_HELPER" \
-       --output-dir "${FS_MOUNT}/heatmaps/stage7/7.4b" \
+       --output-dir "${FS_MOUNT}/heatmaps/7.4b" \
        --n-slides 20 --bytes-per-write 50000000 \
        --poll-interval-s 0.01 \
        --per-slide-csv "$run_dir/read-after-write-latencies.csv" \

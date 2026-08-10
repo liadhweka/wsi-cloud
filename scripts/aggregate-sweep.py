@@ -18,6 +18,37 @@ Stdlib only.
 """
 import csv
 import glob
+from datetime import datetime
+
+
+def _parse_iso_utc(s):
+    """`date -u +%FT%TZ` -> datetime, or None. Tolerant of a trailing Z."""
+    s = (s or "").strip()
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _run_window(run_dir):
+    """(start_iso, end_iso, duration_s) from raw/.run_start + raw/.run_end.
+
+    Returns (None, None, None) when either stamp is missing or unparseable --
+    an aborted cell has no end stamp, and inventing a duration for it would put
+    a fabricated number in the column cost is computed from.
+    """
+    raw = run_dir / "raw"
+    try:
+        s_raw = (raw / ".run_start").read_text()
+        e_raw = (raw / ".run_end").read_text()
+    except OSError:
+        return None, None, None
+    s, e = _parse_iso_utc(s_raw), _parse_iso_utc(e_raw)
+    if s is None or e is None:
+        return None, None, None
+    return s_raw.strip(), e_raw.strip(), (e - s).total_seconds()
 import json
 import re
 import sys
@@ -64,6 +95,17 @@ def extract_cell_summary(run_dir: Path):
 
     out = dict(parsed)
     out["run_dir"] = run_dir.name
+
+    # The recorder's own window, from raw/.run_start + raw/.run_end.
+    #
+    # Without it this summary carries no time basis at all, and cost-to-complete
+    # -- (instance $/hr + filesystem $/hr) x measured wallclock,
+    # PROJECT-THESIS.md section 4 -- cannot be reconstructed from it afterwards.
+    # That matters most here of all the aggregators: these are the Stage-1.0
+    # synthetic ceiling cells, the denominator every downstream "% of ceiling"
+    # divides by, so they are also the reference the per-leg cost roll-up is
+    # anchored against. Absent stamps yield None rather than a guessed duration.
+    out["run_start_utc"], out["run_end_utc"], out["duration_s"] = _run_window(run_dir)
 
     # fio numbers — both write and read sides extracted; the workload
     # detection below picks which side to display in the headline grid.

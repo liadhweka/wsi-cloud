@@ -21,8 +21,8 @@ Per-slide chain of the four production clinical-inference phases:
 PER-SLIDE PER-PHASE LATENCY CSV (the new Stage 7 primary recording source):
   slide_idx, slide_id, process_id, world_size, t_arrived_s, n_tiles,
   inference_batch_size, t_tissue_ms, t_extract_ms, t_mil_ms,
-  t_heatmap_write_ms, t_total_ms, backend, model, cache_state,
-  heatmap_format, heatmap_path, heatmap_bytes
+  t_heatmap_write_ms, t_total_ms, backend, model, cache_policy_requested,
+  client_page_cache_discarded, heatmap_format, heatmap_path, heatmap_bytes
 
 PER-SLIDE HEATMAP WRITE CSV (the new Stage 7 primary for 7.3, 7.4, 7.5):
   slide_idx, slide_id, format, bytes_written, t_write_start_s,
@@ -66,7 +66,7 @@ REUSE FROM STAGE 6
 
 LD_PRELOAD SCOPING
 ==================
-Per `cucim-segfaults-when-libcufile-is-ld-preloaded` memory: kvikIO+GDS needs
+Per `docs/RUNBOOK.md` (mixed-backend sweeps): kvikIO+GDS needs
 LD_PRELOAD=libcufile-1.17 (matches kernel nvidia-fs 2.28.2); cuCIM 26.04
 segfaults if libcufile-1.17 is preloaded. Caller (orchestrator / sweep driver)
 must scope LD_PRELOAD per-cell. This script doesn't touch LD_PRELOAD.
@@ -378,18 +378,48 @@ HEATMAP_WRITERS = {
 # =============================================================================
 # Page-cache discipline (cold/warm split)
 # =============================================================================
-def discard_page_cache(path: Path):
-    """Cold-cache discipline: drop kernel page cache for a single file.
+def load_cucim_fs(cache_policy: str):
+    """Import cuCIM's page-cache helper ONCE, at startup. Fatal if `cold` needs it.
 
-    Per Stage 6 standard pattern — uses cucim.clara.filesystem.discard_page_cache
-    which works without root (unlike `echo 3 > /proc/sys/vm/drop_caches`).
+    WHY AT STARTUP, AND WHY FATAL: on the kvikIO arm this is the only thing that
+    imports cuCIM at all, so an import failure (pip cuCIM wheels have died on a
+    libstdc++ ABI mismatch) makes every per-slide discard a no-op. The cell then
+    runs fully warm while stamping every row cold, and the cold/warm delta --
+    which is the whole point of the 7.1.a-d pairs -- silently becomes cache
+    measured against cache. Refusing before the first slide costs seconds;
+    discovering it afterwards costs the cell and is not detectable from its output.
     """
     try:
         from cucim.clara import filesystem as cucim_fs
-        cucim_fs.discard_page_cache(str(path))
-    except Exception:
-        # Best-effort; if cucim_fs unavailable just skip (warm-cache fallback).
-        pass
+        return cucim_fs
+    except Exception as e:                      # noqa: BLE001 - report, never mask
+        if cache_policy == 'cold':
+            sys.exit(f"FATAL: --cache-policy cold needs cucim.clara.filesystem for the "
+                     f"page-cache discard and importing it failed: {e}. Refusing to run "
+                     f"a cell that would be warm while every row claims cold.")
+        return None
+
+
+def discard_page_cache(cucim_fs, path: Path) -> bool:
+    """Drop the client page cache for one file. Returns whether it ACTUALLY happened.
+
+    Works without root (unlike `echo 3 > /proc/sys/vm/drop_caches`).
+
+    WHY THE RETURN VALUE IS LOAD-BEARING: cuCIM's discard_page_cache reports
+    failure by RETURNING False, not by raising (docs.rapids.ai/api/cucim/stable/api/
+    — "Returns: True if succeed, False otherwise"), so discarding the result is
+    exactly as silent as swallowing the exception. Either way the caller gets a
+    warm slide it will label cold, and nothing downstream can tell the difference.
+
+    This clears the CLIENT page cache only; it says nothing about either
+    filesystem's server-side cache (A.5 / D13 own that half).
+    """
+    try:
+        return bool(cucim_fs.discard_page_cache(str(path)))
+    except Exception as e:                      # noqa: BLE001 - report, never mask
+        print(f"[infer] discard_page_cache({path}) raised: {e} -- this slide is WARM",
+              file=sys.stderr, flush=True)
+        return False
 
 
 # =============================================================================
@@ -398,21 +428,35 @@ def discard_page_cache(path: Path):
 def run_inference_on_slide(sid: str, slide_idx: int, args,
                             reader, foundation_model, preprocess,
                             mil, embed_dim: int, device: torch.device,
-                            t_zero: float) -> Optional[dict]:
+                            t_zero: float, cucim_fs, counters: dict) -> Optional[dict]:
     """Run all 4 phases for one slide. Returns the per-slide CSV row dict
-    (or None if the slide was skipped — no coords or missing file)."""
+    (or None if the slide was skipped — no coords or missing file).
+
+    `counters` accumulates the cell-level discard tally across slides; the
+    per-slide achieved result also goes into the row, so a partly-failed cold
+    cell is separable slide by slide instead of only in aggregate.
+    """
     t_arrived = time.monotonic() - t_zero
 
     # ----- Phase 1: tissue detection (load CLAM coords) -----
     t_phase = time.monotonic()
+    cache_discarded = None      # None = not attempted (warm cell); bool = ACHIEVED
     if args.cache_policy == 'cold':
         # Drop page cache for the slide's underlying file BEFORE the coord load
         if args.backend == 'kvikio':
-            discard_page_cache(Path(args.rawtiff_dir) / f"{sid}.tiff")
+            slide_path = Path(args.rawtiff_dir) / f"{sid}.tiff"
+            if not slide_path.exists():
+                # Missing input, not a failed discard -- open_slide below skips
+                # the slide. Counting it as a discard failure would blame the
+                # instrumentation for a data problem and vice versa.
+                slide_path = None
         else:
             slide_path = reader._find_slide(sid)
-            if slide_path is not None:
-                discard_page_cache(slide_path)
+        if slide_path is not None:
+            cache_discarded = discard_page_cache(cucim_fs, slide_path)
+            counters['discard_attempted'] += 1
+            if not cache_discarded:
+                counters['discard_failed'] += 1
     coords = load_slide_coords(args.coords_dir, sid)
     if coords is None:
         print(f"[infer] skip {sid} (no coords)", flush=True)
@@ -499,7 +543,15 @@ def run_inference_on_slide(sid: str, slide_idx: int, args,
             't_total_ms': f"{t_total_ms:.3f}",
             'backend': args.backend,
             'model': args.model,
-            'cache_state': args.cache_policy,
+            # REQUESTED policy, named as such. It used to be written as
+            # `cache_state`, i.e. an assertion wearing the name of a
+            # measurement (thesis §11.5) -- a cold cell whose discard never
+            # landed produced rows indistinguishable from a real cold cell.
+            'cache_policy_requested': args.cache_policy,
+            # ACHIEVED, client-side only. '' = not attempted (warm cell);
+            # 'false' = attempted and failed, so THIS SLIDE was read warm.
+            'client_page_cache_discarded': ('' if cache_discarded is None
+                                            else str(cache_discarded).lower()),
             'heatmap_format': args.heatmap_format,
             'heatmap_path': str(heatmap_path),
             'heatmap_bytes': heatmap_bytes,
@@ -592,6 +644,10 @@ def main():
     device = torch.device('cuda:0')
     torch.backends.cudnn.benchmark = True
 
+    # Resolve the cold-cache mechanism before any wallclock is spent (fatal for
+    # a cold cell if it is unavailable — see load_cucim_fs).
+    cucim_fs = load_cucim_fs(args.cache_policy)
+
     print(f"[infer] backend={args.backend} model={args.model} "
           f"cache={args.cache_policy} bs={args.inference_batch_size} "
           f"proc {args.process_id}/{args.world_size} "
@@ -646,7 +702,8 @@ def main():
         'slide_idx', 'slide_id', 'process_id', 'world_size',
         't_arrived_s', 'n_tiles', 'inference_batch_size',
         't_tissue_ms', 't_extract_ms', 't_mil_ms', 't_heatmap_write_ms',
-        't_total_ms', 'backend', 'model', 'cache_state',
+        't_total_ms', 'backend', 'model', 'cache_policy_requested',
+        'client_page_cache_discarded',
         'heatmap_format', 'heatmap_path', 'heatmap_bytes',
     ])
     csv_w.writeheader()
@@ -673,6 +730,8 @@ def main():
     deadline = (t_zero + args.max_runtime_s) if args.max_runtime_s > 0 else float('inf')
     slides_done = 0
     slides_skipped = 0
+    # Cell-level tally of what the cold mechanism ACHIEVED (see the summary).
+    counters = {'discard_attempted': 0, 'discard_failed': 0}
     sum_total_ms = 0.0
     sum_tissue_ms = 0.0
     sum_extract_ms = 0.0
@@ -694,7 +753,7 @@ def main():
             res = run_inference_on_slide(
                 sid, global_slide_idx, args,
                 reader, foundation_model, preprocess,
-                mil, embed_dim, device, t_zero,
+                mil, embed_dim, device, t_zero, cucim_fs, counters,
             )
             if res is None:
                 slides_skipped += 1
@@ -731,7 +790,19 @@ def main():
         'model': args.model,
         'embedding_dim': embed_dim,
         'inference_batch_size': args.inference_batch_size,
+        # REQUESTED policy.
         'cache_policy': args.cache_policy,
+        # ACHIEVED, client page cache only. `cache_policy` above is what the cell
+        # ASKED for; these are what actually happened. A cold cell with
+        # n_client_page_cache_discards_failed > 0 read those slides WARM, and
+        # without this the CSV would still label all of them cold (thesis §11.5).
+        'n_client_page_cache_discards_attempted': counters['discard_attempted'],
+        'n_client_page_cache_discards_failed': counters['discard_failed'],
+        # The client page cache is only half the question: this discard does not
+        # touch either filesystem's server-side cache, and the per-filesystem cold
+        # mechanism is still open (A.5 / D13). Recorded as unknown EXPLICITLY, so
+        # the absence of a field can never be read as "cold was achieved".
+        'cache_state_achieved': 'unknown',
         'heatmap_format': args.heatmap_format,
         'manifest': args.manifest,
         'n_slides_assigned': len(my_slide_ids),
@@ -753,6 +824,18 @@ def main():
         json.dump(summary, f, indent=2)
     print("=== summary ===", flush=True)
     print(json.dumps(summary, indent=2), flush=True)
+
+    # Fail loud on a cold cell that did not get cold. The summary and both CSVs
+    # are written FIRST -- the latencies are real measurements and the rows say
+    # per slide which ones were warm, and re-running costs hours of wallclock --
+    # but the exit code stops a driver marking this cell done and stops it being
+    # read as the cold half of a cold/warm pair.
+    if counters['discard_failed'] > 0:
+        raise SystemExit(
+            f"FATAL: {counters['discard_failed']} of {counters['discard_attempted']} "
+            f"page-cache discards failed on a --cache-policy cold cell; those slides "
+            f"were read WARM. Recording is written and labels them per slide -- but "
+            f"this cell is NOT a cold cell, do not use it as one.")
 
 
 if __name__ == '__main__':

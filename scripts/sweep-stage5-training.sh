@@ -22,6 +22,7 @@
 #   ./sweep-stage5-training.sh smoke      # single-GPU short cell (validate trainer end-to-end, ~3-5 min)
 #   ./sweep-stage5-training.sh all        # run all 6 cells sequentially
 #   ./sweep-stage5-training.sh 5.A.1      # run a specific cell only
+#   CUFILE_COMPAT_MODE=on ./sweep-stage5-training.sh 5.A.4   # mode-controlled paired cell
 set -uo pipefail
 
 # Repo root derived from this script's own location (scripts -> runs -> root),
@@ -37,12 +38,12 @@ TRAINER="$REPO/scripts/train-resnet50-stage5.py"
 RECORD="$REPO/scripts/record-run.sh"
 
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -52,6 +53,21 @@ CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 [ -f "$TRAINER" ]       || { echo "missing trainer at $TRAINER" >&2; exit 1; }
 [ -x "$RECORD" ]        || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
 [ -x "$PY" ]            || { echo "missing python at $PY" >&2; exit 1; }
+
+# cuFile mode for the kvikIO cells. 'off' (GDS) is what the 5.A grid runs in, so the
+# default leaves every existing cell unchanged; the mode-controlled paired cell
+# (docs/STAGES.md, Stage-5-Training.md § 5.A) is requested by exporting this for that
+# one invocation. THIS repo's variable, deliberately not kvikIO's own env var — the
+# value is passed to the trainer as --compat-mode and set through kvikio.defaults, and
+# a second channel setting the same knob would make the mode a cell ran in ambiguous.
+# Validated here rather than only in the trainer's argparse: run_cell builds the cell's
+# --note before the trainer starts, so an unrecognised value would otherwise reach
+# record-run.sh as a note naming a mode that nothing ever ran in.
+CUFILE_COMPAT_MODE="${CUFILE_COMPAT_MODE:-off}"
+case "$CUFILE_COMPAT_MODE" in
+  off|on|auto) ;;
+  *) echo "CUFILE_COMPAT_MODE must be off|on|auto, got '$CUFILE_COMPAT_MODE'" >&2; exit 2 ;;
+esac
 
 BRCA_RAWTIFF=${FS_MOUNT}/data/tcga-brca-rawtiff
 BRCA_SVS=${FS_MOUNT}/data/tcga-brca
@@ -65,7 +81,7 @@ export CUFILE_ENV_PATH_JSON="$CUFILE_JSON"
 # segfault inside slide.read_region(), because cuCIM links its own bundled
 # libcufile internally even for CPU reads. cuCIM CPU decode does not use GDS at
 # all, so the preload is unnecessary there. See the
-# `cucim-segfaults-when-libcufile-is-ld-preloaded` memory: the versions are
+# `docs/RUNBOOK.md` (mixed-backend sweeps): the versions are
 # era-specific, the pattern is durable.
 # Cap PyTorch's thread pools so N ranks do not oversubscribe the host's cores
 # (Stage-5-Training.md Q6). ⏳ D-8: re-derive this against the real vCPU count and
@@ -104,12 +120,16 @@ run_cell() {
   # Determined BEFORE the note is built, so the note records the value actually
   # used rather than an empty placeholder. Set only on kvikIO cells: cuCIM links
   # libcufile internally and segfaults on an ABI mismatch (cross-cutting pattern #3).
+  # Same for the cuFile mode: cuCIM CPU reads never touch cuFile, so on a 5.B cell it
+  # is recorded as <n/a> rather than as a value the cell did not actually use.
   local preload=""
+  local compat_mode=""
   if [ "$backend" = "kvikio" ]; then
     preload="$LIBCUFILE_SYSTEM"
+    compat_mode="$CUFILE_COMPAT_MODE"
   fi
 
-  local note="Stage ${substage} cell on fs=${LEG}: backend=${backend} N_gpus=${n_gpus} gpus=${gpu_csv} batch_per_rank=256 effective_batch=$((256 * n_gpus)) ramp=${ramp}s steady=${runtime}s. WHY this cell: see Stage-5-Training.md § 5.A/5.B — ResNet-50 is the storage-stressing choice (small fast model = more demand per unit of compute). DDP self-launched via mp.spawn with an explicit loopback master. GPU set=${gpu_csv} (⏳ D-8: NUMA-aware ordering to be re-derived on this instance). LD_PRELOAD=${preload:-<unset>}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}. Per-training-step CSV at training-steps.csv is the PRIMARY headline source; nvidia-smi is also PRIMARY from Stage 4 onward. Trainer: $TRAINER."
+  local note="Stage ${substage} cell on fs=${LEG}: backend=${backend} N_gpus=${n_gpus} gpus=${gpu_csv} batch_per_rank=256 effective_batch=$((256 * n_gpus)) ramp=${ramp}s steady=${runtime}s cufile_compat_mode=${compat_mode:-<n/a>} (REQUESTED, not proven — the per-cell cuFile path accounting settles which path ran). WHY this cell: see Stage-5-Training.md § 5.A/5.B — ResNet-50 is the storage-stressing choice (small fast model = more demand per unit of compute). DDP self-launched via mp.spawn with an explicit loopback master. GPU set=${gpu_csv} (⏳ D-8: NUMA-aware ordering to be re-derived on this instance). LD_PRELOAD=${preload:-<unset>}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}. Per-training-step CSV at training-steps.csv is the PRIMARY headline source; nvidia-smi is also PRIMARY from Stage 4 onward. Trainer: $TRAINER."
 
   local trainer_args=(
     --backend "$backend"
@@ -124,7 +144,7 @@ run_cell() {
     --seed 42
   )
   if [ "$backend" = "kvikio" ]; then
-    trainer_args+=( --rawtiff-dir "$BRCA_RAWTIFF" --n-buffer 256 --num-threads 16 )
+    trainer_args+=( --rawtiff-dir "$BRCA_RAWTIFF" --n-buffer 256 --num-threads 16 --compat-mode "$compat_mode" )
   elif [ "$backend" = "cucim_batched_cpu" ]; then
     trainer_args+=( --svs-dir "$BRCA_SVS" )
   fi

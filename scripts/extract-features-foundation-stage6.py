@@ -49,7 +49,7 @@ WHY 4096-byte aligned reads (kvikIO backend only)
   via `aligned_read_props()` (verbatim from cucim's gds_whole_slide example).
 
 WHY per-cell LD_PRELOAD scoping (mentioned for caller; this script doesn't set it)
-  Per `cucim-segfaults-when-libcufile-is-ld-preloaded` memory: kvikIO+GDS needs LD_PRELOAD of
+  Per `docs/RUNBOOK.md` (mixed-backend sweeps): kvikIO+GDS needs LD_PRELOAD of
   libcufile-1.17 to override the conda env's bundled 1.14.1, but cuCIM 26.04 segfaults
   inside `slide.read_region()` with that preload due to ABI mismatch. Sweep driver
   must set LD_PRELOAD per-cell (kvikio cells = set; cucim cells = unset).
@@ -346,16 +346,36 @@ class KvikIOSlideReader:
         self.tile_bytes = TILE_SIZE * TILE_SIZE * 3
         self.slot_bytes = int(np.ceil((self.tile_bytes + ALIGNMENT) / ALIGNMENT) * ALIGNMENT)
 
+        # Cold-cache accounting, surfaced in the cell summary. The discard below
+        # is unconditional on this backend, so without a tally there is nothing
+        # separating a cell that dropped every slide's cache from one where the
+        # drop never worked — and both look identical in the results.
+        self.n_discard_attempted = 0
+        self.n_discard_failed = 0
+
     def open_slide(self, slide_id: str):
         """Returns (handle, idx_meta) for the slide, or (None, None) if missing."""
         path = self.rawtiff_dir / f"{slide_id}.tiff"
         if not path.exists():
             return None, None
-        # Cold-cache discipline (matches Stage 4.C random reader)
+        # Cold-cache discipline (matches Stage 4.C random reader). RECORDED, not
+        # assumed: cuCIM signals a failed discard by RETURNING False rather than
+        # raising (docs.rapids.ai/api/cucim/stable/api/ — "Returns: True if
+        # succeed, False otherwise"), so a bare `except: pass` and an ignored
+        # return value fail the same way — the slide is read WARM inside a cell
+        # that claims cold, which is the cache state asserted-rather-than-recorded
+        # that thesis §11.5 lists as invalidating.
+        self.n_discard_attempted += 1
         try:
-            self._cucim_fs.discard_page_cache(str(path))
-        except Exception:
-            pass
+            discarded = bool(self._cucim_fs.discard_page_cache(str(path)))
+        except Exception as e:                  # noqa: BLE001 - report, never mask
+            print(f"[extractor] discard_page_cache({path}) raised: {e}",
+                  file=sys.stderr, flush=True)
+            discarded = False
+        if not discarded:
+            self.n_discard_failed += 1
+            print(f"[extractor] DISCARD-FAILED: {path.name} — read WARM, not cold",
+                  file=sys.stderr, flush=True)
         with self._TiffFile(str(path)) as tif:
             if self.level >= len(tif.pages):
                 return None, None
@@ -633,7 +653,7 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
             rawtiff_dir=args.rawtiff_dir,
             n_buffer=args.n_buffer,
             num_threads=args.num_threads,
-            compat_mode="off",  # GDS-on, Stage 4.C winner
+            compat_mode=args.compat_mode,
             level=0,
             footprint_level0=footprint_level0,
         )
@@ -690,18 +710,33 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
 
     step_idx = 0
     slides_done = 0
+    slides_incomplete = 0   # slides refused because not every embedding row was filled
     total_tiles_steady = 0
     total_steps_steady = 0
+
+    # Each skip cause is counted SEPARATELY because they mean opposite things.
+    # `exists` is a resumed cell doing the right thing; `no_coords` and
+    # `input_missing` mean this cell quietly extracted a reduced corpus and still
+    # exits 0, with tiles_per_sec_aggregate_steady computed over that subset. One
+    # shared `continue` with no counter made all four indistinguishable, and the
+    # likeliest trigger is mundane: a re-run of Stage 3 rm -rf's the coords dir
+    # that every Stage 4/5/6/7 cell reads, so an interrupted Stage 3 leaves the
+    # downstream cells reading a corpus that is smaller than they claim.
+    slides_skipped_exists = 0
+    slides_skipped_no_coords = 0
+    slides_skipped_input_missing = 0
 
     for sid in my_slide_ids:
         # Skip if output already exists (idempotency — useful if cell is re-run after partial failure)
         out_path = output_dir / f"{sid}.pt"
         if out_path.exists() and not args.force_reextract:
+            slides_skipped_exists += 1
             print(f"[extractor] rank={rank} skip {sid} (exists)", file=sys.stderr, flush=True)
             continue
 
         coords = load_slide_coords(args.coords_dir, sid)
         if coords is None:
+            slides_skipped_no_coords += 1
             print(f"[extractor] rank={rank} skip {sid} (no coords)", file=sys.stderr, flush=True)
             continue
         n_tiles = coords.shape[0]
@@ -710,11 +745,13 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
         if args.backend == "kvikio":
             handle, idx_meta = reader.open_slide(sid)
             if handle is None:
+                slides_skipped_input_missing += 1
                 print(f"[extractor] rank={rank} skip {sid} (rawtiff missing)", file=sys.stderr, flush=True)
                 continue
         else:
             slide_handle = reader.open_slide(sid)
             if slide_handle is None:
+                slides_skipped_input_missing += 1
                 print(f"[extractor] rank={rank} skip {sid} (svs missing)", file=sys.stderr, flush=True)
                 continue
 
@@ -817,6 +854,24 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
         })
         per_slide_file.flush()
 
+        # GUARD: every row must have been written before this is persisted.
+        #
+        # `slide_embeddings` is allocated with torch.empty, so any row the batch
+        # loop did not reach still holds whatever was previously in that GPU
+        # memory. Saving it would write uninitialised memory to disk as though
+        # it were a feature vector, under a header claiming n_tiles real rows --
+        # a file that loads cleanly, has the right shape and dtype, trains
+        # without error, and is silently garbage in its tail. Nothing
+        # downstream can detect that, which is why this is a refusal and not a
+        # warning.
+        if emb_cursor != n_tiles:
+            slides_incomplete += 1
+            print(f"[extractor] REFUSING TO SAVE {sid}: filled {emb_cursor}/{n_tiles} "
+                  f"embedding rows. The remainder is uninitialised memory, so this "
+                  f"slide is dropped rather than written. Cell is INCOMPLETE.",
+                  file=sys.stderr, flush=True)
+            continue
+
         # Save per-slide .pt
         # Download to host as FP32 (or FP16 if requested via --dtype-out)
         if args.dtype_out == "fp16":
@@ -841,18 +896,31 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
     if rank == 0:
         steps_csv_file.close()
 
-    # Aggregate across ranks
+    # Aggregate across ranks. Every per-rank counter that reaches the summary is
+    # summed HERE — rank 0 writes the summary, so a counter left out of this
+    # reduction would report rank 0's slice of the work as though it were the
+    # whole cell. Named rather than positional so adding one can't silently
+    # shift the meaning of the others.
+    # getattr default 0: only the kvikIO reader discards page cache, and 0 is the
+    # honest count for the cuCIM backend rather than a missing field.
+    counter_names = ["tiles_steady", "steps_steady", "slides_done", "slides_incomplete",
+                     "scheduled", "skipped_exists", "skipped_no_coords",
+                     "skipped_input_missing", "discard_attempted", "discard_failed"]
+    local_counts = [total_tiles_steady, total_steps_steady, slides_done, slides_incomplete,
+                    len(my_slide_ids), slides_skipped_exists, slides_skipped_no_coords,
+                    slides_skipped_input_missing,
+                    getattr(reader, "n_discard_attempted", 0),
+                    getattr(reader, "n_discard_failed", 0)]
     if world_size > 1:
-        local = torch.tensor([float(total_tiles_steady), float(total_steps_steady),
-                              float(slides_done)], device=device)
+        local = torch.tensor([float(x) for x in local_counts], device=device)
         dist.all_reduce(local, op=dist.ReduceOp.SUM)
-        global_tiles_steady = float(local[0].item())
-        global_steps_steady = float(local[1].item())
-        global_slides_done = int(local[2].item())
+        g = dict(zip(counter_names, [float(x.item()) for x in local]))
     else:
-        global_tiles_steady = float(total_tiles_steady)
-        global_steps_steady = float(total_steps_steady)
-        global_slides_done = slides_done
+        g = dict(zip(counter_names, [float(x) for x in local_counts]))
+    global_tiles_steady = g["tiles_steady"]
+    global_steps_steady = g["steps_steady"]
+    global_slides_done = int(g["slides_done"])
+    global_slides_incomplete = int(g["slides_incomplete"])
 
     cell_wallclock = time.monotonic() - t_zero
 
@@ -889,7 +957,32 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
             "world_size": world_size,
             "batch_size": args.batch_size,
             "n_slides_manifest": len(all_slide_ids),
+            # What was actually SCHEDULED, after --max-slides truncated each rank's
+            # list. n_slides_manifest is the manifest length even in smoke mode, so
+            # on its own a 20-slide smoke run and a full production run produce
+            # summaries that differ only in a number nobody reads as a mode flag.
+            "n_slides_scheduled": int(g["scheduled"]),
+            "max_slides": args.max_slides,
             "n_slides_extracted_total": global_slides_done,
+            # The skip causes, counted separately — see the counter declarations
+            # for why they must not be pooled. Non-zero no_coords / input_missing
+            # means this cell extracted a REDUCED corpus and still exited 0.
+            "n_slides_skipped_exists": int(g["skipped_exists"]),
+            "n_slides_skipped_no_coords": int(g["skipped_no_coords"]),
+            "n_slides_skipped_input_missing": int(g["skipped_input_missing"]),
+            # Cache state ACHIEVED, not asserted. The kvikIO backend discards each
+            # slide's page cache before opening it; the cuCIM backend has NO
+            # discard mechanism at all, so attempted == 0 there and such a cell
+            # must be read as WARM — cold cannot be inferred from the backend name.
+            "n_page_cache_discards_attempted": int(g["discard_attempted"]),
+            "n_page_cache_discards_failed": int(g["discard_failed"]),
+            # Client page cache only; the server side and the per-filesystem cold
+            # mechanism are open (A.5 / D13). Stated, not left to omission.
+            "cache_state_achieved": "unknown",
+            # Slides refused because not every embedding row was filled. Non-zero
+            # means this cell did NOT produce the feature set it claims, and the
+            # process exits non-zero so no driver can mark the step done.
+            "n_slides_incomplete_refused": global_slides_incomplete,
             "total_tiles_steady_phase": global_tiles_steady,
             "total_steady_steps": global_steps_steady,
             "cell_wallclock_s": cell_wallclock,
@@ -909,6 +1002,15 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
 
     if world_size > 1:
         dist.destroy_process_group()
+
+    # Exit non-zero if any slide was refused. Without this the driver sees a
+    # clean exit and marks the step done, and the cell's own output count is the
+    # only remaining evidence that features are missing -- which is exactly the
+    # kind of failure that is invisible until someone goes looking.
+    if global_slides_incomplete > 0:
+        raise SystemExit(
+            f"FATAL: {global_slides_incomplete} slide(s) refused for incomplete "
+            f"embedding fill. This cell is INCOMPLETE -- do not use its features.")
 
 
 def _pick_free_port() -> int:
@@ -940,6 +1042,12 @@ def main():
                     help="kvikIO async pread pipelining depth")
     ap.add_argument("--num-threads", type=int, default=16,
                     help="kvikIO internal thread pool size")
+    ap.add_argument("--compat-mode", choices=["off", "on", "auto"], default="off",
+                    help="kvikIO compat_mode for the kvikio backend: off (GDS), on (POSIX bounce), "
+                         "auto (kvikIO decides). Default 'off' is what 6.A's cells run in; the "
+                         "mode-controlled paired cell (STAGES.md) is requested by passing this "
+                         "explicitly. REQUESTED, not proven — the per-cell cuFile path accounting "
+                         "settles which path actually ran.")
     ap.add_argument("--dtype-out", choices=["fp32", "fp16"], default="fp32",
                     help="Per-slide .pt feature tensor dtype")
     ap.add_argument("--force-reextract", action="store_true",

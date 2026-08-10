@@ -4,7 +4,10 @@
   // Doc-grounded 2026-06-29 (NVIDIA GDS config guide + docs.weka.io networking/GDS).
   //
   // POST-REINSTALL: copy this to the CUFILE_ENV_PATH_JSON target
-  //   (~/wsi-debug/p1-gdsio/cufile-full-rdma.json), then REPLACE every
+  //   ($CUFILE_CONFIG_DIR/cufile.json — NAMING-AND-VARIABLES.md Table 1 is the only
+  //   source for this path; writing it anywhere else produces a config that no
+  //   driver loads, cuFile silently falls back to stock defaults, and every kvikIO
+  //   cell still reports a plausible number), then REPLACE every
   //   "REPLACE-WITH-A100-CLIENT-IB-NIC-IPs" with the A100 client's actual IB NIC
   //   addresses (see GDS-TUNING-CHECKLIST.md Step 2). cuFile tolerates // comments
   //   (the stock /etc/cufile.json ships with them).

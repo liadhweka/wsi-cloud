@@ -78,6 +78,54 @@ def _bare_float(s):
         return 0.0
 
 
+def parse_iso_utc(s: str):
+    return datetime.fromisoformat(s.strip().rstrip('Z'))
+
+
+def read_run_window(run_dir: Path):
+    """The recorder's own window, from raw/.run_start + raw/.run_end.
+
+    Same pair every other stage aggregator reads. Without it the summary CSV
+    carries no time basis at all, and cost-to-complete — (instance $/hr +
+    filesystem $/hr) × measured wallclock, PROJECT-THESIS.md §4 — is not
+    reconstructable from it afterwards. Stage 7 holds the leg's longest cells
+    (7.4 endurance, the 7.2 concurrency grid), so it is the largest cost line.
+    """
+    raw = run_dir / 'raw'
+    try:
+        start = parse_iso_utc((raw / '.run_start').read_text())
+        end = parse_iso_utc((raw / '.run_end').read_text())
+    except Exception:
+        return None, None, None
+    return start, end, (end - start).total_seconds()
+
+
+def worker_cell_wallclock(run_dir: Path):
+    """Max `cell_wallclock_s` across this cell's worker summary JSONs.
+
+    A CROSS-CHECK on the recorder window, never a replacement: the orchestrated
+    tiers run N worker processes, so the cell is not finished until the slowest
+    one is, hence max rather than sum or mean. The gap to duration_s is the
+    recorder's pre/post snapshots plus model load inside the recording window —
+    real information about setup overhead, not noise. Returns the count too, so
+    a null cannot be misread as "workers reported zero".
+    """
+    best = None
+    n = 0
+    for p in sorted(run_dir.glob('*summary*.json')):
+        try:
+            v = json.loads(p.read_text()).get('cell_wallclock_s')
+            v = float(v) if v is not None else None
+        except Exception:
+            continue
+        if v is None:
+            continue
+        n += 1
+        if best is None or v > best:
+            best = v
+    return best, n
+
+
 def _active_window_mean(seq):
     """Idle-robust mean: trim leading/trailing samples below 5% of peak, then
     average the contiguous active span (internal gaps kept). Immune to a
@@ -373,10 +421,21 @@ def aggregate_cell(run_dir: Path) -> dict:
     if not name_m:
         return {}
     cell_name = name_m.group('name')
+    ts_m = TS_RE.match(run_dir.name)
+    start, end, duration = read_run_window(run_dir)
+    app_wall, n_worker_summaries = worker_cell_wallclock(run_dir)
     out = {
         'run_dir': run_dir.name,
         'cell_name': cell_name,
-        'ts': name_m.group('ts'),
+        # TS_RE, not name_m: RUN_NAME_RE carries no `ts` group, so asking it for
+        # one raised IndexError on EVERY cell — main() swallowed that as a
+        # per-cell WARN and wrote a header-only CSV while still exiting 0.
+        'ts': ts_m.group('ts') if ts_m else None,
+        'run_start_utc': start.isoformat() + 'Z' if start else None,
+        'run_end_utc': end.isoformat() + 'Z' if end else None,
+        'duration_s': duration,
+        'app_cell_wallclock_s_max': app_wall,
+        'n_worker_summaries': n_worker_summaries,
     }
 
     # Inference latencies (7.1, 7.2, 7.5 inference workload, 7.6)
@@ -485,7 +544,9 @@ def main():
 
     # Build the union of all column names across rows (cells have different
     # field sets depending on which sub-tier).
-    fieldnames = ['run_dir', 'cell_name', 'ts']
+    fieldnames = ['run_dir', 'cell_name', 'ts',
+                  'run_start_utc', 'run_end_utc', 'duration_s',
+                  'app_cell_wallclock_s_max', 'n_worker_summaries']
     seen = set(fieldnames)
     for r in rows:
         for k in r:

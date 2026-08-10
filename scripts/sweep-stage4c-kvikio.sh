@@ -54,12 +54,12 @@ READER="$REPO/scripts/read-tiles-kvikio.py"
 RECORD="$REPO/scripts/record-run.sh"
 
 # The SYSTEM libcufile, matched to the installed kernel nvidia-fs module. Read from
-# the environment (docs/NAMING-AND-VARIABLES.md Table 3) — never hardcoded:
+# the environment (docs/NAMING-AND-VARIABLES.md Table 1) — never hardcoded:
 # the conda env bundles an older copy, the right path is instance-specific, and a
 # path pointing nowhere makes LD_PRELOAD a silent no-op, so the kvikIO cells would
 # quietly run on the WRONG libcufile and still report numbers. ⏳ D-10: locate it on
 # the real instance and export LIBCUFILE_PRELOAD before running any kvikIO sweep.
-: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 3)}"
+: "${LIBCUFILE_PRELOAD:?LIBCUFILE_PRELOAD is unset -- locate the system libcufile matched to the loaded nvidia-fs module and export it (see docs/NAMING-AND-VARIABLES.md Table 1)}"
 LIBCUFILE_SYSTEM="$LIBCUFILE_PRELOAD"
 [ -f "$LIBCUFILE_SYSTEM" ] || { echo "LIBCUFILE_PRELOAD points at a nonexistent file: $LIBCUFILE_SYSTEM" >&2; exit 1; }
 CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
@@ -242,11 +242,12 @@ tier2() {
 # whole parallel-process group as one cell. Post-aggregation sums the per-process
 # tiles/sec to get the cell-aggregate.
 #
-# GPU assignment (NUMA-aware per locked decision Q3):
-#   N=1 → GPU 2 (NUMA-0, IB-adjacent)
-#   N=2 → GPU 2, 3 (both NUMA-0)
-#   N=4 → GPU 2, 3, 6, 7 (NUMA-0 + NUMA-2)
-#   N=8 → all 8 GPUs (deferred to Tier 3 if needed)
+# GPU assignment: the map below is the identity list for this instance's GPU count,
+# and must be re-derived here rather than carried over. A list from another machine
+# names indices that may not exist, and CUDA_VISIBLE_DEVICES drops unknown indices
+# silently rather than erroring -- so the cell runs at less than N-way width while
+# reporting a scaling number as though it had them all. Adjacency criteria are also
+# per-machine: this instance's data path is DPDK over ENA, not IB.
 tier2_mp() {
   echo "=== Stage 4.C Tier 2 (e) — multi-process scaling for 4.C.2 random mode ==="
 
