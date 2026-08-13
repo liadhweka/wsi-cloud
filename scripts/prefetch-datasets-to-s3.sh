@@ -32,9 +32,12 @@ case "$MODE" in
   *) echo "prefetch: unknown mode '$MODE' (none|pilot|full)" >&2; exit 1 ;;
 esac
 
+# The fast-exit is scoped to the DATASET sections: the model mirror further down
+# is cheap when already synced and must still run on every fresh instance.
+SKIP_DATASETS=0
 if [ "${FORCE:-0}" != "1" ] && aws s3api head-object --bucket "$S3_BUCKET" --key "datasets/.prefetch-complete-$MODE" >/dev/null 2>&1; then
-  echo "prefetch: $MODE already complete (marker in S3) — nothing to do (FORCE=1 to re-scan)"
-  exit 0
+  echo "prefetch: $MODE datasets already complete (marker in S3) — skipping dataset sections (FORCE=1 to re-scan)"
+  SKIP_DATASETS=1
 fi
 mkdir -p "$STAGE" || { echo "prefetch: cannot create staging dir $STAGE (scratch not mounted?)" >&2; exit 1; }
 
@@ -44,6 +47,7 @@ s3_has() { # s3_has KEY SIZE -> 0 if object exists with the same size
   [ "$sz" = "$2" ]
 }
 
+if [ "$SKIP_DATASETS" -eq 0 ]; then   # ---- dataset sections (skipped when marker present)
 # ---- TCGA via the GDC data API (open-access diagnostic slides; no token) --------
 fetch_tcga_one() { # id filename md5 size
   local id="$1" fn="$2" md5="$3" size="$4" key local_f
@@ -85,6 +89,10 @@ else
   echo "prefetch: CAMELYON manifest not found: $CAM_MANIFEST (skipping)"
 fi
 
+date -u > "$STAGE/.last-prefetch-$MODE"
+aws s3 cp --only-show-errors "$STAGE/.last-prefetch-$MODE" "s3://$S3_BUCKET/datasets/.prefetch-complete-$MODE" || true
+fi   # ---- end dataset sections
+
 # ---- Foundation models (stage 6/7) — timm loads by hub id, so the artifact is
 # ---- the HF hub CACHE; S3 mirrors it so rebuilds never re-hit huggingface.co.
 HF_MODELS=("paige-ai/Virchow2" "MahmoodLab/UNI2-h")
@@ -102,6 +110,4 @@ else
   echo "prefetch: hf CLI missing — model prefetch skipped"
 fi
 
-date -u > "$STAGE/.last-prefetch-$MODE"
-aws s3 cp --only-show-errors "$STAGE/.last-prefetch-$MODE" "s3://$S3_BUCKET/datasets/.prefetch-complete-$MODE" || true
 echo "prefetch: $MODE pass complete"
