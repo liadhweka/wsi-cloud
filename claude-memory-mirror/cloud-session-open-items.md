@@ -209,3 +209,11 @@ These change what the numbers mean, so resolving them after cells have run means
 10. **UNI2-h results stay internal-only** — don't strip the tags in refactors; filter those rows before
    anything leaves the building. More important here than in an internal study, since a competitive comparison
    is likelier to be externalised. Detail: `[[uni2h-conditional-use-status]]`.
+11. **Docs cadence debt from the cloud-init batch.** `scripts/bootstrap-instance.sh` and
+   `scripts/prefetch-datasets-to-s3.sh` now provision the client end-to-end (Terraform
+   `clients_custom_data_post_mount` -> bootstrap: packages, NVIDIA/CUDA-12.9, scratch RAID, weka login via
+   Secrets Manager, env.sh generation from instance evidence, cuFile compat wiring, envs + smoke tests, HF
+   token/models, memories, S3 dataset prefetch). Triggered but deferred until the first live boot validates:
+   `NAMING-AND-VARIABLES.md` + slimmed `env.example.sh` pairing, `SCRIPT-TRACKER.md` entries for both scripts,
+   the `docs/cloud-setup/*` rewrite (rebuild = `clients_number` 0->1 + three human steps), and D-13's hydrate
+   driver writing `runs/.leg-state/$LEG/hydration-complete` (the bootstrap's re-hydration guard keys on it).

@@ -1,0 +1,426 @@
+#!/usr/bin/env bash
+# bootstrap-instance.sh — WEKA-leg client bootstrap (Amazon Linux 2023, ec2-user).
+#
+# WHAT THIS IS
+#   The single, git-tracked copy of instance provisioning. On the WEKA leg it is
+#   launched by terraform-aws-weka's clients_custom_data_post_mount wrapper, as
+#   root, AFTER /mnt/weka is mounted. It replaces NEW-CLOUD-SETUP Parts 3-4 and
+#   most of Part 5's mechanical steps, and collapses TEARDOWN-AND-REBUILD's
+#   rebuild to: terraform apply -> SSH in -> add the printed GitHub key -> claude /login.
+#
+# DESIGN RULES (CLAUDE.md)
+#   - Facts land in env.sh from THIS instance's own evidence, never from config
+#     intent (D16: FS_TRANSPORT is written only when the client's own state shows
+#     DPDK; otherwise it stays blank for the session to investigate).
+#   - No `dnf upgrade` EVER: the kernel is a MUST_MATCH contract field (D-17).
+#     Patching is a human decision made with the contract in view.
+#   - Hydration (S3 -> $FS_MOUNT) is measured cell 1.7 and is NOT done here.
+#     Dataset prefetch populates S3 only (see prefetch-datasets-to-s3.sh).
+#   - Refuse loudly rather than default quietly; every failure is in the log
+#     with a WSI-WARN/WSI-FATAL prefix so `grep WSI- /var/log/wsi-bootstrap.log`
+#     is the whole triage.
+#
+# IDEMPOTENCY: safe to re-run (FORCE=1 bypasses the completion marker).
+set -uo pipefail
+exec >> /var/log/wsi-bootstrap.log 2>&1
+
+MARKER=/var/lib/wsi-bootstrap.done
+if [ -f "$MARKER" ] && [ "${FORCE:-0}" != "1" ]; then
+  echo "bootstrap: marker present ($MARKER) — already ran. FORCE=1 to re-run."
+  exit 0
+fi
+
+CONF=/etc/wsi-bootstrap.conf
+[ -f "$CONF" ] && . "$CONF"
+S3_BUCKET="${S3_BUCKET:-liad-wsi-cloud}"
+SSM_PREFIX="${SSM_PREFIX:-/wsi-bench}"
+DATASET_PREFETCH="${DATASET_PREFETCH:-none}"
+GIT_USER_NAME="${GIT_USER_NAME:-}"
+GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
+
+U=ec2-user
+UH=/home/$U
+REPO=$UH/wsi-cloud
+SCRATCH=/data/local-nvme
+WEKA_MNT=/mnt/weka
+warn()  { echo "WSI-WARN: $*"; }
+fatal() { echo "WSI-FATAL: $*"; }
+step()  { printf '\n===== %s ===== (%s)\n' "$*" "$(date -u +%H:%M:%S)"; }
+as_u()  { runuser -u $U -- "$@"; }
+
+step "0. facts"
+TOK=$(curl -sfX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+imds() { curl -sf -H "X-aws-ec2-metadata-token: $TOK" "http://169.254.169.254/latest/meta-data/$1"; }
+REGION=$(imds placement/region); AZ=$(imds placement/availability-zone)
+INSTANCE_ID=$(imds instance-id);  AMI_ID=$(imds ami-id); ITYPE=$(imds instance-type)
+HOSTN=$(hostname)
+echo "region=$REGION az=$AZ instance=$INSTANCE_ID ami=$AMI_ID type=$ITYPE host=$HOSTN kernel=$(uname -r)"
+grep -q "Amazon Linux 2023" /etc/os-release || warn "not AL2023 — this script targets AL2023; proceeding anyway"
+
+step "1. base packages (no dnf upgrade — D-17)"
+dnf install -y git tmux jq unzip rsync tar wget numactl mdadm fio pciutils python3-pip \
+  sysstat tree \
+  gcc make automake autoconf \
+  kernel-devel-"$(uname -r)" kernel-headers-"$(uname -r)" kernel-modules-extra \
+  || warn "some base packages failed — check the dnf output above"
+# GNU parallel (4 pipeline call sites) — may not be packaged for AL2023.
+if ! command -v parallel >/dev/null; then
+  dnf install -y parallel \
+    || ( cd /tmp && wget -q https://ftp.gnu.org/gnu/parallel/parallel-latest.tar.bz2 \
+         && tar -xjf parallel-latest.tar.bz2 && cd parallel-*/ \
+         && ./configure >/dev/null && make -s install && cd /tmp && rm -rf parallel-* ) \
+    || warn "GNU parallel unavailable — scripts invoking it will fail (see SCRIPT-TRACKER)"
+fi
+dnf install -y nodejs22 nodejs22-npm || dnf install -y nodejs20 nodejs20-npm || dnf install -y nodejs npm \
+  || warn "no Node.js — Claude Code npm fallback unavailable"
+command -v node >/dev/null || { for n in /usr/bin/node-22 /usr/bin/node-20; do [ -x "$n" ] && ln -sf "$n" /usr/bin/node; done; }
+command -v npm  >/dev/null || { for n in /usr/bin/npm-22 /usr/bin/npm-20;   do [ -x "$n" ] && ln -sf "$n" /usr/bin/npm;  done; }
+echo "node=$(node --version 2>/dev/null || echo none) npm=$(npm --version 2>/dev/null || echo none)"
+
+# fpart/fpsync (Stage 1.1 / 6.C ingest). Best-effort: not packaged for AL2023.
+if ! command -v fpsync >/dev/null; then
+  ( cd /tmp && rm -rf fpart && git clone -q --depth 1 https://github.com/martymac/fpart.git \
+    && cd fpart && autoreconf -i >/dev/null 2>&1 && ./configure >/dev/null && make -s && make -s install ) \
+    || warn "fpsync build failed — Stage 1.1/6.C ingest cells need it (env-prep can retry)"
+fi
+echo "fpsync=$(command -v fpsync || echo MISSING)"
+
+step "2. NVIDIA driver / CUDA / GDS (AL2023 NVIDIA repo)"
+# Rebuild pinning: if a Leg-A contract exists in S3, try to install the SAME driver
+# branch it recorded; a silent driver drift would violate MUST_MATCH.
+CONTRACT=/tmp/env-contract-leg-weka.json
+REBUILD=0
+if aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-weka.json" "$CONTRACT" 2>/dev/null; then
+  REBUILD=1; echo "contract found in S3 -> REBUILD mode"
+fi
+PIN_DRIVER=""
+[ $REBUILD -eq 1 ] && PIN_DRIVER=$(python3 -c "import json;c=json.load(open('$CONTRACT'));print(c.get('driver_version') or '')" 2>/dev/null)
+dnf install -y nvidia-release || warn "nvidia-release install failed — no AL2023 NVIDIA repo"
+if [ -n "$PIN_DRIVER" ]; then
+  dnf install -y "nvidia-driver-$PIN_DRIVER*" \
+    || { warn "pinned driver $PIN_DRIVER unavailable — installing latest (POSSIBLE MUST_MATCH DRIFT)"; \
+         touch /var/lib/wsi-DRIVER-DRIFT-CHECK-ME; dnf install -y nvidia-driver; }
+else
+  dnf install -y nvidia-driver || warn "nvidia-driver install failed"
+fi
+# System toolkit tracks the envs' CUDA major (they pin cuda-version=12.*): a NEWER
+# system libcufile preloaded over cuCIM's bundled one segfaults (standing constraint),
+# and gdscheck must come from the line the kvikIO cells actually preload.
+dnf install -y cuda-toolkit-12-9 || dnf install -y cuda-toolkit || warn "CUDA toolkit install failed"
+dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until env-prep resolves"
+systemctl enable --now nvidia-persistenced 2>/dev/null || true
+modprobe nvidia 2>/dev/null; modprobe nvidia_fs 2>/dev/null || true
+if nvidia-smi >/dev/null 2>&1; then
+  DRIVER_V=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
+  echo "GPU OK: driver=$DRIVER_V  gpus=$(nvidia-smi -L | wc -l)"
+else
+  fatal "nvidia-smi failed — GPU stack NOT working; env-prep session must resolve before any GPU cell"
+fi
+ls -d /usr/local/cuda* 2>/dev/null || warn "no /usr/local/cuda — check cuda-toolkit install"
+
+step "3. local NVMe scratch -> $SCRATCH"
+if mountpoint -q "$SCRATCH"; then
+  echo "scratch already mounted"
+else
+  # Instance-store disks only: unmounted, no fs, no partitions. Never touches root.
+  CAND=()
+  for d in /dev/nvme*n1; do
+    [ -b "$d" ] || continue
+    lsblk -no MOUNTPOINT,FSTYPE "$d" | grep -q '[^[:space:]]' && continue
+    [ "$(lsblk -no TYPE "$d" | wc -l)" -gt 1 ] && continue   # has partitions
+    CAND+=("$d")
+  done
+  echo "candidate scratch disks: ${CAND[*]:-none}"
+  if [ "${#CAND[@]}" -ge 2 ]; then
+    mdadm --create /dev/md/wsi-scratch --level=0 --raid-devices="${#CAND[@]}" "${CAND[@]}" --force --run \
+      && mkfs.xfs -f /dev/md/wsi-scratch && DEV=/dev/md/wsi-scratch \
+      && mdadm --detail --scan >> /etc/mdadm.conf || DEV=""
+  elif [ "${#CAND[@]}" -eq 1 ]; then
+    mkfs.xfs -f "${CAND[0]}" && DEV="${CAND[0]}" || DEV=""
+  else
+    DEV=""
+  fi
+  if [ -n "${DEV:-}" ]; then
+    mkdir -p "$SCRATCH" && mount "$DEV" "$SCRATCH" \
+      && grep -q "$SCRATCH" /etc/fstab || echo "$DEV $SCRATCH xfs defaults,noatime,nofail 0 0" >> /etc/fstab
+  else
+    fatal "no scratch device prepared — CONDA_ROOT/CONDA_ENVS_DIR live on $SCRATCH; env builds skipped"
+  fi
+fi
+mkdir -p "$SCRATCH" && chown $U:$U "$SCRATCH" && df -h "$SCRATCH" || true
+
+step "4. filesystem-under-test ownership"
+mountpoint -q "$WEKA_MNT" || fatal "$WEKA_MNT not mounted — post_mount ordering violated?"
+chown $U:$U "$WEKA_MNT" 2>/dev/null || warn "could not chown $WEKA_MNT"
+
+step "5.0 WEKA cluster login (admin password from Secrets Manager)"
+# Cluster-level queries (weka status / weka cluster ...) need `weka user login`;
+# the local ones (weka local *) and the DPDK evidence below do not. The module
+# stores the generated admin password in Secrets Manager as <prefix>-<cluster>-*password*.
+# We log in as BOTH root (this script's queries) and ec2-user (so no human ever
+# runs `weka user login` on this box again). On any failure the cluster facts
+# below simply stay blank/pending in env.sh — nothing else breaks.
+LB_HOST=$(findmnt -n -o SOURCE "$WEKA_MNT" 2>/dev/null | cut -d/ -f1)
+CLUSTER_HINT=$(echo "$LB_HOST" | sed 's/^internal-//; s/-lb-[0-9]*\..*$//')
+sm_fetch() { # sm_fetch SECRET_ID -> prints the password (handles raw or JSON SecretString)
+  local raw
+  raw=$(aws secretsmanager get-secret-value --region "$REGION" --secret-id "$1" \
+          --query SecretString --output text 2>/dev/null) || return 1
+  case "$raw" in
+    \{*) printf '%s' "$raw" | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('password') or d.get('value') or '')" ;;
+    *)   printf '%s' "$raw" ;;
+  esac
+}
+sm_discover() { # find weka/<cluster>/weka-password-* by name (suffix regenerates on rebuilds)
+  aws secretsmanager list-secrets --region "$REGION" \
+      --query "SecretList[].Name" --output text 2>/dev/null \
+    | tr '\t' '\n' | grep -F "$CLUSTER_HINT" | grep -i password | head -1
+}
+SECRET_ID="${WEKA_PASSWORD_SECRET_ID:-}"
+WEKA_PASS=""
+[ -n "$SECRET_ID" ] && WEKA_PASS=$(sm_fetch "$SECRET_ID")
+if [ -z "$WEKA_PASS" ] && [ -n "$CLUSTER_HINT" ]; then
+  [ -n "$SECRET_ID" ] && warn "configured secret id did not resolve (suffix regenerated on a rebuild?) — trying name discovery"
+  SECRET_ID=$(sm_discover)
+  [ -n "$SECRET_ID" ] && { echo "discovered secret: $SECRET_ID (hint: $CLUSTER_HINT)"; WEKA_PASS=$(sm_fetch "$SECRET_ID"); }
+fi
+WEKA_AUTH=0
+if [ -n "$WEKA_PASS" ]; then
+  # Not echoed, not traced (this script does not run under set -x). The value is
+  # briefly visible in argv, same as the documented manual login on this box.
+  if weka user login admin "$WEKA_PASS" >/dev/null 2>&1; then
+    WEKA_AUTH=1
+    as_u env HOME=$UH weka user login admin "$WEKA_PASS" >/dev/null 2>&1 \
+      && echo "weka login OK (root + $U)" \
+      || { warn "weka login OK as root but FAILED for $U"; }
+  else
+    warn "weka user login failed with the retrieved secret ($SECRET_ID)"
+  fi
+else
+  warn "no WEKA password retrievable (id + discovery both failed: IAM GetSecretValue/ListSecrets? KMS?) — cluster facts stay pending; log in manually and re-run with FORCE=1, or let env-prep record them"
+fi
+unset WEKA_PASS
+
+step "5. WEKA facts (evidence, not intent — D16)"
+FS_NAME=$(findmnt -n -o SOURCE "$WEKA_MNT" 2>/dev/null | awk -F/ '{print $NF}')
+WSTAT=$(weka status 2>/dev/null || true)
+EC=$(echo "$WSTAT"     | sed -n 's/.*protection: \([0-9]\++[0-9]\+\).*/\1/p' | head -1)
+CAP=$(echo "$WSTAT"    | sed -n 's/.*drive storage: \([0-9.]\+\) TiB total.*/\1/p' | head -1)
+read -r BACKENDS CLIENT_CORES <<< "$(weka cluster container -J 2>/dev/null | python3 -c "
+import json,sys
+try:
+    rows=json.load(sys.stdin); hosts=set(); cores=''
+    for r in rows:
+        name=(r.get('container') or r.get('container_name') or '')
+        hn=r.get('hostname','')
+        if name=='client' and '$HOSTN'.startswith(hn.split('.')[0]): cores=str(r.get('cores',''))
+        elif name!='client': hosts.add(hn)
+    print(len(hosts), cores or '')
+except Exception: print('','')" 2>/dev/null)"
+[ "$WEKA_AUTH" -eq 0 ] && [ -z "${BACKENDS:-}" ] && warn "cluster facts unavailable without weka login — EC/capacity/backends left pending"
+# Local fallback for cores (no cluster auth needed): count FRONTEND rows in the
+# local resources table. Strict regex — zero matches means leave it blank.
+if [ -z "${CLIENT_CORES:-}" ]; then
+  CC=$(weka local resources 2>/dev/null | grep -cE '^[0-9]+[[:space:]]+FRONTEND')
+  [ "${CC:-0}" -gt 0 ] && CLIENT_CORES=$CC
+fi
+# DPDK evidence: ENA functions on PCI that the kernel no longer drives (bound to
+# weka/DPDK), plus hugepages actually allocated.
+ENA_TOTAL=$(lspci 2>/dev/null | grep -ci 'Elastic Network Adapter' || echo 0)
+ENA_KERNEL=$(ip -br link 2>/dev/null | grep -vc '^lo' || echo 0)
+BOUND_NICS=$(( ENA_TOTAL - ENA_KERNEL )); [ "$BOUND_NICS" -lt 0 ] && BOUND_NICS=0
+HUGE=$(awk '/HugePages_Total/ {print $2}' /proc/meminfo)
+FS_TRANSPORT=""
+if [ "$BOUND_NICS" -ge 1 ] && [ "${HUGE:-0}" -gt 0 ]; then FS_TRANSPORT="dpdk"; fi
+echo "fs_name=$FS_NAME ec=$EC cap_tib=$CAP backends=$BACKENDS client_cores=$CLIENT_CORES bound_nics=$BOUND_NICS hugepages=$HUGE -> FS_TRANSPORT='${FS_TRANSPORT:-<blank: no evidence>}'"
+
+step "6. env.sh (rebuild-aware)"
+ENV_SH=$REPO/env.sh
+if [ ! -f "$ENV_SH" ]; then cp "$REPO/env.example.sh" "$ENV_SH"; fi
+py_set() { # py_set KEY VALUE — overwrite an existing export line, else insert before --check
+  python3 - "$ENV_SH" "$1" "$2" <<'PY'
+import sys,re
+p,k,v=sys.argv[1:4]
+lines=open(p).read().splitlines(True)
+pat=re.compile(r'^(\s*)export '+re.escape(k)+r'=')
+done=False
+for i,l in enumerate(lines):
+    if pat.match(l):
+        lines[i]=re.sub(r'^(\s*export '+re.escape(k)+r'=)"[^"]*"', r'\1"'+v+'"', l)
+        done=True; break
+if not done:
+    for i,l in enumerate(lines):
+        if l.startswith('if [ "${1:-}" = "--check" ]'):
+            lines.insert(i,f'export {k}="{v}"\n'); done=True; break
+    if not done: lines.append(f'export {k}="{v}"\n')
+open(p,'w').writelines(lines)
+PY
+}
+py_set AWS_REGION "$REGION";            py_set S3_BUCKET "$S3_BUCKET"
+[ -n "$EC" ]           && py_set WEKA_EC_SCHEME "$EC"
+[ -n "$CAP" ]          && py_set WEKA_CAPACITY_TB "$CAP"
+[ -n "$BACKENDS" ]     && py_set WEKA_BACKEND_COUNT "$BACKENDS"
+[ -n "$CLIENT_CORES" ] && py_set WEKA_CLIENT_CORES "$CLIENT_CORES"
+[ "$BOUND_NICS" -ge 1 ] && py_set WEKA_CLIENT_NICS "$BOUND_NICS"
+[ -n "$FS_TRANSPORT" ] && py_set FS_TRANSPORT "$FS_TRANSPORT"
+if [ $REBUILD -eq 1 ]; then
+  # Contract values win over freshly-derived ones where both exist: the contract is
+  # what Leg A actually measured under.
+  python3 "$REPO/scripts/env-contract.py" env --file "$CONTRACT" 2>/dev/null | \
+  while IFS= read -r line; do
+    case "$line" in export\ *=\"*\")
+      k=${line#export }; k=${k%%=*}; v=${line#*\"}; v=${v%\"*}
+      py_set "$k" "$v" ;;
+    esac
+  done
+fi
+chown $U:$U "$ENV_SH"
+as_u bash "$ENV_SH" --check || warn "env.sh --check reported missing items (expected pre-env-build; see above)"
+if [ $REBUILD -eq 1 ]; then
+  ( cd "$REPO" && as_u python3 scripts/env-contract.py verify --against "$CONTRACT" --leg weka ) \
+    || { warn "CONTRACT VERIFY FAILED — held-constant drift on this rebuild"; touch /var/lib/wsi-CONTRACT-VIOLATION-CHECK-ME; }
+fi
+
+step "6.5 cuFile/GDS wiring (weka leg: compat mode — D-10 mechanical half)"
+# This leg runs over ENA with no RDMA, so kvikIO cells run libcufile in COMPAT
+# mode by design (D8 runs the kvikIO path on both legs). gdscheck reporting GDS
+# unsupported here is a recorded fact, not a failure; per-cell GPU-direct-vs-
+# bounced accounting (D-6) remains the proof of path. Tuning judgment stays with
+# the env-prep session; this step does only the mechanical wiring.
+CUFILE_DIR=$UH/cufile-config
+mkdir -p "$CUFILE_DIR"
+if [ ! -f "$CUFILE_DIR/cufile.json" ]; then
+  cat > "$CUFILE_DIR/cufile.json" <<'CUF'
+{
+  "properties": { "allow_compat_mode": true }
+}
+CUF
+fi
+chown -R $U:$U "$CUFILE_DIR"
+LIBCUFILE=$(ls -1 /usr/local/cuda*/targets/*/lib/libcufile.so.* 2>/dev/null | grep -E 'so\.[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+if [ -n "$LIBCUFILE" ]; then
+  py_set LIBCUFILE_PRELOAD "$LIBCUFILE"
+  echo "LIBCUFILE_PRELOAD=$LIBCUFILE"
+else
+  warn "no versioned libcufile found under /usr/local/cuda* — kvikIO drivers will refuse to start until env-prep resolves"
+fi
+GDSCHECK=$(ls /usr/local/cuda*/gds/tools/gdscheck 2>/dev/null | sort -V | tail -1)
+if [ -n "$GDSCHECK" ]; then
+  echo "-- gdscheck -p verdict (expected: GDS unsupported on this leg):"
+  "$GDSCHECK" -p 2>&1 || true
+else
+  warn "gdscheck not found — CUDA toolkit gds tools missing?"
+fi
+
+step "7. Claude Code"
+as_u bash -lc 'curl -fsSL https://claude.ai/install.sh | bash' || true
+if ! as_u bash -lc 'command -v claude || test -x ~/.local/bin/claude'; then
+  npm install -g @anthropic-ai/claude-code || warn "Claude Code install failed (native + npm)"
+fi
+echo "claude=$(as_u bash -lc 'claude --version 2>/dev/null || ~/.local/bin/claude --version 2>/dev/null' || echo MISSING)"
+
+step "8. Miniforge + benchmark envs (background)"
+CONDA_ROOT=$SCRATCH/miniforge
+CONDA_ENVS=$SCRATCH/conda-envs
+if mountpoint -q "$SCRATCH"; then
+  if [ ! -x "$CONDA_ROOT/bin/mamba" ]; then
+    as_u bash -c "wget -q https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh -O /tmp/miniforge.sh && bash /tmp/miniforge.sh -b -p $CONDA_ROOT && rm -f /tmp/miniforge.sh" \
+      || fatal "miniforge install failed"
+  fi
+  as_u "$CONDA_ROOT/bin/conda" init bash >/dev/null 2>&1 || true
+  as_u mkdir -p "$CONDA_ENVS"
+  cat > /usr/local/bin/wsi-build-envs.sh <<EOS
+#!/usr/bin/env bash
+# Rebuilds the pinned benchmark envs from scripts/env-specs (scratch dies with the
+# instance, so this runs on every build). Explicit files ARE the pin — do not "update".
+set -x
+for e in wsi-cucim-2604 wsi-cucim; do
+  spec=$REPO/scripts/env-specs/\$e.conda-explicit.txt
+  [ -f "\$spec" ] || { echo "WSI-WARN: no spec for \$e"; continue; }
+  [ -x "$CONDA_ENVS/\$e/bin/python" ] && { echo "\$e already built"; continue; }
+  $CONDA_ROOT/bin/mamba create -y -p "$CONDA_ENVS/\$e" --file "\$spec" \
+    || { echo "WSI-WARN: env \$e build FAILED — see scripts/env-specs/env-create-history.txt for the manual recipe"; continue; }
+  # Smoke test the way the sweep drivers invoke it: CONDA_PREFIX set, bare exec.
+  mods="torch,cucim"; [ "\$e" = "wsi-cucim-2604" ] && mods="torch,cucim,kvikio"
+  if CONDA_PREFIX="$CONDA_ENVS/\$e" "$CONDA_ENVS/\$e/bin/python" -c "import \$mods, torch; assert torch.cuda.is_available(); print('\$e smoke OK:', torch.__version__, torch.cuda.device_count(), 'GPUs')" \
+       > "$CONDA_ENVS/\$e/.wsi-smoke.log" 2>&1; then
+    touch "$CONDA_ENVS/\$e/.wsi-smoke-ok"; cat "$CONDA_ENVS/\$e/.wsi-smoke.log"
+  else
+    echo "WSI-WARN: env \$e smoke test FAILED — see $CONDA_ENVS/\$e/.wsi-smoke.log"
+  fi
+done
+echo "env builds finished \$(date -u)"
+EOS
+  chmod +x /usr/local/bin/wsi-build-envs.sh
+  nohup runuser -u $U -- /usr/local/bin/wsi-build-envs.sh > /var/log/wsi-env-build.log 2>&1 &
+  echo "env builds launched in background -> /var/log/wsi-env-build.log"
+else
+  warn "scratch absent — skipping miniforge/env builds"
+fi
+
+step "9. CLAM (Stage 3 tissue detector)"
+[ -d "$UH/wsi-tools/CLAM/.git" ] || as_u git clone -q https://github.com/mahmoodlab/CLAM "$UH/wsi-tools/CLAM" \
+  || warn "CLAM clone failed"
+
+step "10. Hugging Face token (SSM SecureString $SSM_PREFIX/hf-token)"
+HF_TOKEN=$(aws ssm get-parameter --region "$REGION" --name "$SSM_PREFIX/hf-token" --with-decryption --query Parameter.Value --output text 2>/dev/null || true)
+if [ -n "$HF_TOKEN" ] && [ "$HF_TOKEN" != "None" ]; then
+  as_u mkdir -p "$UH/.cache/huggingface"
+  printf '%s' "$HF_TOKEN" > "$UH/.cache/huggingface/token"
+  chown $U:$U "$UH/.cache/huggingface/token"; chmod 600 "$UH/.cache/huggingface/token"
+  echo "HF token installed to ~/.cache/huggingface/token"
+else
+  warn "no HF token from SSM ($SSM_PREFIX/hf-token) — gated models (UNI2-h etc.) blocked until 'hf auth login' is run manually, or add ssm:GetParameter to the client role"
+fi
+unset HF_TOKEN
+as_u python3 -m pip install --user -q "huggingface_hub[cli]" || warn "huggingface_hub install failed — model prefetch will skip HF downloads"
+
+step "11. GitHub identity + push key"
+[ -n "$GIT_USER_NAME" ]  && as_u git config --global user.name  "$GIT_USER_NAME"
+[ -n "$GIT_USER_EMAIL" ] && as_u git config --global user.email "$GIT_USER_EMAIL"
+if [ ! -f "$UH/.ssh/id_ed25519" ]; then
+  as_u ssh-keygen -q -t ed25519 -N "" -C "wsi-client-$INSTANCE_ID" -f "$UH/.ssh/id_ed25519"
+fi
+as_u bash -c "ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null; sort -u -o ~/.ssh/known_hosts ~/.ssh/known_hosts"
+as_u git -C "$REPO" remote set-url --push origin git@github.com:liadhweka/wsi-cloud.git
+cp "$UH/.ssh/id_ed25519.pub" "$UH/GITHUB-DEPLOY-KEY.pub"; chown $U:$U "$UH/GITHUB-DEPLOY-KEY.pub"
+echo "GitHub push key (add at https://github.com/settings/keys):"
+cat "$UH/.ssh/id_ed25519.pub"
+
+step "12. Claude memories"
+( cd "$REPO" && as_u env HOME=$UH ./scripts/restore-memories.sh ) || warn "memory restore failed — sessions will start blank"
+
+step "13. dataset prefetch -> S3 (mode=$DATASET_PREFETCH; NOT hydration/cell 1.7)"
+if [ "$DATASET_PREFETCH" != "none" ] && [ -f "$REPO/scripts/prefetch-datasets-to-s3.sh" ]; then
+  nohup runuser -u $U -- bash "$REPO/scripts/prefetch-datasets-to-s3.sh" "$DATASET_PREFETCH" > /var/log/wsi-prefetch.log 2>&1 &
+  echo "prefetch launched -> /var/log/wsi-prefetch.log"
+else
+  echo "prefetch skipped"
+fi
+
+step "13.5 conditional re-hydration (unmeasured; only when 1.7 is on record but data is gone)"
+# Cell 1.7 (S3 -> filesystem hydration) is a MEASURED cell; this step never
+# replaces it. It fires only when this leg's hydrate driver has recorded
+# completion (runs/.leg-state/$LEG/hydration-complete — written by the D-13
+# driver) and the data is absent, i.e. a mid-leg cluster rebuild lost the
+# filesystem contents after the measurement already happened.
+if [ -f "$REPO/runs/.leg-state/weka/hydration-complete" ] && [ ! -d "$WEKA_MNT/data/tcga-brca" ]; then
+  echo "1.7 recorded complete but data absent -> re-hydrating UNMEASURED in background"
+  nohup runuser -u $U -- aws s3 sync "s3://$S3_BUCKET/datasets/tcga-brca/"  "$WEKA_MNT/data/tcga-brca/"  --only-show-errors > /var/log/wsi-rehydrate.log 2>&1 &
+  nohup runuser -u $U -- aws s3 sync "s3://$S3_BUCKET/datasets/camelyon16/" "$WEKA_MNT/data/camelyon16/" --only-show-errors >> /var/log/wsi-rehydrate.log 2>&1 &
+fi
+
+step "SUMMARY"
+mkdir -p /etc/motd.d 2>/dev/null || true
+{
+  echo "wsi-cloud client bootstrapped $(date -u). Remaining HUMAN steps:"
+  echo "  1. Add the GitHub push key (~/GITHUB-DEPLOY-KEY.pub) to GitHub"
+  echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
+  echo "  3. Paste prompts/prompt-env-prep-cloud.md (verification pass)"
+  echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
+  echo "Triage: grep WSI- /var/log/wsi-bootstrap.log"
+} | tee /etc/motd.d/50-wsi 2>/dev/null || true
+grep -c 'WSI-WARN' /var/log/wsi-bootstrap.log | xargs -I{} echo "warnings this run: {}"
+grep -c 'WSI-FATAL' /var/log/wsi-bootstrap.log | xargs -I{} echo "fatals this run: {}"
+touch "$MARKER"
+echo "=== bootstrap complete $(date -u) ==="

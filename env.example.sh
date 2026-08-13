@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# env.example.sh — the project's configuration. Copy to env.sh, fill in, source it.
+# env.example.sh — the project's configuration template.
 #
-#     cp env.example.sh env.sh
-#     $EDITOR env.sh
-#     source env.sh
+# scripts/bootstrap-instance.sh generates env.sh from this file at boot, filling
+# every instance-derived value from the machine's own evidence. Manual fallback:
+#
+#     cp env.example.sh env.sh && $EDITOR env.sh && source env.sh
 #     ./env.sh --check          # validate before running anything
 #
 # env.sh is gitignored. Every name here is documented in docs/NAMING-AND-VARIABLES.md.
@@ -16,21 +17,17 @@
 # number from the wrong filesystem, which is the worst failure mode in this project.
 
 # ── Identity & location (DECIDE NOW) ─────────────────────────────────────────────
-export PROJECT_USER="ubuntu"                     # AMI default user. NOT root — see the doc.
+export PROJECT_USER="ec2-user"                   # AMI default user. NOT root — see the doc.
 export PROJECT_HOME="/home/${PROJECT_USER}"
 export REPO_DIR="${PROJECT_HOME}/wsi-cloud"
-export GITHUB_REPO="liadhweka/wsi-cloud"
 
 # ── AWS (DECIDE NOW) ─────────────────────────────────────────────────────────────
-export AWS_REGION="us-west-2"                    # instance + both filesystems + bucket, all same region
-export AWS_AZ=""                                 # FILL IN: pick one and keep it (cross-AZ contaminates)
-export INSTANCE_TYPE="g6e.24xlarge"              # (subject to change — see STAGES.md D10)
-export S3_BUCKET=""                              # FILL IN: globally unique, e.g. weka-wsi-bench-<suffix>
+export AWS_REGION="ap-northeast-2"               # instance + both filesystems + bucket, all same region
+export S3_BUCKET="liad-wsi-cloud"                # the only durable store
 
 # ── Filesystems (DECIDE NOW) ─────────────────────────────────────────────────────
 export WEKA_MOUNT="/mnt/weka"                    # Leg A
 export LUSTRE_MOUNT="/mnt/lustre"                # Leg B
-export WEKA_FS_NAME="wsibench"                   # the filesystem NAME (need not equal the mount path)
 
 # ── Local scratch & Python (DECIDE NOW) ──────────────────────────────────────────
 export SCRATCH_DIR="/data/local-nvme"            # EPHEMERAL — dies with the instance
@@ -49,17 +46,14 @@ export CUFILE_ENV_PATH_JSON="${CUFILE_CONFIG_DIR}/cufile.json"   # generated per
 # drivers read it and refuse to start without it. What must NOT be exported
 # globally is LD_PRELOAD itself — the drivers set that per cell, on kvikIO cells
 # only, because cuCIM segfaults under a preloaded newer libcufile.
-# ⏳ D-10: fill in from the real instance (the env-prep session reports it).
+# Written by bootstrap-instance.sh from the installed CUDA line; the env-prep
+# session verifies it matches the loaded nvidia-fs module (D-10).
 export LIBCUFILE_PRELOAD=""                      # e.g. /usr/local/cuda-<ver>/targets/x86_64-linux/lib/libcufile.so.<ver>
 
 # ── Which leg is running (set per leg) ───────────────────────────────────────────
 export LEG="weka"                                # weka | lustre
 
 # ── DERIVED — do not set by hand ─────────────────────────────────────────────────
-# MEMORY_SLUG is DISPLAY-ONLY. restore-memories.sh and backup.sh each derive their own
-# slug from the repo's REAL location, so nothing reads this copy — don't wire anything
-# to it, or a wrong REPO_DIR would move the memories while --check still said "ok".
-export MEMORY_SLUG="$(printf '%s' "$REPO_DIR" | sed 's#^/#-#; s#/#-#g')"
 case "${LEG}" in
   weka)   export FS_MOUNT="${WEKA_MOUNT}" ;;
   lustre) export FS_MOUNT="${LUSTRE_MOUNT}" ;;
@@ -125,9 +119,6 @@ esac
 # ── RECORDED AT PROVISIONING — fill in as you go; feeds the environment contract ──
 # Leave blank until known. `--check` warns (does not fail) on these, because they are
 # captured progressively rather than up front.
-export AMI_ID=""
-export INSTANCE_ID=""
-export CLIENT_HOSTNAME=""                        # load-bearing: aggregators filter telemetry by it
 export WEKA_BACKEND_TYPE=""
 export WEKA_BACKEND_COUNT=""
 export WEKA_CAPACITY_TB=""
@@ -211,8 +202,6 @@ if [ "${1:-}" = "--check" ]; then
   _req PROJECT_USER    "everything else derives from it"
   _req REPO_DIR        "the memory slug derives from this path"
   _req AWS_REGION      "instance, filesystems and bucket must share it"
-  _req AWS_AZ          "cross-AZ traffic contaminates the comparison"
-  _req INSTANCE_TYPE   "held constant across both legs"
   _req S3_BUCKET       "the only durable store; teardown loses telemetry without it"
   _req LEG             "determines FS_MOUNT and the S3 prefix"
   _req FS_MOUNT        "a wrong mount silently measures the other filesystem"
@@ -220,10 +209,6 @@ if [ "${1:-}" = "--check" ]; then
   _req CONDA_ENV_ALT   "the two cuCIM-CPU drivers (Stage 4.A, 4.B) refuse to start without it"
   _req CONDA_ENVS_DIR  "every sweep driver builds its interpreter path from it"
   _req SCRATCH_DIR     "the local-scratch source paths derive from it"
-  # Display-only, so printed rather than required: restore-memories.sh and backup.sh
-  # each derive their own slug from the repo's real location and never read this one.
-  # Validating it would imply it is in force when it is not.
-  printf '  info     %-24s = %s (display-only — the scripts derive their own)\n' MEMORY_SLUG "${MEMORY_SLUG:-}"
 
   echo "── Paths ────────────────────────────────────────────────────────────"
   _dir REPO_DIR
@@ -233,14 +218,12 @@ if [ "${1:-}" = "--check" ]; then
   echo "── Recorded at provisioning (blank is OK early) ──────────────────────"
   _pybin   CONDA_ENV_MAIN         "nearly every sweep driver execs it; nothing runs without it"
   _pybin   CONDA_ENV_ALT          "the Stage 4.A and 4.B drivers exec it"
-  _rec     CLIENT_HOSTNAME        "aggregators filter telemetry by hostname"
   _recfile LIBCUFILE_PRELOAD      "every kvikIO sweep driver refuses to start without it"
   _genfile CUFILE_ENV_PATH_JSON   "regenerated per instance (D-10) — its addresses are instance-specific"
   _rec     FS_TRANSPORT           "run-leg.sh refuses to start a leg without it (D16)"
   _rec     WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12) — Leg A"
   _rec     LUSTRE_STRIPE_LAYOUT   "needed to derive the Lustre canary relation (D12) — Leg B"
   _rec     WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
-  _rec     AMI_ID                 "Leg B rebuilds from this exact AMI"
 
   # Workload shape: report OVERRIDES, not absences. An unset knob is the driver's own
   # default, identical on both legs by construction; a SET one applies to every cell of
