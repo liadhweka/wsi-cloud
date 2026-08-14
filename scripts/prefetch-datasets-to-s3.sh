@@ -95,7 +95,7 @@ fi   # ---- end dataset sections
 
 # ---- Foundation models (stage 6/7) — timm loads by hub id, so the artifact is
 # ---- the HF hub CACHE; S3 mirrors it so rebuilds never re-hit huggingface.co.
-HF_MODELS=("paige-ai/Virchow2" "MahmoodLab/UNI2-h")
+HF_MODELS=("paige-ai/Virchow2" "MahmoodLab/UNI2-h" "prov-gigapath/prov-gigapath")
 HUB_CACHE="$HOME/.cache/huggingface/hub"
 mkdir -p "$HUB_CACHE"
 aws s3 sync --only-show-errors "s3://$S3_BUCKET/models/hub-cache/" "$HUB_CACHE/" || true
