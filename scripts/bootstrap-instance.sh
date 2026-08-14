@@ -6,7 +6,7 @@
 #   launched by terraform-aws-weka's clients_custom_data_post_mount wrapper, as
 #   root, AFTER /mnt/weka is mounted. It replaces NEW-CLOUD-SETUP Parts 3-4 and
 #   most of Part 5's mechanical steps, and collapses TEARDOWN-AND-REBUILD's
-#   rebuild to: terraform apply -> SSH in -> add the printed GitHub key -> claude /login.
+#   rebuild to: terraform apply -> SSH in -> claude /login.
 #
 # DESIGN RULES (CLAUDE.md)
 #   - Facts land in env.sh from THIS instance's own evidence, never from config
@@ -156,7 +156,8 @@ chown $U:$U "$WEKA_MNT" 2>/dev/null || warn "could not chown $WEKA_MNT"
 step "5.0 WEKA cluster login (admin password from Secrets Manager)"
 # Cluster-level queries (weka status / weka cluster ...) need `weka user login`;
 # the local ones (weka local *) and the DPDK evidence below do not. The module
-# stores the generated admin password in Secrets Manager as <prefix>-<cluster>-*password*.
+# stores the generated admin password in Secrets Manager as
+# weka/<prefix>-<cluster>/weka-password-<suffix> (the suffix regenerates per cluster).
 # We log in as BOTH root (this script's queries) and ec2-user (so no human ever
 # runs `weka user login` on this box again). On any failure the cluster facts
 # below simply stay blank/pending in env.sh — nothing else breaks.

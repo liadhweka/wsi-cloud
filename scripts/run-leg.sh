@@ -157,8 +157,10 @@ esac
 # an instruction is not a mechanism: this is the unattended entry point, so it refuses
 # here rather than trusting that the instruction was followed hours earlier.
 #
-# FS_TRANSPORT is written into env.sh by the per-leg cluster-setup prompt FROM EVIDENCE
-# (the client's own report), never from the mount options that were passed.
+# FS_TRANSPORT is written into env.sh FROM EVIDENCE (the client's own report), never
+# from the mount options that were passed — by bootstrap-instance.sh at boot where it
+# can prove the transport (WEKA leg: bound NICs + hugepages), and by the per-leg
+# cluster-setup prompt otherwise; the prompt always verifies it either way.
 case "$LEG" in weka) WANT_TRANSPORT=dpdk ;; lustre) WANT_TRANSPORT=efa ;; esac
 WAIVER="$STATE/$LEG/transport-waiver"
 if [ -z "${FS_TRANSPORT:-}" ]; then

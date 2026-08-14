@@ -108,10 +108,8 @@
       "Bash(bash:*)",
       "Bash(sh:*)",
 
-      "Edit(/home/ubuntu/wsi-cloud/**)",
-      "Write(/home/ubuntu/wsi-cloud/**)",
-      "Edit(/home/liadhermelin/weka-vs-lustre-cloud/**)",
-      "Write(/home/liadhermelin/weka-vs-lustre-cloud/**)",
+      "Edit(/home/ec2-user/wsi-cloud/**)",
+      "Write(/home/ec2-user/wsi-cloud/**)",
 
       "Bash(fio:*)",
       "Bash(fpsync:*)",
@@ -144,7 +142,6 @@
       "Bash(aws ec2 describe-instances:*)",
       "Bash(aws fsx describe-file-systems:*)",
       "Bash(aws cloudwatch get-metric-statistics:*)",
-      "Bash(gdc-client:*)",
 
       "Bash(chmod:*)",
       "Bash(chown:*)",
@@ -181,8 +178,8 @@
       "Bash(git commit:*)",
       "Bash(git reset --hard:*)",
       "Bash(git clean -f:*)",
-      "Bash(apt:*)",
-      "Bash(apt-get:*)",
+      "Bash(dnf:*)",
+      "Bash(yum:*)",
       "Bash(pip install:*)",
       "Bash(pip uninstall:*)",
       "Bash(mamba install:*)",

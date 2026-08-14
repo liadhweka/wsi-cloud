@@ -68,7 +68,7 @@ for n in "${CONCURRENCIES[@]}"; do
   TARGET="$TARGET_ROOT/n${n}"
   SHDIR="$SHDIR_ROOT/n${n}"
   name="fpsync-n${n}"
-  note="Stage 1.5 fpsync sweep cell $i/$TOTAL on fs=${LEG}: local NVMe -> ${FS_MOUNT}, fpsync -n $n. Source: $SRC ($SRC_FILES files, $SRC_BYTES bytes). Target: $TARGET (cleaned pre-cell). fpsync 1.4.0 default partition (-f 2000 -s 4G), default rsync opts (-lptgoD -v --numeric-ids), shdir $SHDIR. Per-cell isolation via record-run.sh: any single cell failure leaves rest of sweep intact."
+  note="Stage 1.5 fpsync sweep cell $i/$TOTAL on fs=${LEG}: local NVMe -> ${FS_MOUNT}, fpsync -n $n. Source: $SRC ($SRC_FILES files, $SRC_BYTES bytes). Target: $TARGET (cleaned pre-cell). fpsync default partition (-f 2000 -s 4G), default rsync opts (-lptgoD -v --numeric-ids), shdir $SHDIR. Per-cell isolation via record-run.sh: any single cell failure leaves rest of sweep intact."
 
   log ""
   log "=== [cell $i/$TOTAL] $name ==="

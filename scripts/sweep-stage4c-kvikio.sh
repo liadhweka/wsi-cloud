@@ -320,8 +320,6 @@ tier3() {
     local now_utc
     now_utc=$(date -u +%Y-%m-%d-%H%M%S)
     local run_dir="$REPO/runs/${now_utc}-${LEG}-s4.C-${run_name}"
-    # NOTE: the wrapper currently hardcodes BRCA paths. We need a CAM16 variant
-    # or to parameterize it. For now we'll write a CAM16 wrapper inline.
     RECORD_RUN_DIR="$run_dir" \
     "$RECORD" \
       --run-name "$run_name" --stage 4.C --note "$note" \

@@ -123,13 +123,11 @@ def imds(path):
 def _reconcile(conflicts, field, env_name, imds_path):
     """Prefer instance metadata over env.sh, and RECORD any disagreement.
 
-    WHY not the previous `env(X) or imds(Y)`: env.sh is hand-typed at bootstrap, so a
-    wrong `ami_id` or `instance_type` there is never consulted against reality — it is
-    written into Leg A's contract, hand-copied into Leg B's env.sh from that same
-    contract, and then compared against itself by `verify`. It matches. The drift the
-    contract exists to catch becomes invisible at exactly the moment it matters.
-
-    Metadata is what the instance actually IS, so it wins; but a disagreement is itself
+    WHY metadata wins: it is what the instance actually IS. The env side is a
+    cross-check for any of these fields env.sh still carries (today: AWS_REGION);
+    for the rest the env side is empty by design — the slimmed env.sh does not
+    duplicate instance facts — and this reduces to a pure metadata read.
+    A disagreement, where one occurs, is itself
     a finding (a region/AZ mismatch means the instance is not where it was meant to be),
     so it is recorded rather than silently resolved.
     """
@@ -292,12 +290,16 @@ def cmd_verify(a, repo_root):
 
 # Contract field -> env.sh variable. Only fields that belong in env.sh appear here;
 # the rest of the contract is measured state, not configuration.
+# Only variables that exist in the slimmed env.example.sh appear here: the
+# bootstrap's rebuild merge py_sets every live line this mode emits, so a key
+# absent from the template would be re-INSERTED into env.sh with no consumer.
+# The other held-constant facts (AMI, instance type, AZ ...) live in the contract
+# itself and in Terraform, not in env.sh.
 ENV_MAP_HELD = {
-    "instance_type": "INSTANCE_TYPE", "aws_region": "AWS_REGION", "aws_az": "AWS_AZ",
-    "ami_id": "AMI_ID", "conda_env_main": "CONDA_ENV_MAIN",
+    "aws_region": "AWS_REGION", "conda_env_main": "CONDA_ENV_MAIN",
 }
 ENV_MAP_LEG = {
-    "leg": "LEG", "instance_id": "INSTANCE_ID", "client_hostname": "CLIENT_HOSTNAME",
+    "leg": "LEG",
     "libcufile_path": "LIBCUFILE_PRELOAD", "fs_transport": "FS_TRANSPORT",
     "weka_backend_type": "WEKA_BACKEND_TYPE", "weka_backend_count": "WEKA_BACKEND_COUNT",
     "weka_capacity_tb": "WEKA_CAPACITY_TB", "weka_ec_scheme": "WEKA_EC_SCHEME",
@@ -312,11 +314,12 @@ ENV_MAP_LEG = {
 def cmd_env(a, repo_root):
     """Emit env.sh-shaped export lines from a contract.
 
-    WHY: env.sh is gitignored, so it is LOST on every rebuild, and the documented
-    recovery was "read the contract and retype the values". That is a transcription
-    step in front of the one artifact whose whole purpose is proving the two legs
-    matched — a typo in AMI_ID or INSTANCE_TYPE defeats the check it exists to pass.
-    The rebuild happens at least twice, so this is worth automating.
+    WHY: env.sh is gitignored, so it is LOST on every rebuild. On a rebuild the
+    bootstrap consumes this output programmatically (its merge py_sets every live
+    line over the freshly generated env.sh, so the contract's values win where both
+    exist); pasting it by hand is the fallback when provisioning outside the
+    bootstrap. Emitting rather than retyping matters because a transcription typo
+    in a held-constant field defeats the check the contract exists to pass.
 
     Held-constant values are emitted live; leg-specific ones are emitted COMMENTED,
     because on a cross-leg rebuild the previous leg's filesystem facts must not be

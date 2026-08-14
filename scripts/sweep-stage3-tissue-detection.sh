@@ -33,7 +33,10 @@
 #   - per-cell HDF5 + masks at ${FS_MOUNT}/tissue-detection/3.0/<dataset>/n<N>/
 #
 # Prerequisites:
-#   - Python deps: numpy, pandas, tqdm, opencv-python, matplotlib, h5py, openslide-python (Stage 2 / 3 pre-flight)
+#   - Python deps: numpy, pandas, tqdm, opencv-python, matplotlib, h5py, openslide-python.
+#     ⚠ Not yet provisioned on AL2023: cv2 + matplotlib are in NO pinned env and the
+#     system python route (apt libs) does not exist here — dependency home is an open
+#     decision; this driver hard-stops below until it is made.
 #   - CLAM cloned at ${CLAM_DIR:-${PROJECT_HOME:-$HOME}/wsi-tools/CLAM} (Stage 3 pre-flight)
 #   - Datasets at ${FS_MOUNT}/data/{tcga-brca,camelyon16}/ (Stage 1.2 / 1.3)
 set -uo pipefail
@@ -62,7 +65,9 @@ if [[ ! -f "$EXTRACTOR_SCRIPT" ]]; then
   exit 2
 fi
 if ! python3 -c "import openslide, cv2, h5py, numpy, pandas, matplotlib" 2>/dev/null; then
-  log "FATAL: Stage 3 Python deps missing. Run pip install --user numpy pandas tqdm opencv-python matplotlib h5py"
+  log "FATAL: Stage 3 Python deps missing for the interpreter this driver uses."
+  log "  On AL2023 there is no apt/system-lib route; cv2 + matplotlib are in no pinned"
+  log "  env either. The dependency home is an OPEN DECISION — resolve it before Stage 3."
   exit 2
 fi
 

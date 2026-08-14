@@ -139,8 +139,9 @@ export LUSTRE_STRIPE_LAYOUT=""                   # REQUIRED to derive the Lustre
 
 # FS_TRANSPORT — the transport this leg's client is ACTUALLY on, from evidence.
 #   weka:   dpdk | udp        lustre:  efa | tcp
-# Written by the per-leg cluster-setup prompt from the client's own report, never from
-# the mount options that were passed. run-leg.sh REFUSES to start a leg when it is
+# Written from the client's own report, never from the mount options that were
+# passed — by bootstrap-instance.sh at boot where it can prove the transport, by the
+# per-leg cluster-setup prompt otherwise; the prompt verifies it either way. run-leg.sh REFUSES to start a leg when it is
 # unset, or when it is the fallback without a written waiver in
 # runs/.leg-state/$LEG/transport-waiver (D16). Why a hard gate and not a caveat: UDP
 # and TCP mount cleanly and report plausible numbers for a transport this project
@@ -219,7 +220,7 @@ if [ "${1:-}" = "--check" ]; then
   _pybin   CONDA_ENV_MAIN         "nearly every sweep driver execs it; nothing runs without it"
   _pybin   CONDA_ENV_ALT          "the Stage 4.A and 4.B drivers exec it"
   _recfile LIBCUFILE_PRELOAD      "every kvikIO sweep driver refuses to start without it"
-  _genfile CUFILE_ENV_PATH_JSON   "regenerated per instance (D-10) — its addresses are instance-specific"
+  _genfile CUFILE_ENV_PATH_JSON   "written per instance by bootstrap-instance.sh (compat mode on the WEKA leg; Leg B is D-10)"
   _rec     FS_TRANSPORT           "run-leg.sh refuses to start a leg without it (D16)"
   _rec     WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12) — Leg A"
   _rec     LUSTRE_STRIPE_LAYOUT   "needed to derive the Lustre canary relation (D12) — Leg B"

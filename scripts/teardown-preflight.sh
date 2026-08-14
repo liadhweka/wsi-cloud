@@ -19,7 +19,7 @@
 #   4. The environment contract exists for this leg and is complete
 #   5. Every local run dir's raw telemetry is present in S3  <-- the one that matters
 #   6. Nothing else lives only on ephemeral storage
-#   7. The rebuild inputs (AMI, instance type, region/AZ) are recorded
+#   7. The rebuild inputs (AMI, instance type, region/AZ) are recorded in the contract
 #
 # USAGE
 #   source env.sh
@@ -137,8 +137,9 @@ print(sum(1 for k in ec.MUST_MATCH if not c.get(k)))" 2>/dev/null || echo "?")
     ok "contract present in S3"
   else bad "contract NOT in S3 — it dies with the instance"; fi
   # A recorded env.sh-vs-metadata conflict means the contract is right (it kept the
-  # metadata value) but env.sh is wrong — and env.sh is what the NEXT instance is
-  # rebuilt from, so the rebuild would launch in the wrong AZ or from the wrong AMI.
+  # metadata value) but env.sh described a machine this is not. env.sh is generated
+  # by the bootstrap from the instance's own evidence, so a conflict indicates a
+  # hand edit or a stale value worth explaining before trusting the leg.
   # Self-clearing: fix env.sh, re-run `env-contract.py write`, and the field empties.
   # -1 = the field is absent, which is NOT the same as "no conflicts": a contract
   # written before this check existed simply never looked, so claiming agreement would
@@ -151,7 +152,7 @@ print(len(c['source_conflicts']) if 'source_conflicts' in c else -1)" 2>/dev/nul
   elif [ "$conflicts" = "-1" ]; then warn "contract predates the env.sh-vs-metadata check — agreement is unverified, not confirmed"
   elif [ "$conflicts" = "?" ]; then warn "could not parse $(basename "$CONTRACT") to read source_conflicts"
   else
-    bad "$conflicts field(s) where env.sh disagreed with instance metadata — env.sh is the rebuild source, fix it and re-run env-contract.py write"
+    bad "$conflicts field(s) where env.sh disagreed with instance metadata — fix env.sh and re-run env-contract.py write"
     python3 -c "
 import json
 for d in json.load(open('$CONTRACT'))['source_conflicts']:
@@ -208,9 +209,18 @@ fi
 
 # ── 7. Rebuild inputs ────────────────────────────────────────────────────────────
 hdr "Rebuild inputs (needed to stand the next leg up identically)"
-for v in AMI_ID INSTANCE_TYPE AWS_REGION AWS_AZ; do
-  if [ -n "${!v:-}" ]; then ok "$v=${!v}"; else bad "$v not recorded — the rebuild cannot be made identical"; fi
-done
+# These live in the CONTRACT (collected from instance metadata at write time) and
+# in Terraform — env.sh no longer carries them. The contract is the recorded proof;
+# Terraform is the mechanism that reproduces them.
+if [ -f "$CONTRACT" ]; then
+  for f in ami_id instance_type aws_region aws_az; do
+    v=$(python3 -c "import json;print(json.load(open('$CONTRACT')).get('$f') or '')" 2>/dev/null)
+    if [ -n "$v" ]; then ok "$f=$v (from the contract)"
+    else bad "$f not recorded in the contract — the rebuild cannot be shown identical"; fi
+  done
+else
+  bad "no contract file — rebuild inputs unverifiable (check 4 already failed)"
+fi
 
 # ── Verdict ──────────────────────────────────────────────────────────────────────
 printf '\n\033[1m─────────────────────────────────────────\033[0m\n'

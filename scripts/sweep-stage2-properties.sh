@@ -33,8 +33,8 @@
 #   - JSON sidecars at ${FS_MOUNT}/cataloging/2.0/<dataset>/n<N>/
 #
 # Prerequisites:
-#   - openslide-tools + libopenslide0 installed (apt)
-#   - openslide-python installed (pip --user) — verified at module import time
+#   - the pinned main conda env built (bootstrap does this) — it carries
+#     openslide-python plus the bundled libopenslide, which AL2023 does not package
 #   - ${FS_MOUNT}/data/{tcga-brca,camelyon16}/ populated (Stages 1.2, 1.3)
 set -uo pipefail
 
@@ -43,6 +43,12 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source env.sh}"
+# The pinned main env, same convention as every other python-exec'ing driver:
+# it carries openslide-python + the bundled libopenslide, which the AL2023 system
+# python cannot get (no distro libopenslide, no apt).
+CONDA_ENV="${CONDA_ENVS_DIR}/${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source env.sh}"
+PYTHON="$CONDA_ENV/bin/python"
 EXTRACTOR=$REPO/scripts/extract-slide-properties.py
 CATALOG_OUT=${FS_MOUNT}/cataloging/2.0
 MANIFEST_DIR=/tmp/stage2-manifests
@@ -53,10 +59,13 @@ SWEEP_LOG="$LOG_DIR/$(date -u +%F-%H%M)-stage2-properties.log"
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 
-# Sanity: openslide-python importable
-if ! python3 -c "import openslide" 2>/dev/null; then
-  log "FATAL: python3 -c 'import openslide' failed. Pre-flight install required."
-  log "  Run: sudo apt install -y openslide-tools && pip install --user openslide-python"
+# Sanity: openslide importable by the interpreter this driver actually uses
+if [[ ! -x "$PYTHON" ]]; then
+  log "FATAL: conda env python not found at $PYTHON — env not built on this instance yet."
+  exit 2
+fi
+if ! CONDA_PREFIX="$CONDA_ENV" "$PYTHON" -c "import openslide" 2>/dev/null; then
+  log "FATAL: '$PYTHON -c import openslide' failed — the pinned env should carry it; rebuild the env from scripts/env-specs."
   exit 2
 fi
 
@@ -85,7 +94,7 @@ TOTAL=$(( ${#DATASETS[@]} * ${#CONCURRENCIES[@]} ))
 
 log ""
 log "=== Stage 2.0 sweep starting ==="
-log "  tool:    openslide-python $(python3 -c 'import openslide; print(openslide.__version__)') / libopenslide $(python3 -c 'import openslide; print(openslide.__library_version__)')"
+log "  tool:    openslide-python $(CONDA_PREFIX="$CONDA_ENV" "$PYTHON" -c 'import openslide; print(openslide.__version__)') / libopenslide $(CONDA_PREFIX="$CONDA_ENV" "$PYTHON" -c 'import openslide; print(openslide.__library_version__)')"
 log "  grid:    datasets × concurrency = $TOTAL cells"
 log "  output:  $CATALOG_OUT/<dataset>/n<N>/<slide-id>.json"
 log "  log:     $SWEEP_LOG"
@@ -118,7 +127,7 @@ for ds_entry in "${DATASETS[@]}"; do
       --run-name "$name" \
       --stage 2.0 \
       --note "$note" \
-      -- python3 "$EXTRACTOR" \
+      -- env CONDA_PREFIX="$CONDA_ENV" "$PYTHON" "$EXTRACTOR" \
         --concurrency "$n" \
         --output-dir "$out_dir" \
         --manifest "$manifest" \
