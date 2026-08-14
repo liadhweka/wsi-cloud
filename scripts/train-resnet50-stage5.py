@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""train-resnet50-stage5.py — Stage 5 PyTorch DDP trainer fed by WekaFS storage.
+"""train-resnet50-stage5.py — Stage 5 PyTorch DDP trainer fed by the filesystem under test.
 
 Backends (pluggable, one per DDP rank — single Python process per rank):
   --backend kvikio              : kvikIO+GDS+raw-TIFF (Stage 4.C random-mode logic)
@@ -7,7 +7,7 @@ Backends (pluggable, one per DDP rank — single Python process per rank):
 
 DESIGN — single in-process reader per DDP rank, NOT PyTorch DataLoader workers:
   kvikIO+GDS's internal async pread + n_buffer pipelining already provides the
-  parallelism that Stage 4.C measured at 4.89 GB/s single-process. cuCIM batched
+  parallelism (measured sufficient single-process in Stage 4.C). cuCIM batched
   CPU has its own num_workers=16 internal C++ threads. Wrapping either in
   multiprocessing-forked PyTorch DataLoader workers would force `spawn` start
   method (CUDA context fork issues), split CuFile handles across processes, and
@@ -25,7 +25,7 @@ WHY 4096-byte aligned reads:
 
 WHY torch.cuda.synchronize() per step:
   Required for accurate per-phase timing (data load, forward, backward, opt).
-  Adds ~1 sync per step (sub-ms on A100); marginal vs ~50 ms step time.
+  Adds ~1 sync per step (sub-ms); marginal vs typical step time.
   DDP backward already has an implicit sync via AllReduce, so the actual
   marginal cost is only the data-load + forward phases.
 
@@ -526,8 +526,8 @@ def worker(local_rank, world_size, args, master_port):
     # production WSI training pipeline would generate.
     #   - cudnn.benchmark: autotunes the convolution algorithm for our fixed
     #     (B=256, C=3, H=256, W=256) input shape after the first few steps.
-    #   - channels_last: NHWC memory layout — required for the A100 to use
-    #     Tensor Cores efficiently for FP16 conv. Standard in NVIDIA / MONAI
+    #   - channels_last: NHWC memory layout — required for the GPU's Tensor
+    #     Cores to run FP16 conv efficiently. Standard in NVIDIA / MONAI
     #     reference WSI training pipelines.
     torch.backends.cudnn.benchmark = True
 

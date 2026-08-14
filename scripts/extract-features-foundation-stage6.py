@@ -3,7 +3,7 @@
 
 For each slide in the dataset, extract ALL tissue-tile feature embeddings via a frozen
 foundation-model ViT (UNI2-h / Virchow2 / GigaPath) and write a per-slide `.pt` file to
-WekaFS. This is the 2024–2026 production WSI research workload — feed every tile in
+the filesystem under test. This is the 2024–2026 production WSI research workload — feed every tile in
 every slide through a frozen foundation model once.
 
 Pluggable along two axes (mirrors Stage 5's design):
@@ -49,10 +49,11 @@ WHY 4096-byte aligned reads (kvikIO backend only)
   via `aligned_read_props()` (verbatim from cucim's gds_whole_slide example).
 
 WHY per-cell LD_PRELOAD scoping (mentioned for caller; this script doesn't set it)
-  Per `docs/RUNBOOK.md` (mixed-backend sweeps): kvikIO+GDS needs LD_PRELOAD of
-  libcufile-1.17 to override the conda env's bundled 1.14.1, but cuCIM 26.04 segfaults
-  inside `slide.read_region()` with that preload due to ABI mismatch. Sweep driver
-  must set LD_PRELOAD per-cell (kvikio cells = set; cucim cells = unset).
+  Per `docs/RUNBOOK.md` (mixed-backend sweeps): kvikIO+GDS cells must run under
+  LD_PRELOAD of the system libcufile ($LIBCUFILE_PRELOAD, matched to the loaded
+  nvidia-fs module), but cuCIM has segfaulted inside `slide.read_region()` under a
+  mismatched preload (ABI clash). Sweep driver must set LD_PRELOAD per-cell
+  (kvikio cells = set; cucim cells = unset).
 
 Per-extraction-step CSV columns (rank 0 only writes):
   step_idx, phase, t_step_start_s, t_step_end_s, step_duration_ms,

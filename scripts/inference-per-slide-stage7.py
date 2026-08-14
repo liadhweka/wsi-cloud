@@ -38,7 +38,7 @@ GPU via CUDA_VISIBLE_DEVICES and given disjoint slide chunks via
 WHY single-process per inference job (mirrors Stage 7 roadmap Q8):
   Each pathologist's inference is a separate request in production. Disjoint
   slide chunks model the real "many users, distinct slides" workload. Storage
-  pressure comes from the N processes competing for WekaFS reads.
+  pressure comes from the N processes competing for reads on the filesystem under test.
 
 WHY `--inference-batch-size` is a CLI knob (Q8 revision 2026-05-26):
   Virchow2 forward at bs=256 fp16 holds ~21 GB per process (1.3 GB weights +
@@ -66,10 +66,11 @@ REUSE FROM STAGE 6
 
 LD_PRELOAD SCOPING
 ==================
-Per `docs/RUNBOOK.md` (mixed-backend sweeps): kvikIO+GDS needs
-LD_PRELOAD=libcufile-1.17 (matches kernel nvidia-fs 2.28.2); cuCIM 26.04
-segfaults if libcufile-1.17 is preloaded. Caller (orchestrator / sweep driver)
-must scope LD_PRELOAD per-cell. This script doesn't touch LD_PRELOAD.
+Per `docs/RUNBOOK.md` (mixed-backend sweeps): kvikIO+GDS cells run under
+LD_PRELOAD of the system libcufile ($LIBCUFILE_PRELOAD, matched to the loaded
+nvidia-fs module); cuCIM has segfaulted under a mismatched preload (ABI clash).
+Caller (orchestrator / sweep driver) must scope LD_PRELOAD per-cell. This
+script doesn't touch LD_PRELOAD.
 
 USAGE
 =====
@@ -78,7 +79,7 @@ Typically invoked by `orchestrate-clinical-deployment-stage7.sh` or
 
   CUDA_VISIBLE_DEVICES=2 \\
   LD_PRELOAD=$LIBCUFILE_PRELOAD \\
-  CUFILE_ENV_PATH_JSON=.../cufile-full-rdma.json \\
+  CUFILE_ENV_PATH_JSON=$CUFILE_ENV_PATH_JSON \\
   CONDA_PREFIX=$CONDA_ENVS_DIR/$CONDA_ENV_MAIN \\
   $CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python \\
   inference-per-slide-stage7.py \\
@@ -165,7 +166,7 @@ def _viridis_lut() -> np.ndarray:
     # Simple parametric viridis-like ramp: dark purple → green → yellow.
     # Not pixel-identical to matplotlib's viridis but visually equivalent and
     # has zero external dependencies. Customer-story doesn't care about
-    # colormap fidelity — only about the WekaFS write workload size+latency.
+    # colormap fidelity — only about the filesystem write workload size+latency.
     t = np.linspace(0.0, 1.0, 256, dtype=np.float64)
     r = np.clip(np.where(t < 0.5, 0.27 + 0.5 * t, 0.5 + 1.0 * (t - 0.5)), 0, 1) * 255
     g = np.clip(0.0 + 0.95 * t, 0, 1) * 255
