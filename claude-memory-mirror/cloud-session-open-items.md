@@ -214,6 +214,6 @@ These change what the numbers mean, so resolving them after cells have run means
    `clients_custom_data_post_mount` -> bootstrap: packages, NVIDIA/CUDA-12.9, scratch RAID, weka login via
    Secrets Manager, env.sh generation from instance evidence, cuFile compat wiring, envs + smoke tests, HF
    token/models, memories, S3 dataset prefetch). Triggered but deferred until the first live boot validates:
-   `NAMING-AND-VARIABLES.md` + slimmed `env.example.sh` pairing, `SCRIPT-TRACKER.md` entries for both scripts,
+   `NAMING-AND-VARIABLES.md` + slimmed `env.example.sh` pairing, `SCRIPT-TRACKER.md` entries for all three new scripts (bootstrap, prefetch, `scripts/teardown-prep.sh` — the pre-destroy orchestrator: backup+sync, commit+push, log archive, gated on teardown-preflight),
    the `docs/cloud-setup/*` rewrite (rebuild = `clients_number` 0->1 + three human steps), and D-13's hydrate
    driver writing `runs/.leg-state/$LEG/hydration-complete` (the bootstrap's re-hydration guard keys on it).
