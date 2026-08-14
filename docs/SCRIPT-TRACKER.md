@@ -78,7 +78,7 @@ the number still looks correct* — into *refuses to run*.
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
 | **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
 | **D-9** | **Core accounting** | Aggregators computing CPU-saturation figures | The reserved-core exclusion set is a **per-filesystem parameter** (**D15**), and the reserved count is only measurable on the real client |
-| **D-10** | **cuFile config + env VALUES** | ~20 files reference conda/cuFile/CUDA paths. They now genuinely read documented variables (`$CONDA_ENVS_DIR`, `$LIBCUFILE_PRELOAD`, `$CUFILE_ENV_PATH_JSON`) and refuse if unset — audit items `A-4`/`A-5`; before that they were literals from another machine. What remains is the **values** | Locate the system libcufile and export `LIBCUFILE_PRELOAD`; generate `cufile.json` with this instance's own addresses; rewrite `../scripts/GDS-TUNING-CHECKLIST.md` (bannered) incl. a Lustre-over-EFA branch |
+| **D-10** | **cuFile config + env VALUES** | ~20 files reference conda/cuFile/CUDA paths. They now genuinely read documented variables (`$CONDA_ENVS_DIR`, `$LIBCUFILE_PRELOAD`, `$CUFILE_ENV_PATH_JSON`) and refuse if unset — audit items `A-4`/`A-5`; before that they were literals from another machine. What remains is the **values** | Leg A's values are set by the bootstrap (`LIBCUFILE_PRELOAD` located and exported; a compat-mode `cufile.json` generated per instance). Remaining: rewrite `../scripts/GDS-TUNING-CHECKLIST.md` (bannered) incl. a Lustre-over-EFA branch, and Leg B's cufile config |
 | **D-11** | **Lustre tuning** | Stripe layout + client tunables | Needs FSx (Leg B). **Part of "Lustre at maximum" (D7)** — skipping it would understate Lustre and break the fairness basis |
 | **D-13** | **1.7 hydration driver** | New `sweep-stage1-hydrate.sh` | Needs the real bucket. `run-leg.sh` reports this step as **MISSING and aborts** rather than skipping it |
 | **D-15** | **Make step 4.D actually recorded** | `convert-stage4c-rawtiff.sh` | It is `run-leg.sh` step 4.D and its own header calls it a recorded cell, but it **never invokes `record-run.sh`** — no run dir, no telemetry, no `INDEX.md` row, no S3 sync for the 20× conversion the roadmap treats as a measured workload. It also does not fail loud when zero slides resolve from the manifest. Wrapping it changes what a substage produces, so it needs the owner's nod |
@@ -87,7 +87,7 @@ the number still looks correct* — into *refuses to run*.
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 | **D-20** | **`prove-recording.sh`** | new script in `../scripts/` | The rebuild checklist and `../prompts/handoff-cloud.md` both say to run a throwaway Stage-0 cell and confirm **five** things by eye — recording complete, both canaries functional, S3 sync verified, the `INDEX.md` row correct, an aggregator emitting an `fs`-pivoted row — with no command given. It runs on every rebuild before wallclock is spent, and five eyeball checks is where one gets skipped. One script, a named non-zero exit per failed assertion. Needs the real environment: it runs an actual cell end to end |
 | **D-21** | **A contract-verified marker `run-leg.sh` refuses without** | `env-contract.py`, `run-leg.sh` | The rebuild runs `env-contract.py verify` as "the gate", then starts the leg **without checking the gate ever ran or passed.** Phase 1 (safe): `verify` writes `runs/.leg-state/$LEG/contract-verified` on PASS and unlinks it on FAIL; `run-leg.sh` warns loudly when it is absent or older than the contract. Phase 2 — promoting that to a refusal — **needs explicit ratification**, since it can abort a leg |
-| **D-22** | **`verify-conda-env.sh`** | new script in `../scripts/`, beside `restore-memories.sh` — the other bootstrap script | The rebuild asks for nine imports plus a visible-GPU count to be checked by hand every time. Script the **verification only** — imports, GPU count vs `nvidia-smi`, `python_version` against the reference contract, non-zero on drift — and leave environment *creation* in the prompt, where it stays ask-gated |
+| **D-22** | **`verify-conda-env.sh`** | new script in `../scripts/`, beside `restore-memories.sh` — the other bootstrap script | The rebuild asks for nine imports plus a visible-GPU count to be checked by hand every time. Script the **verification only** — imports, GPU count vs `nvidia-smi`, `python_version` against the reference contract, non-zero on drift — environment *creation* lives in the bootstrap, whose smoke test is import-only and warn-only — this script is the fail-loud verification it lacks |
 | **D-23** | **`sync-to-s3.sh --self-test`** | `../scripts/sync-to-s3.sh` | Its header carries a seven-step manual first-run procedure, including the one that matters: prove a file under a MIRROR path disappears when deleted locally and a file under an ARCHIVE path does **not**. Mechanise it under a namespaced `_selftest/` prefix, print (don't run) the cleanup command, and make removing the file's `UNVERIFIED` banner conditional on it passing. Needs the real bucket |
 | **D-24** | **Cross-leg artifact fingerprints** | new `capture`/`compare` in `../scripts/`, defined in `STAGES.md` | `RUNBOOK.md` declares four cross-leg integrity gates — same slides producing coords and same per-slide tile counts; same raw-TIFF byte counts and tile-grid dimensions; same feature file count, per-slide tile count and tensor shapes — each "fail-loud and invalidates downstream comparison", and **nothing computes or compares them.** A declared gate that no code implements is worse than no gate: it reads as covered. Propose the per-artifact-class fingerprint definitions for ratification now; build after Stage 3.0 has real output |
 | **D-25** | **Stage 6.C's 4-GPU partition** | `orchestrate-concurrent-stage6c.sh` | 6.C pins MIL to GPU 0 "to stay out of the extract workload's GPUs" while extract requests 4 — an isolation that is arithmetically impossible on a 4-GPU instance. Decide the partition (extract on 3 + MIL on 1, or accept sharing and delete the isolation claim); either way the retention denominators change, so it is a methodology call, not a tuning one |
@@ -117,8 +117,9 @@ These recur across scripts and each one exists because its absence caused a real
    filesystem-side metric can under-report by ~100×, because that metric averages across **all** rows in the
    stats stream including many idle server-side rows. **Correct pattern:** re-read the raw stats CSV, filter
    to the client's own rows, sum across the client's processes **per timestamp**, then aggregate the
-   per-second sums. Filter by a stable identity (hostname + role) — **never** a numeric process/node id,
-   which is reassigned on reinstall. ⏳ **The pattern generalises to both legs; the filter does not** (D-4).
+   per-second sums. Filter by a stable identity — **role** (`Mode=="client"`; this cluster runs exactly one
+   client container by design) — never a hostname or a numeric process/node id, both reassigned on rebuild or
+   reinstall. ⏳ **The pattern generalises to both legs; the source schema does not** (D-4).
 2. **`setsid` + process-group kill, never `pkill -f`.** A `-f` pattern matches the wrapper shell and the
    recording wrapper too (their argv contain the pattern string), so the signal kills the whole chain —
    producing duplicate `INDEX.md` entries and a spurious `INCOMPLETE` on a cell whose data is fine.
@@ -217,10 +218,10 @@ confirm it does **not** disappear from S3. Also tracked as open item `D-7`.
 **What.** `write` collects every environment fact into JSON at the end of a leg; `verify` compares the current
 environment against a reference contract before the next leg's first cell; `show` prints one readably; **`env`
 emits it back as `env.sh`-shaped `export` lines** for the rebuild.
-**Why `env` exists.** `env.sh` is gitignored, so it is **lost on every rebuild** — and the documented recovery
-was "read the contract and retype the values". That put a transcription step in front of the one artifact whose
-whole purpose is proving the two legs matched: a typo in `AMI_ID` or `INSTANCE_TYPE` defeats the check it
-exists to pass. **Held-constant fields are emitted live; leg-specific fields are emitted COMMENTED** — on a
+**Why `env` exists.** `env.sh` is gitignored, so it is **lost on every rebuild**; the bootstrap regenerates it
+and merges the previous leg's held-constant fields by consuming this emit programmatically. A hand
+transcription step here would put a typo in front of the one artifact whose whole purpose is proving the two
+legs matched. **Held-constant fields are emitted live; leg-specific fields are emitted COMMENTED** — on a
 cross-leg rebuild those describe the *other* filesystem, and the cluster-setup prompt writes the new ones.
 Fields absent from the contract are emitted as a commented placeholder saying so, never invented.
 *Caveat:* **paste the output over the placeholders, do not `>>` append.* `env.sh`'s `--check` block sits at the
@@ -241,10 +242,10 @@ as **unverifiable → FAILED**, because *an unrecorded fact cannot be shown to h
 non-zero when held-constant fields are missing, so an incomplete contract cannot pass unnoticed.
 **`env.sh` is reconciled against instance metadata, not trusted.** `instance_type`, `aws_region`, `aws_az`,
 `ami_id` and `instance_id` are fetched from **both** `env.sh` and IMDS; **metadata wins** and any disagreement
-is recorded in `source_conflicts`. *Why the old `env(X) or imds(Y)` was wrong:* `env.sh` is hand-typed at
-bootstrap, so a wrong `ami_id` went into Leg A's contract, was copied into Leg B's `env.sh` **from that same
-contract**, and then compared against itself by `verify` — it matched, and the drift the contract exists to
-catch was invisible. `write` warns on a conflict; `teardown-preflight.sh` NO-GOes on one, because `env.sh` is
+is recorded in `source_conflicts`. *Why metadata wins:* `env.sh` is a generated
+file that can still drift or be hand-edited between rebuilds, and a wrong value there would flow into Leg A's
+contract, be emitted into Leg B's `env.sh` from that same contract, and then be compared against itself by
+`verify` — matching, and hiding exactly the drift the contract exists to catch. `write` warns on a conflict; `teardown-preflight.sh` NO-GOes on one, because `env.sh` is
 what the next instance is rebuilt from. A contract predating the check reports *unverified*, not *agrees*.
 **Third field list, `RECOVERY_ONLY` (`s3_bucket`).** Comparing it proves nothing — you must already know the
 bucket to have fetched the contract — but without it the recovery artifact could not rebuild the file it is the
@@ -265,7 +266,8 @@ earlier outputs, so continuing would build cells on missing inputs; (2) **checkp
 done-markers, so a crash re-runs only what is missing; (3) **S3 sync after every step**, because both mounts
 and local scratch are ephemeral; (4) **tee everything** — on an overnight run the log is the only forensic
 record; (5) **refuse a leg on the wrong transport** — WEKA must be on DPDK and Lustre on EFA (**D16**), read
-from `FS_TRANSPORT`, which the cluster-setup prompt records from evidence. Unset refuses too, because an
+from `FS_TRANSPORT`, recorded from client evidence — the bootstrap writes it on the WEKA leg, the cluster
+prompt verifies it (and records it on Leg B). Unset refuses too, because an
 unrecorded transport cannot be shown to be the right one. Overridable only by a written reason in
 `runs/.leg-state/$LEG/transport-waiver`, which is then echoed into the log. *Why here:* this is the unattended
 entry point, and the fallback transports (UDP / TCP) mount cleanly and report plausible numbers, so an
@@ -307,6 +309,53 @@ result afterwards.
 would otherwise overwrite the mirror from an empty live dir (it refuses in that case; correct ordering makes
 the refusal moot). *Extra* files in the live dir are reported but **not** a failure — that is the live dir
 being ahead after a session wrote new memories; *missing* or *differing* files are fatal.
+
+### `bootstrap-instance.sh` — the automated client build ⭐ NEW
+
+**What.** The Terraform `clients_custom_data_post_mount` payload: builds the whole client on first boot —
+dnf packages, the pinned NVIDIA/CUDA-12.9 stack (chosen so `nvidia-fs` and the system `libcufile` are
+version-matched), local-NVMe RAID0+XFS scratch, WEKA login via Secrets Manager and mount verification,
+`env.sh` generated from instance evidence (IMDS plus the client's own transport report → `FS_TRANSPORT`),
+`LIBCUFILE_PRELOAD` located and exported, the compat-mode `cufile.json`, both conda envs from
+`env-specs/` with smoke tests, HF token + model prefetch from SSM, memory restore, and the S3 dataset
+hydration guard.
+
+**Why.** A rebuild is `terraform apply` plus `claude /login` and nothing else — every manual step in a
+rebuild is a place the two legs can silently diverge, and the environment contract can only verify what a
+build records mechanically.
+
+**Caveats.** The env smoke tests are **import-only and warn-only** (`WSI-WARN`; the boot continues) —
+fail-loud verification is `D-22`. The re-hydration guard keys on
+`runs/.leg-state/$LEG/hydration-complete`, which only the `D-13` hydrate driver will write. Boot progress
+lands in the instance log; the SSM deploy-key step must report the fixed key installed (next-rebuild
+verification, open-items memory).
+
+### `prefetch-datasets-to-s3.sh` — one-time dataset staging ⭐ NEW
+
+**What.** Stages TCGA-BRCA (per-file fetch from the GDC data API over HTTPS, manifest-driven,
+**md5-verified per file**, failed files removed and retried) and CAMELYON16 (open-data bucket copy) into
+`s3://$S3_BUCKET/datasets/`. Resumable; skips objects already present.
+
+**Why.** The WAN pull happens **once, before either leg** — it measures a WAN link, not a filesystem — and
+S3 is then the per-leg hydration source (1.7), so both legs read byte-identical datasets (**D6**).
+
+**Caveats.** Consumes the gdc-manifest-format TSVs from `build-tcga-manifest.py`. Not a measured cell.
+Requires local staging space under `$SCRATCH_DIR`.
+
+### `teardown-prep.sh` — the pre-destroy orchestrator ⭐ NEW
+
+**What.** Runs the teardown sequence mechanically: `backup.sh` (memories → mirror → S3 sync), boot-log
+archive, `git commit` + `git push` (fail-loud — an unpushed repo dies with the instance), then hands off to
+`teardown-preflight.sh` as the GO/NO-GO gate and echoes its verdict.
+
+**Why.** The teardown checklist's order is load-bearing and a human runs it under time pressure; scripting
+the preparation makes the steps unskippable, while the **destruction itself stays human** — this script
+never terminates anything.
+
+**Caveats.** Gated on the preflight, which demands the next-session handoff written and dated — so the
+handoff must exist before this runs. The commit it makes is the human-initiated teardown commit, not an
+autonomous one. First real teardown must also run `sync-to-s3.sh`'s FIRST-RUN procedure (open-items
+memory).
 
 ---
 
@@ -462,8 +511,9 @@ filesystem effect and the transport effect are separable (**D8**). **`LD_PRELOAD
 
 ### `cufile-full-rdma.template.json` · `GDS-TUNING-CHECKLIST.md`
 **What.** A parameterised cuFile configuration template, and a doc-grounded verify → measure → tune procedure.
-**Why.** The cuFile config must list the client's own network addresses and the transport options the
-filesystem needs; a template plus a checklist keeps that reproducible instead of folkloric.
+**Why.** On a GDS-capable transport the cuFile config lists the client's own network addresses and transport
+options; the WEKA leg runs a bootstrap-generated compat-mode config with no address list. The template plus
+checklist keep the GDS-side procedure reproducible instead of folkloric.
 **⏳ DEFER:** every value is environment-specific (D-10); the checklist needs a Lustre-over-EFA section.
 
 ---
