@@ -30,9 +30,9 @@ Each worker reads .pt files via torch.load() — this is the IO pattern Stage 6.
 measures. Worker count is the customer-quotable axis.
 
 Optional `--max-tiles-per-slide` fallback for outlier slides: random subsample at
-__getitem__ (Tellez et al. 2024 arXiv:2403.05351). Not needed at bs=1 on 40 GiB
-A100s for our N_tiles distribution (max ~127K × 1280 fp32 = 0.65 GiB input + ~2.5
-GiB with autograd), but available as a safety knob.
+__getitem__ (Tellez et al. 2024 arXiv:2403.05351). Not needed at bs=1 for our
+N_tiles distribution (max ~127K × 1280 fp32 = 0.65 GiB input + ~2.5 GiB with
+autograd), but available as a safety knob.
 
 Per-step CSV columns (mirrors Stage 5):
   step_idx, phase, t_step_start_s, t_step_end_s, step_duration_ms,
@@ -158,7 +158,7 @@ def main():
     ap.add_argument("--max-tiles-per-slide", type=int, default=0,
                     help="Optional Tellez-2024 random subsample per epoch "
                          "(arXiv:2403.05351, 1024 budget is the cited default). "
-                         "Default 0 = no cap; fits 40 GiB at canonical bs=1 even on max-tile slides.")
+                         "Default 0 = no cap; fits GPU memory at canonical bs=1 even on max-tile slides.")
     ap.add_argument("--hidden-dim", type=int, default=384)
     ap.add_argument("--lr", type=float, default=1e-4)
     args = ap.parse_args()

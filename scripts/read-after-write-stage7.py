@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """read-after-write-stage7.py — Stage 7.4.b read-after-write consistency cell.
 
-Customer-decisive measurement: when a file is written to WekaFS by one client
-process, how quickly does another client process see it? This validates
-WekaFS's "no second tier, strong consistency" claim with a hard number.
+Customer-decisive measurement: when a file is written to the filesystem under
+test by one client process, how quickly does another client process see it?
+On the WEKA leg this validates WekaFS's "no second tier, strong consistency"
+claim with a hard number; the same cell on the other leg is the comparison point.
 
 METHODOLOGY (per Stage 7 roadmap Q10)
 =====================================
@@ -18,8 +19,8 @@ Per slide (20 slides total):
   4. Read latency = t_first_read_complete - t_first_visible (also captured).
 
 Two processes run concurrently — one writer, one reader — to ensure the
-reader sees the write through WekaFS's actual cross-client visibility path,
-not through process-local cache.
+reader sees the write through the filesystem's actual cross-client visibility
+path, not through process-local cache.
 
 PER-SLIDE CSV columns (slide_id, t_write_complete_s, t_first_visible_s,
 t_first_read_complete_s, consistency_latency_ms, first_read_latency_ms,

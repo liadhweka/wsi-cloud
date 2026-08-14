@@ -24,8 +24,9 @@ not to error-out on the first bad slide. Failure count appears in the
 summary; exit code is 0 only if all slides succeeded.
 
 Per CLAUDE.md docs-citation rule:
-    openslide-python: github.com/openslide/openslide-python (1.4.3)
-    libopenslide:     openslide.org (3.4.1)
+    openslide-python: github.com/openslide/openslide-python
+    libopenslide:     openslide.org
+(versions per the pinned env specs in scripts/env-specs/)
 """
 import argparse
 import json

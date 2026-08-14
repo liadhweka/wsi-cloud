@@ -42,7 +42,7 @@ WHY file sizes {5, 10, 50, 200} MB:
 
 WHY parallel generation via multiprocessing.Pool:
   100K × 50 MB = 5 TB; single-process write of random tensors would take hours.
-  Parallel generation across 16+ processes saturates wekafs write bandwidth.
+  Parallel generation across 16+ processes saturates the filesystem's write bandwidth.
 
 Output path convention:
   $FS_MOUNT/features-6.B-synthetic/N${count}-sz${size_MB}MB-${dtype}/

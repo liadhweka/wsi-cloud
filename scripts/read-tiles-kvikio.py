@@ -19,7 +19,7 @@ random-tile pattern.
                     per-tile latency sampled.
 
 WHY two modes under one script:
-  - 4.C.1 (faithful) lifts NVIDIA's exact benchmark onto WekaFS for direct
+  - 4.C.1 (faithful) lifts NVIDIA's exact benchmark onto the filesystem under test for direct
     comparison to their published GDS-vs-POSIX speedup pattern (the blog's
     "11.8× with GDS" framing).
   - 4.C.2 (random) measures the same access pattern Stage 4.B characterized
@@ -32,20 +32,20 @@ WHY 4096-byte aligned reads (NVIDIA's _get_aligned_read_props helper):
     layer. NVIDIA's reference code handles this; we must too. See Stage 4.C
     decision log entry 2026-05-16.
 
-WHY system libcufile 1.17.0 via LD_PRELOAD:
-  - The cuCIM 26.04 conda env bundles libcufile 1.14.1 (CUDA 12.9 era) which
-    works but is ~30% slower against the kernel nvidia-fs 2.28.2 (GDS 1.17).
-    Caller must LD_PRELOAD the matched system libcufile (the wrapper script
-    handles this).
+WHY the system libcufile via LD_PRELOAD:
+  - The conda env bundles its own libcufile, which is not matched to the
+    kernel's nvidia-fs module. Caller must LD_PRELOAD the system libcufile
+    matched to the loaded nvidia-fs (the wrapper script handles this via
+    $LIBCUFILE_PRELOAD).
 
 WHY per-process CUFILE_ENV_PATH_JSON:
-  - System /etc/cufile.json has a config bug (only 1 of 6 active IB IPs listed).
-    Caller provides a corrected config via env var without touching system state.
+  - The cuFile config is per-instance, per-leg state. Caller provides this
+    leg's config via env var without touching system files.
 
 WHY compat_mode flag exposed as a sweep axis:
   - Every Stage 4.C cell measures BOTH GDS-on (kvikio.CompatMode.OFF) and
     POSIX-compat (kvikio.CompatMode.ON) so we directly characterize the GDS
-    speedup on WekaFS at every config.
+    speedup on the filesystem under test at every config.
 
 Required environment (caller / wrapper script's responsibility):
   CONDA_PREFIX=$CONDA_ENVS_DIR/$CONDA_ENV_MAIN

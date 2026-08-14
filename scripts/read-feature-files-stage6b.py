@@ -19,7 +19,7 @@ Per-file-load latency CSV columns (sampled 1-in-K):
   worker_id, time_since_start_s, file_idx_in_corpus, file_size_bytes,
   load_latency_ms, pattern, dtype_inferred
 
-Cold-cache: optionally discard wekafs page cache for the corpus directory at
+Cold-cache: optionally discard the client page cache for the corpus directory at
 start (via cucim.clara.filesystem.discard_page_cache). Default: cold start.
 
 Multi-process via multiprocessing.Pool (fork start method; no CUDA in parent).
