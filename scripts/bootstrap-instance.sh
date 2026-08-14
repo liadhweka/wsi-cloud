@@ -275,11 +275,6 @@ if [ $REBUILD -eq 1 ]; then
   done
 fi
 chown $U:$U "$ENV_SH"
-as_u bash "$ENV_SH" --check || warn "env.sh --check reported missing items (expected pre-env-build; see above)"
-if [ $REBUILD -eq 1 ]; then
-  ( cd "$REPO" && as_u python3 scripts/env-contract.py verify --against "$CONTRACT" --leg weka ) \
-    || { warn "CONTRACT VERIFY FAILED — held-constant drift on this rebuild"; touch /var/lib/wsi-CONTRACT-VIOLATION-CHECK-ME; }
-fi
 
 step "6.5 cuFile/GDS wiring (weka leg: compat mode — D-10 mechanical half)"
 # This leg runs over ENA with no RDMA, so kvikIO cells run libcufile in COMPAT
@@ -310,6 +305,14 @@ if [ -n "$GDSCHECK" ]; then
   "$GDSCHECK" -p 2>&1 || true
 else
   warn "gdscheck not found — CUDA toolkit gds tools missing?"
+fi
+
+# --check runs HERE, after 6.5, so the boot log shows the finished env.sh
+# (LIBCUFILE_PRELOAD and cufile.json included) rather than second-old pendings.
+as_u bash "$ENV_SH" --check || warn "env.sh --check reported missing items (expected pre-env-build; see above)"
+if [ $REBUILD -eq 1 ]; then
+  ( cd "$REPO" && as_u python3 scripts/env-contract.py verify --against "$CONTRACT" --leg weka ) \
+    || { warn "CONTRACT VERIFY FAILED — held-constant drift on this rebuild"; touch /var/lib/wsi-CONTRACT-VIOLATION-CHECK-ME; }
 fi
 
 step "7. Claude Code"
@@ -369,7 +372,7 @@ for e in wsi-cucim-2604 wsi-cucim; do
     || { echo "WSI-WARN: env \$e build FAILED — see scripts/env-specs/env-create-history.txt for the manual recipe"; continue; }
   # Smoke test the way the sweep drivers invoke it: CONDA_PREFIX set, bare exec.
   mods="torch,cucim"; [ "\$e" = "wsi-cucim-2604" ] && mods="torch,cucim,kvikio"
-  if CONDA_PREFIX="$CONDA_ENVS/\$e" "$CONDA_ENVS/\$e/bin/python" -c "import \$mods, torch; assert torch.cuda.is_available(); print('\$e smoke OK:', torch.__version__, torch.cuda.device_count(), 'GPUs')" \
+  if CONDA_PREFIX="$CONDA_ENVS/\$e" "$CONDA_ENVS/\$e/bin/python" -c "import \$mods; assert torch.cuda.is_available(); print('\$e smoke OK:', torch.__version__, torch.cuda.device_count(), 'GPUs')" \
        > "$CONDA_ENVS/\$e/.wsi-smoke.log" 2>&1; then
     touch "$CONDA_ENVS/\$e/.wsi-smoke-ok"; cat "$CONDA_ENVS/\$e/.wsi-smoke.log"
   else

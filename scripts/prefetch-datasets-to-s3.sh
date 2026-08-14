@@ -105,7 +105,11 @@ if [ -x "$HF_BIN" ]; then
     "$HF_BIN" download "$m" >/dev/null 2>&1 && echo "model ok    $m" \
       || echo "model FAIL  $m (gated repo without a valid HF token?)"
   done
-  aws s3 sync --only-show-errors "$HUB_CACHE/" "s3://$S3_BUCKET/models/hub-cache/" || true
+  # --no-follow-symlinks: the hub cache stores each model once in blobs/ with
+  # snapshots/ symlinking into it; following the links uploads every model twice.
+  # Restores stay whole: sync-down brings blobs/ + refs/, and `hf download` above
+  # rebuilds the snapshot links from existing blobs without re-downloading.
+  aws s3 sync --only-show-errors --no-follow-symlinks "$HUB_CACHE/" "s3://$S3_BUCKET/models/hub-cache/" || true
 else
   echo "prefetch: hf CLI missing — model prefetch skipped"
 fi

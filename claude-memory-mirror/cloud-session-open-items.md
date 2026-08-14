@@ -217,3 +217,10 @@ These change what the numbers mean, so resolving them after cells have run means
    `NAMING-AND-VARIABLES.md` + slimmed `env.example.sh` pairing, `SCRIPT-TRACKER.md` entries for all three new scripts (bootstrap, prefetch, `scripts/teardown-prep.sh` — the pre-destroy orchestrator: backup+sync, commit+push, log archive, gated on teardown-preflight),
    the `docs/cloud-setup/*` rewrite (rebuild = `clients_number` 0->1 + three human steps), and D-13's hydrate
    driver writing `runs/.leg-state/$LEG/hydration-complete` (the bootstrap's re-hydration guard keys on it).
+12. **Next-rebuild verifications (raise at the next boot/teardown).** (a) SSM deploy key first
+   silent install — the next boot log's step 11 must read "fixed deploy key installed from SSM"
+   (fallback message means the SSM parameter or IAM is wrong). (b) First real teardown must run
+   `sync-to-s3.sh`'s FIRST-RUN PROCEDURE (its header, steps 1-7 — the archive-vs-mirror semantics
+   test is the one that matters), then remove its UNVERIFIED banner. Tracked cosmetic, no action:
+   a mamba "error opening log file: Permission denied" warn at the env-build log tail — envs build
+   and smoke-pass regardless; investigate only if impact ever appears.
