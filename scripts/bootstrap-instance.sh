@@ -406,12 +406,27 @@ step "11. GitHub identity + push key"
 [ -n "$GIT_USER_NAME" ]  && as_u git config --global user.name  "$GIT_USER_NAME"
 [ -n "$GIT_USER_EMAIL" ] && as_u git config --global user.email "$GIT_USER_EMAIL"
 if [ ! -f "$UH/.ssh/id_ed25519" ]; then
-  as_u ssh-keygen -q -t ed25519 -N "" -C "wsi-client-$INSTANCE_ID" -f "$UH/.ssh/id_ed25519"
+  # Preferred: the FIXED deploy key from SSM ($SSM_PREFIX/github-deploy-key,
+  # SecureString), registered ONCE in GitHub (repo Settings -> Deploy keys, with
+  # write access) — so rebuilds need no GitHub step at all. Falls back to a
+  # per-instance key whose pubkey must be added by hand.
+  DEPLOY_KEY=$(aws ssm get-parameter --region "$REGION" --name "$SSM_PREFIX/github-deploy-key" --with-decryption --query Parameter.Value --output text 2>/dev/null || true)
+  if printf '%s' "$DEPLOY_KEY" | grep -q "BEGIN OPENSSH PRIVATE KEY"; then
+    as_u mkdir -p "$UH/.ssh"
+    printf '%s\n' "$DEPLOY_KEY" > "$UH/.ssh/id_ed25519"
+    chown $U:$U "$UH/.ssh/id_ed25519"; chmod 600 "$UH/.ssh/id_ed25519"
+    ssh-keygen -y -f "$UH/.ssh/id_ed25519" > "$UH/.ssh/id_ed25519.pub"
+    chown $U:$U "$UH/.ssh/id_ed25519.pub"
+    echo "GitHub push key: fixed deploy key installed from SSM — no GitHub step needed"
+  else
+    as_u ssh-keygen -q -t ed25519 -N "" -C "wsi-client-$INSTANCE_ID" -f "$UH/.ssh/id_ed25519"
+    echo "GitHub push key: SSM key absent — per-instance key generated; ADD IT at the repo's Deploy keys (write access):"
+  fi
+  unset DEPLOY_KEY
 fi
 as_u bash -c "ssh-keyscan -t ed25519 github.com >> ~/.ssh/known_hosts 2>/dev/null; sort -u -o ~/.ssh/known_hosts ~/.ssh/known_hosts"
 as_u git -C "$REPO" remote set-url --push origin git@github.com:liadhweka/wsi-cloud.git
 cp "$UH/.ssh/id_ed25519.pub" "$UH/GITHUB-DEPLOY-KEY.pub"; chown $U:$U "$UH/GITHUB-DEPLOY-KEY.pub"
-echo "GitHub push key (add at https://github.com/settings/keys):"
 cat "$UH/.ssh/id_ed25519.pub"
 
 step "12. Claude memories"
@@ -441,7 +456,7 @@ step "SUMMARY"
 mkdir -p /etc/motd.d 2>/dev/null || true
 {
   echo "wsi-cloud client bootstrapped $(date -u). Remaining HUMAN steps:"
-  echo "  1. Add the GitHub push key (~/GITHUB-DEPLOY-KEY.pub) to GitHub"
+  echo "  1. GitHub push: automatic if the SSM deploy key is set; else add ~/GITHUB-DEPLOY-KEY.pub (repo Deploy keys, write access)"
   echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
   echo "  3. Paste prompts/prompt-env-prep-cloud.md (verification pass)"
   echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
