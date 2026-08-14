@@ -279,7 +279,7 @@ def extract_cell_summary(run_dir):
     out["rdma_rcv_dev"] = rdma_dev
     out["rdma_rcv_sustained_bps"] = rdma_rcv if rdma_rcv and rdma_rcv > 0 else None
 
-    # WEKA-side per-ts-summed across the the client's frontends
+    # WEKA-side per-ts-summed across the client's frontends
     wk_read = weka_client_per_sec(run_dir, "Read", parse_bps)
     wk_ops  = weka_client_per_sec(run_dir, "Ops/s", parse_numeric)
     out["weka_read_sustained_bps"]  = wk_read["sustained_mean"]  if wk_read else None
@@ -340,7 +340,7 @@ def main():
     grid = {(r["dataset"], r["concurrency"]): r for r in rows}
 
     print()
-    print("# Stage 3.0 CLAM tissue detection sweep — POSIX wekafs")
+    print("# Stage 3.0 CLAM tissue detection sweep — POSIX, filesystem under test")
     print()
     print("Tool: CLAM create_patches_fp.py + bash-level concurrency (N parallel python3 instances per cell)")
     print("Headline customer story: 'WEKA's distributed metadata path serves CLAM's thumbnail reads while non-WEKA CPU cores saturate at concurrency C.'")

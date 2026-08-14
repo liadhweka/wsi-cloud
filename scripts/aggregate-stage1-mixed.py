@@ -161,7 +161,7 @@ def parse_fpsync_bytes_from_notes(run_dir: Path):
 def extract_rdma_pair(d):
     """Returns (xmit_dev, xmit_bps, rcv_dev, rcv_bps) — picking the device
     that moved the most for each direction. For mixed workload we expect
-    xmit ≈ 2× writes (writes amplified by erasure coding) and rcv ≈ reads.
+    xmit to exceed writes (erasure-coding amplification) and rcv ≈ reads.
     """
     rdma = (d.get("sources") or {}).get("rdma_counters") or {}
     devs = rdma.get("devices") or {}
@@ -256,7 +256,7 @@ def extract_cell_summary(run_dir: Path):
     else:
         out["ratio_weka_read_over_read_app"] = None
 
-    # Write-side ratios (data flows OUT on writes = xmit direction; ~2× from EC)
+    # Write-side ratios (data flows OUT on writes = xmit direction; EC-amplified)
     write_app = out["fpsync_bw_bytes_per_sec"] or 0
     if write_app > 0 and out["rdma_xmit_sustained_bps"]:
         out["ratio_rdma_xmit_over_write_app"] = out["rdma_xmit_sustained_bps"] / write_app
@@ -301,8 +301,8 @@ def main():
     print()
     print("# Stage 1.6 mixed sweep — concurrent fpsync ingest + fio randread")
     print()
-    print("Ingest: fpsync -n 4 (FIXED, 1.72 GiB/s baseline from 1.5)")
-    print("Read:   fio --rw=randread --iodepth=8 against pre-staged scratch on wekafs")
+    print("Ingest: fpsync -n 4 (FIXED; n chosen from this leg's Stage 1.5 baseline)")
+    print("Read:   fio --rw=randread --iodepth=8 against pre-staged scratch on the filesystem under test")
     print()
 
     def grid_table(title, key, fmt):
@@ -336,13 +336,13 @@ def main():
                "weka_write_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
     grid_table("RDMA rcv sustained (MiB/s) — wire-level read direction",
                "rdma_rcv_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
-    grid_table("RDMA xmit sustained (MiB/s) — wire-level write direction (~2× write app)",
+    grid_table("RDMA xmit sustained (MiB/s) — wire-level write direction (EC-amplified)",
                "rdma_xmit_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
 
     # Cross-source ratio canary
     print("## Cross-source consistency canary")
     print()
-    print("Expected: weka/app ratios ≈ 1.0 (both directions); RDMA xmit/write_app ≈ 2.0 (3+2 erasure);")
+    print("Expected: weka/app ratios ≈ 1.0 (both directions); RDMA xmit/write_app ≈ 2.0 (erasure-coding amplification per the cluster's protection scheme);")
     print("RDMA rcv/read_app ≈ 1.0 (no read amplification). Bands trip warnings.")
     print()
     print("| bs | jobs | weka_R/read_app | RDMA_rcv/read_app | weka_W/write_app | RDMA_xmit/write_app |")

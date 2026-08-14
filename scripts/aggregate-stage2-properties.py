@@ -268,7 +268,7 @@ def extract_cell_summary(run_dir: Path):
     out["rdma_rcv_dev"] = rdma_dev
     out["rdma_rcv_sustained_bps"] = rdma_rcv if rdma_rcv > 0 else None
 
-    # WEKA-side per-ts-summed across the the client's frontends
+    # WEKA-side per-ts-summed across the client's frontends
     wk_read = weka_client_per_sec(run_dir, "Read", parse_bps)
     wk_ops  = weka_client_per_sec(run_dir, "Ops/s", parse_numeric)
     wk_rds  = weka_client_per_sec(run_dir, "Reads/s", parse_numeric)
@@ -330,7 +330,7 @@ def main():
     grid = {(r["dataset"], r["concurrency"]): r for r in rows}
 
     print()
-    print("# Stage 2.0 OpenSlide property extraction sweep — POSIX wekafs")
+    print("# Stage 2.0 OpenSlide property extraction sweep — POSIX, filesystem under test")
     print()
     print("Tool: openslide-python + multiprocessing.Pool")
     print("Headline customer story: 'WEKA cataloged N slides in X seconds at concurrency C.'")

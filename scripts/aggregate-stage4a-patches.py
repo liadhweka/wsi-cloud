@@ -224,7 +224,7 @@ def extract_cell_summary(run_dir):
     out["agg_cpu_busy_p95_pct"]       = cpu["p95"]            if cpu else None
     out["agg_cpu_busy_max_pct"]       = cpu["max"]            if cpu else None
 
-    # Cross-source: writes amplified ~2× (3+2 EC); reads ~1× (no amplification)
+    # Cross-source: writes EC-amplified per the protection scheme; reads ~1× (no amplification)
     if out["weka_write_sustained_bps"] and out["rdma_xmit_sustained_bps"]:
         out["ratio_xmit_over_write"] = out["rdma_xmit_sustained_bps"] / out["weka_write_sustained_bps"]
     else:
@@ -279,7 +279,7 @@ def main():
     grid_table("WEKA client Write sustained (MiB/s)", "weka_write_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
     grid_table("WEKA client Read sustained (MiB/s) — slide-source reads", "weka_read_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
     grid_table("RDMA xmit sustained (MiB/s) — wire-level write direction", "rdma_xmit_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
-    grid_table("Cross-source: RDMA_xmit / weka_Write (expect ~2.0× from EC)", "ratio_xmit_over_write", lambda v: f"{v:.2f}")
+    grid_table("Cross-source: RDMA_xmit / weka_Write (EC-amplified; expected ratio per protection scheme)", "ratio_xmit_over_write", lambda v: f"{v:.2f}")
 
     valid = [r for r in rows if r.get("tiles_per_second")]
     if valid:

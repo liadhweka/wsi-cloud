@@ -10,7 +10,7 @@ For each matching run dir:
   - reads notes.md for app-level bytes-transferred (du-based pre/post)
   - computes app-level throughput from .run_start / .run_end + post-bytes
   - extracts RDMA xmit on the device that carried the workload (writes -> xmit)
-  - cross-source ratio: RDMA_xmit / app_level (expect ~2.0 for 3+2 erasure)
+  - cross-source ratio: RDMA_xmit / app_level (erasure-coding amplification per the cluster's protection scheme)
 
 Outputs:
   - runs/s1.5-fpsync-summary.csv
@@ -275,7 +275,7 @@ def main():
 
     # Markdown 1D table.
     print()
-    print("# Stage 1.5 fpsync sweep — local NVMe -> wekafs (POSIX)")
+    print("# Stage 1.5 fpsync sweep — local NVMe -> the filesystem under test (POSIX)")
     print()
     print(f"Source: TCGA-BRCA full (1133 SVS, 1.05 TiB per the manifest), "
           f"pre-staged on {os.environ.get('SCRATCH_DIR', '$SCRATCH_DIR')}/fpsync-source/.")
@@ -310,7 +310,7 @@ def main():
     print()
     print("## Cross-source consistency (from CLAUDE.md primary sources)")
     print()
-    print("Expected for write workloads: RDMA xmit / app ≈ 2.0 (3+2 erasure-coding amplification),")
+    print("Expected for write workloads: RDMA xmit / app ≈ 2.0 (erasure-coding amplification per the cluster's protection scheme),")
     print("weka Write / app ≈ 1.0 (cluster-side throughput tracks app-level).")
     print()
     issues = []

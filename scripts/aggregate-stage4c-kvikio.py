@@ -147,7 +147,7 @@ def weka_client_per_sec(run_dir, col, parser=parse_bps):
     WHY this function exists: per the project-memory aggregator pattern (Stage 1.5
     discovery), the parser's pre-aggregated weka_stats metric is the MEAN across
     all (host, role, mode, NodeID) tuples — diluted ~100× by idle backend rows.
-    For client-side WEKA throughput, sum per timestamp across the the client's frontends
+    For client-side WEKA throughput, sum per timestamp across the client's frontends
     only.
 
     NOTE column name in the CSV is lowercase `timestamp` (not `Timestamp`); using
