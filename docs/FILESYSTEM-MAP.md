@@ -167,7 +167,7 @@ copy values from another machine:**
 |---|---|---|
 | conda env | The RAPIDS/cuCIM/PyTorch environment (its own interpreter; `CONDA_PREFIX` exported) | Use the **conda** build, not pip — pip cuCIM wheels have been observed to crash on a libstdc++ ABI mismatch inside `read_region()` |
 | `LD_PRELOAD` | The **system** `libcufile`, matched to the installed kernel `nvidia-fs` | The conda env bundles an older copy; the system one matches the kernel module |
-| cuFile config (`CUFILE_ENV_PATH_JSON`) | Per-process cuFile JSON | Must list the client's own network addresses and set the transport options the filesystem needs |
+| cuFile config (`CUFILE_ENV_PATH_JSON`) | Per-process cuFile JSON | Per-leg: a compat-mode config on the WEKA leg (no address list); the Lustre-over-EFA config sets what that transport needs (`D-10`) |
 
 > ⚠ **Scope `LD_PRELOAD` per cell.** cuCIM segfaults inside `read_region()` when a newer libcufile is
 > preloaded over its bundled one (ABI clash), and it links libcufile internally even for CPU reads. Since
@@ -186,7 +186,7 @@ GPU-direct-vs-bounced byte accounting** — a configuration flag is not proof of
 |---|---|---|
 | CLAM | `~/wsi-tools/CLAM/` | Tissue detection (3.0) + tile coords; commit recorded per run |
 | conda environments | `/data/local-nvme/conda-envs/` | Rebuilt from `../scripts/env-specs/` on each instance |
-| `gdc-client`, `aws` CLI | `~/.local/bin/` | Dataset staging into S3 (once, pre-leg) and 1.7 hydration |
+| `aws` CLI | system | Dataset staging into S3 (once, pre-leg, via `../scripts/prefetch-datasets-to-s3.sh` — the GDC data API over HTTPS) and 1.7 hydration |
 | `fpart` / `fpsync` | system | 1.5 bulk copy, 1.6 mixed, 6.C ingest workload. **One package:** `fpsync` ships inside `fpart` |
 | `fio` | system | 1.0 synthetic ceilings, viewer patterns in 1.6 / 6.C / 7.5 |
 | Lustre client tools (`lctl`, `lfs`) | system | Lustre-leg recording + stripe layout inspection |

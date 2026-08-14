@@ -31,17 +31,17 @@ is unset.** An unset variable must never silently default, because the defaults 
 
 | Variable | Recommended | Why this value / what it affects |
 |---|---|---|
-| `PROJECT_USER` | **`ubuntu`** | The AMI's default user on Ubuntu images — no `adduser` step, no permission surprises. **Do NOT use `root`:** it breaks `/dev/shm` permissions and conda ownership, and it changes the memory slug (see Table 3). |
-| `PROJECT_HOME` | **`/home/ubuntu`** | Follows from `PROJECT_USER`. |
-| `REPO_DIR` | **`$PROJECT_HOME/wsi-cloud`** | Matches the GitHub repo (`wsi-cloud`). Distinct from the earlier project's `wsi`, so the derived slug (`-home-ubuntu-wsi-cloud`) cannot collide with it — **the directory name is load-bearing for exactly this reason.** |
+| `PROJECT_USER` | **`ec2-user`** | The AMI's default user on Amazon Linux 2023 images — no `adduser` step, no permission surprises. **Do NOT use `root`:** it breaks `/dev/shm` permissions and conda ownership, and it changes the memory slug (see Table 3). |
+| `PROJECT_HOME` | **`/home/ec2-user`** | Follows from `PROJECT_USER`. |
+| `REPO_DIR` | **`$PROJECT_HOME/wsi-cloud`** | Matches the GitHub repo (`wsi-cloud`). Distinct from the earlier project's `wsi`, so the derived slug (`-home-ec2-user-wsi-cloud`) cannot collide with it — **the directory name is load-bearing for exactly this reason.** |
 | `GITHUB_REPO` | **`liadhweka/wsi-cloud`** | SSH remote: `git@github.com:$GITHUB_REPO.git`. |
-| `AWS_REGION` | **`us-west-2`** *(subject to g6e capacity)* | Tiebreaker only: the CAMELYON open-data bucket lives there, so that pull is same-region. **Capacity and your standard region outrank this.** Everything — instance, both filesystems, the bucket — must share it. |
+| `AWS_REGION` | **`ap-northeast-2`** | Chosen for g6e capacity, which outranks every tiebreaker (the CAMELYON open-data bucket's home region lost to it). Everything — instance, both filesystems, the bucket — must share it. |
 | `AWS_AZ` | *(pick one in-region and keep it)* | Cross-AZ traffic adds latency and cost and would contaminate the comparison. |
 | `INSTANCE_TYPE` | **`g6e.24xlarge`** | The L40S GPU family, ≥200 Gbps client networking, and EFA-capable from the start because Leg B needs EFA. **Identical in both legs** — it is the single largest held-constant variable. If **D10**'s pre-committed revisit trigger fires, the move is up to `g6e.48xlarge`, **before Leg B**. Specs, why, and the trigger: `STAGES.md` **D10**. |
-| `S3_BUCKET` | **`weka-wsi-bench-<unique-suffix>`** | ⚠ **S3 bucket names are globally unique across all AWS accounts** — a generic name will likely be taken, so add a suffix. Avoid `-s3` in the name (redundant). |
+| `S3_BUCKET` | **`liad-wsi-cloud`** | ⚠ **S3 bucket names are globally unique across all AWS accounts**, which is why the name carries an owner prefix rather than a generic one. |
 | `WEKA_MOUNT` | **`/mnt/weka`** | Leg A mount. |
 | `LUSTRE_MOUNT` | **`/mnt/lustre`** | Leg B mount. |
-| `WEKA_FS_NAME` | **`wsibench`** | The WEKA filesystem name. Kept distinct from the mount path deliberately — they need not match, and assuming they do has caused confusion before. |
+| `WEKA_FS_NAME` | **`default`** | The WEKA filesystem name — created by the terraform-aws-weka module under its default name. Kept distinct from the mount path deliberately — they need not match, and assuming they do has caused confusion before. |
 | `SCRATCH_DIR` | **`/data/local-nvme`** | Instance-store scratch. **Ephemeral** — dies with the instance, including between legs. |
 | `CONDA_ROOT` | **`$SCRATCH_DIR/miniforge`** | The miniforge **install** root. Off the OS disk. |
 | `CONDA_ENVS_DIR` | **`$SCRATCH_DIR/conda-envs`** | Where the **environments** live — deliberately *not* under `CONDA_ROOT`, so the interpreter path is stable if miniforge is reinstalled. Every sweep driver builds its interpreter as `$CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python`. |
@@ -49,8 +49,8 @@ is unset.** An unset variable must never silently default, because the defaults 
 | `CONDA_ENV_ALT` | **`wsi-cucim`** | Second env, same reasoning. Used by the two cuCIM-CPU drivers (Stage 4.A, 4.B). |
 | `CLAM_DIR` | **`$PROJECT_HOME/wsi-tools/CLAM`** | The tissue detector used by Stage 3. Cloned during setup; the commit is recorded per run. |
 | `CUFILE_CONFIG_DIR` | **`$PROJECT_HOME/cufile-config`** | Where the generated cuFile config lives. |
-| `CUFILE_ENV_PATH_JSON` | **`$CUFILE_CONFIG_DIR/cufile.json`** | Generated **per instance** from the template — holds this instance's own addresses (deferred item `D-10`). |
-| `LIBCUFILE_PRELOAD` | *(locate on the instance — `D-10`)* | The **path** of the system `libcufile` matched to the loaded `nvidia-fs` module. Every kvikIO sweep driver reads it and **refuses to start without it.** Blank until the env-prep session reports it. |
+| `CUFILE_ENV_PATH_JSON` | **`$CUFILE_CONFIG_DIR/cufile.json`** | Generated **per instance, per leg** by the bootstrap — a compat-mode config on the WEKA leg (no address list). The Lustre-over-EFA config is deferred item `D-10`. |
+| `LIBCUFILE_PRELOAD` | *(set by the bootstrap)* | The **path** of the system `libcufile` matched to the loaded `nvidia-fs` module. Every kvikIO sweep driver reads it and **refuses to start without it.** The bootstrap locates and exports it from the installed CUDA stack at build time. |
 
 > **`LIBCUFILE_PRELOAD` holds a path; `LD_PRELOAD` is what must never be global.** Exporting the *path* is
 > required — the drivers read it. What the drivers then do is set **`LD_PRELOAD` per cell, on kvikIO cells
@@ -70,7 +70,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 |---|---|---|
 | `AMI_ID` | Instance launch | Leg B rebuilds from this exact AMI. Pin it. |
 | `INSTANCE_ID` | Instance launch | Provenance. |
-| `CLIENT_HOSTNAME` | `hostname` on the instance | **Load-bearing:** the aggregators filter telemetry to the client's own rows by hostname, so a wrong value silently yields empty or foreign rows. Record it on every build. Retargeting the aggregators off a hardcoded host is deferred work — `SCRIPT-TRACKER.md`, item `D-4`. |
+| `CLIENT_HOSTNAME` | `hostname` on the instance | Provenance. The aggregators select client telemetry by **role** (`Mode=="client"`), never by hostname — hostnames are rebuild-unstable, and this cluster runs exactly one client container by design. |
 | `WEKA_BACKEND_TYPE` · `WEKA_BACKEND_COUNT` | Your WEKA provisioning | Sizing evidence for the fairness basis (**D7**). |
 | `WEKA_CAPACITY_TB` | WEKA provisioning | Same. |
 | `WEKA_EC_SCHEME` | WEKA provisioning | **Required** to derive the WEKA cross-source consistency relation (**D12**) — the canary cannot run without it. |
@@ -87,7 +87,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 
 | Variable | How it's derived | Note |
 |---|---|---|
-| `MEMORY_SLUG` | `REPO_DIR` with `/` → `-` | For the chosen names: `-home-ubuntu-wsi-cloud`. **Discover it, don't type it** — the memory restore and backup steps derive it (`cloud-setup/NEW-CLOUD-SETUP.md`, `FILESYSTEM-MAP.md`), so a path change needs no edits. **`env.sh`'s copy is display-only:** `restore-memories.sh` and `backup.sh` each derive their own from the repo's *real* location and never read it, so `--check` prints it as `info` rather than validating it — an `ok` on a value nothing reads would claim it is in force when it is not. Don't wire anything to it. |
+| `MEMORY_SLUG` | `REPO_DIR` with `/` → `-` | For the chosen names: `-home-ec2-user-wsi-cloud`. **Discover it, don't type it** — the memory restore and backup steps derive it (`cloud-setup/NEW-CLOUD-SETUP.md`, `FILESYSTEM-MAP.md`), so a path change needs no edits. **`env.sh`'s copy is display-only:** `restore-memories.sh` and `backup.sh` each derive their own from the repo's *real* location and never read it, so `--check` prints it as `info` rather than validating it — an `ok` on a value nothing reads would claim it is in force when it is not. Don't wire anything to it. |
 | `LEG` | set per leg in `env.sh`; `run-leg.sh --leg` exports it | `weka` \| `lustre`. Feeds `FS_MOUNT`, the run-dir name segment, the `metadata.json` field, and the S3 prefix. **`record-run.sh` derives `--fs` from it** when the flag is not passed, so the sweep drivers stay argument-free — see the `--fs` note below. |
 | `FS_MOUNT` | `WEKA_MOUNT` or `LUSTRE_MOUNT`, from `LEG` | **The single most important variable in the project.** Every script resolves the mount through it. A hardcoded mount makes one leg measure the other with no failure signal. |
 
