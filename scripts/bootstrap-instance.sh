@@ -313,6 +313,33 @@ else
 fi
 
 step "7. Claude Code"
+# Personal defaults (model/effort/TUI) so first launch needs no /config walkthrough.
+# Verbatim copy of the working laptop config; project rules ride in via the repo's
+# own .claude/settings.json and override where they overlap. /login stays human.
+if [ ! -f "$UH/.claude/settings.json" ]; then
+  as_u mkdir -p "$UH/.claude"
+  cat > "$UH/.claude/settings.json" <<'CCFG'
+{
+  "permissions": {
+    "defaultMode": "auto"
+  },
+  "worktree": {
+    "baseRef": "fresh"
+  },
+  "workflowKeywordTriggerEnabled": false,
+  "effortLevel": "xhigh",
+  "promptSuggestionEnabled": false,
+  "awaySummaryEnabled": false,
+  "tui": "fullscreen",
+  "theme": "auto",
+  "autoCompactEnabled": false,
+  "switchModelsOnFlag": false,
+  "fileCheckpointingEnabled": false,
+  "model": "opus[1m]"
+}
+CCFG
+  chown $U:$U "$UH/.claude/settings.json"
+fi
 as_u bash -lc 'curl -fsSL https://claude.ai/install.sh | bash' || true
 if ! as_u bash -lc 'command -v claude || test -x ~/.local/bin/claude'; then
   npm install -g @anthropic-ai/claude-code || warn "Claude Code install failed (native + npm)"
