@@ -6,7 +6,7 @@ covering all sub-tiers. Per cell, parses the new Stage 7 primary CSVs
 (`per-slide-inference-latencies.csv`, `per-slide-heatmap-writes.csv`,
 `streaming-loop-events.csv`, `read-after-write-latencies.csv`,
 `workload-<name>.csv`), pairs them with cluster-side primary sources
-(per-ts WekaFS frontend summing across the 8 a100 client rows, RDMA mlx5_0
+(per-ts WekaFS frontend summing across the client's frontend rows, RDMA mlx5_0
 cumulative-counter diff, nvidia-smi PRIMARY for 7.2 GPU-memory pressure,
 sar-cpu non-DPDK %busy), and computes cross-source canary ratios.
 
@@ -146,11 +146,11 @@ def _active_window_mean(seq):
 
 
 def weka_per_sec_sum(run_dir: Path, col: str, parser=_bps_or_zero):
-    """Per-timestamp sum across 8 a100 wekafs client frontends.
+    """Per-timestamp sum across 8 wekafs client frontends.
 
     The pre-aggregated results.json mean dilutes ~100× from idle backend rows
     (cross-cutting pattern #1). We re-read the raw CSV and sum per
-    timestamp across the rows where Hostname=a100 + Mode=client.
+    timestamp across the rows where Mode=client.
     """
     p = run_dir / 'raw' / 'weka-stats.csv'
     if not p.exists():
@@ -158,7 +158,7 @@ def weka_per_sec_sum(run_dir: Path, col: str, parser=_bps_or_zero):
     sums = {}
     with p.open() as f:
         for row in csv.DictReader(f):
-            if row.get('Hostname') != 'a100' or row.get('Mode') != 'client':
+            if row.get('Mode') != 'client':
                 continue
             ts = row.get('timestamp', '')  # lowercase per Stage 1.5 finding
             if not ts:

@@ -69,13 +69,13 @@ def _active_window_mean(seq):
     return sum(span) / len(span)
 
 
-def weka_a100_client_per_sec(run_dir, col):
+def weka_client_per_sec(run_dir, col):
     p = run_dir / "raw" / "weka-stats.csv"
     if not p.exists(): return []
     sums = {}
     with p.open() as f:
         for row in csv.DictReader(f):
-            if row.get("Hostname") != "a100" or row.get("Mode") != "client": continue
+            if row.get("Mode") != "client": continue
             ts = row.get("timestamp", "")
             if not ts: continue
             sums[ts] = sums.get(ts, 0.0) + _bps(row.get(col, ""))
@@ -96,8 +96,8 @@ def extract_cell_summary(run_dir):
     rs_dt, re_dt = read_run_window(run_dir)
     duration = (re_dt - rs_dt).total_seconds() if rs_dt and re_dt else None
 
-    weka_read = weka_a100_client_per_sec(run_dir, "Read")
-    weka_write = weka_a100_client_per_sec(run_dir, "Write")
+    weka_read = weka_client_per_sec(run_dir, "Read")
+    weka_write = weka_client_per_sec(run_dir, "Write")
 
     row = {
         "run_dir": run_dir.name,

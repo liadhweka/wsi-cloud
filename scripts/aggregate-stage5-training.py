@@ -6,7 +6,7 @@ Per cell, reads:
   - training-steps.csv      (per-step CSV — the PRIMARY headline source: phase, step_duration,
                              dataload, forward, backward, optimizer, samples, loss)
   - .run_start / .run_end   (record-run.sh window)
-  - raw/weka-stats.csv      (per-ts sum across 8 a100 client frontends, Read column)
+  - raw/weka-stats.csv      (per-ts sum across the client frontends, Read column)
   - raw/rdma-counters.csv   (mlx5_0 rcv rate, cumulative-counter → rate diff)
   - raw/sar-cpu.csv         (non-DPDK per-core %busy aggregate)
   - raw/nvidia-smi.csv      (per-GPU util max/mean — PRIMARY for Stage 5)
@@ -230,8 +230,8 @@ def parse_numeric(s):
         return 0.0
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
-    """Sum a column from weka-stats.csv across the 8 a100 client frontends per timestamp."""
+def weka_client_per_sec(run_dir, col, parser=parse_bps):
+    """Sum a column from weka-stats.csv across the client frontends per timestamp."""
     p = run_dir / "raw" / "weka-stats.csv"
     if not p.exists():
         return []
@@ -239,8 +239,9 @@ def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
     with p.open() as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("Hostname") != "a100":
-                continue
+            # Selected by ROLE alone: hostnames and Node IDs are both rebuild-
+            # unstable, and this cluster runs exactly ONE client container by
+            # design, so Mode=="client" uniquely selects it.
             if row.get("Mode") != "client":
                 continue
             ts = row.get("timestamp", "")  # lowercase per Stage 1.5 finding
@@ -412,7 +413,7 @@ def extract_cell_summary(run_dir):
     rs_dt, re_dt = read_run_window(run_dir)
     duration = (re_dt - rs_dt).total_seconds() if (rs_dt and re_dt) else None
 
-    weka_read_per_ts = weka_a100_client_per_sec(run_dir, "Read")
+    weka_read_per_ts = weka_client_per_sec(run_dir, "Read")
     weka_read_mean = (_active_window_mean(weka_read_per_ts) or 0.0)
     weka_read_full_mean = sum(weka_read_per_ts) / len(weka_read_per_ts) if weka_read_per_ts else 0.0
     weka_read_max = max(weka_read_per_ts) if weka_read_per_ts else 0.0

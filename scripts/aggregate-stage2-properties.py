@@ -9,7 +9,7 @@ For each matching run dir:
   - parses per-slide-latencies.csv (archived by the sweep driver) for app-level
     per-slide stats (mean, p50, p95, p99, max, success/fail counts)
   - parses cmd.log for the extractor's summary line (slides_per_second, total_seconds)
-  - re-reads weka-stats.csv directly with per-timestamp summing across the 8
+  - re-reads weka-stats.csv directly with per-timestamp summing across
     the storage client's own processes (cross-cutting pattern #1, from
     Stages 1.5/1.6) — pulls Ops/s (NEW Stage 2 headline), Read, Reads/s
   - extracts RDMA rcv (read direction) per device, picks the busiest
@@ -104,11 +104,10 @@ def parse_numeric(s):
         return None
 
 
-def weka_a100_client_per_sec(run_dir: Path, col: str, parser=parse_bps):
-    """Per-second total of weka-stats `col` across all a100 client frontend
-    processes (selected by Hostname=="a100" & Mode=="client", NOT by Node ID —
-    that global range is reinstall-dependent: 15091-15098 post-2026-07, was
-    941-948). Returns aggregate stats over the per-second sums.
+def weka_client_per_sec(run_dir: Path, col: str, parser=parse_bps):
+    """Per-second total of weka-stats `col` across all client frontend
+    processes (selected by Mode=="client", never by hostname or
+    Node ID — both rebuild-unstable). Returns aggregate stats over the per-second sums.
 
     `parser` is the function to convert the raw cell text (parse_bps for B/s
     columns, parse_numeric for bare-float columns like Ops/s).
@@ -120,8 +119,9 @@ def weka_a100_client_per_sec(run_dir: Path, col: str, parser=parse_bps):
     with csv_path.open(newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("Hostname") != "a100":
-                continue
+            # Selected by ROLE alone: hostnames and Node IDs are both rebuild-
+            # unstable, and this cluster runs exactly ONE client container by
+            # design, so Mode=="client" uniquely selects it.
             if row.get("Mode") != "client":
                 continue
             ts = row.get("timestamp")
@@ -268,10 +268,10 @@ def extract_cell_summary(run_dir: Path):
     out["rdma_rcv_dev"] = rdma_dev
     out["rdma_rcv_sustained_bps"] = rdma_rcv if rdma_rcv > 0 else None
 
-    # WEKA-side per-ts-summed across the 8 a100 frontends
-    wk_read = weka_a100_client_per_sec(run_dir, "Read", parse_bps)
-    wk_ops  = weka_a100_client_per_sec(run_dir, "Ops/s", parse_numeric)
-    wk_rds  = weka_a100_client_per_sec(run_dir, "Reads/s", parse_numeric)
+    # WEKA-side per-ts-summed across the the client's frontends
+    wk_read = weka_client_per_sec(run_dir, "Read", parse_bps)
+    wk_ops  = weka_client_per_sec(run_dir, "Ops/s", parse_numeric)
+    wk_rds  = weka_client_per_sec(run_dir, "Reads/s", parse_numeric)
 
     out["weka_read_sustained_bps"] = wk_read["sustained_mean"] if wk_read else None
     out["weka_read_max_bps"]       = wk_read["max"]            if wk_read else None
@@ -361,7 +361,7 @@ def main():
                "per_slide_lat_p99_ms", lambda v: f"{v:.2f}")
     grid_table("Per-slide max latency (ms) — slowest single slide in the run",
                "per_slide_lat_max_ms", lambda v: f"{v:.0f}")
-    grid_table("WEKA client Read sustained (MiB/s) — per-ts sum across 8 a100 frontends",
+    grid_table("WEKA client Read sustained (MiB/s) — per-ts sum across the client's frontends",
                "weka_read_sustained_bps", lambda v: f"{v/(1024**2):.2f}" if v < 1024**3 else f"{v/(1024**3):.2f} GiB/s")
     grid_table("WEKA Ops/s sustained — NEW headline metric for Stage 2 (metadata ops)",
                "weka_ops_sustained", lambda v: f"{v/1000:.1f}k" if v >= 1000 else f"{v:.0f}")

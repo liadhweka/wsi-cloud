@@ -22,7 +22,7 @@
 # WHY inlined conversion (vs calling Stage 4.C's `convert-stage4c-rawtiff.sh`):
 #   The Stage 4.C script hardcodes manifest paths + output dirs for the 50-slide
 #   subset. Refactoring it would touch a closed-stage script. Cleaner to inline
-#   the same logic (cucim convert + per-slide scratch dirs to avoid mmap collision)
+#   the same logic (convert-rawtiff-20x.py, the tifffile-based TRUE-20x writer)
 #   with our own chunk-specific paths.
 #
 # WHY one outer record-run.sh wrap (vs per-chunk record-run):

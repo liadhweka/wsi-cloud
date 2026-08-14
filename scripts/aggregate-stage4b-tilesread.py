@@ -8,7 +8,7 @@ Usage:
 Per cell:
   - parses reader-summary.json (app-level: tiles/sec steady, cache hit rate, errors)
   - reads .run_start/.run_end for the recorded window
-  - re-reads weka-stats.csv (per-timestamp sum across 8 a100 client frontends) — Read, Ops/s
+  - re-reads weka-stats.csv (per-timestamp sum across the client frontends) — Read, Ops/s
   - extracts RDMA rcv (read direction) + xmit (sanity, should be near 0)
   - aggregate %busy from sar-cpu (excluding wekafs DPDK cores 24-31)
 
@@ -118,13 +118,13 @@ def parse_numeric(s):
     except (ValueError, TypeError): return None
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
+def weka_client_per_sec(run_dir, col, parser=parse_bps):
     csv_path = run_dir / "raw" / "weka-stats.csv"
     if not csv_path.exists(): return None
     per_ts = {}
     with csv_path.open(newline="") as f:
         for row in csv.DictReader(f):
-            if row.get("Hostname") != "a100" or row.get("Mode") != "client": continue
+            if row.get("Mode") != "client": continue
             ts = row.get("timestamp")
             v = parser(row.get(col))
             if ts is None or v is None: continue
@@ -243,8 +243,8 @@ def extract_cell_summary(run_dir):
     out["rdma_rcv_sustained_bps"] = rcv_bps if rcv_bps > 0 else None
 
     # WEKA client per-ts summed
-    wk_read = weka_a100_client_per_sec(run_dir, "Read", parse_bps)
-    wk_ops  = weka_a100_client_per_sec(run_dir, "Ops/s", parse_numeric)
+    wk_read = weka_client_per_sec(run_dir, "Read", parse_bps)
+    wk_ops  = weka_client_per_sec(run_dir, "Ops/s", parse_numeric)
     out["weka_read_sustained_bps"] = wk_read["sustained_mean"] if wk_read else None
     out["weka_ops_sustained"] = wk_ops["sustained_mean"] if wk_ops else None
 

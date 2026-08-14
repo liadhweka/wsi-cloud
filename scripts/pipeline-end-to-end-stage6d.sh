@@ -16,8 +16,8 @@
 #                        conversion via run-stage6a-tier2-chunked.sh inside)
 #   --backend cucim    : cuCIM CPU batched on canonical SVS (no raw-TIFF needed)
 #
-# Outer record-run.sh wraps the whole pipeline so we capture WEKA aggregate time-series
-# across all four phases.
+# Outer record-run.sh wraps the whole pipeline so we capture the filesystem-side
+# time-series across all four phases (which source that is differs per leg).
 #
 # Usage:
 #   ./pipeline-end-to-end-stage6d.sh --backend cucim --run-dir <run-dir>

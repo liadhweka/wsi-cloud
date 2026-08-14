@@ -10,7 +10,7 @@ For each matching run dir:
     slides_with_h5, slides_with_mask, concurrency, dataset)
   - reads .run_start/.run_end for the recorded window
   - computes app-level slides/sec and per-slide-mean from app-level totals
-  - re-reads weka-stats.csv with per-timestamp summing across the 8 a100
+  - re-reads weka-stats.csv with per-timestamp summing across the client's
     the storage client's own processes (cross-cutting pattern #1)
   - **NEW for Stage 3:** parses sar-cpu.csv and computes %busy on the
     NON-WEKA cores (everything except the wekafs DPDK cores 24-31 on NUMA-0).
@@ -106,8 +106,8 @@ def parse_numeric(s):
     except (ValueError, TypeError): return None
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
-    """Per-second total of weka-stats `col` across all a100 client frontends.
+def weka_client_per_sec(run_dir, col, parser=parse_bps):
+    """Per-second total of weka-stats `col` across all client frontends.
     Returns aggregate stats over per-second sums. Same pattern as Stage 2.
     """
     csv_path = run_dir / "raw" / "weka-stats.csv"
@@ -116,7 +116,7 @@ def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
     with csv_path.open(newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("Hostname") != "a100": continue
+            # Role-selected: hostnames are rebuild-unstable; one client by design.
             if row.get("Mode") != "client": continue
             ts = row.get("timestamp")
             v = parser(row.get(col))
@@ -279,9 +279,9 @@ def extract_cell_summary(run_dir):
     out["rdma_rcv_dev"] = rdma_dev
     out["rdma_rcv_sustained_bps"] = rdma_rcv if rdma_rcv and rdma_rcv > 0 else None
 
-    # WEKA-side per-ts-summed across the 8 a100 frontends
-    wk_read = weka_a100_client_per_sec(run_dir, "Read", parse_bps)
-    wk_ops  = weka_a100_client_per_sec(run_dir, "Ops/s", parse_numeric)
+    # WEKA-side per-ts-summed across the the client's frontends
+    wk_read = weka_client_per_sec(run_dir, "Read", parse_bps)
+    wk_ops  = weka_client_per_sec(run_dir, "Ops/s", parse_numeric)
     out["weka_read_sustained_bps"]  = wk_read["sustained_mean"]  if wk_read else None
     out["weka_read_max_bps"]        = wk_read["max"]             if wk_read else None
     out["weka_ops_sustained"]       = wk_ops["sustained_mean"]   if wk_ops  else None
@@ -373,7 +373,7 @@ def main():
                "non_dpdk_cpu_busy_p95_pct", lambda v: f"{v:.1f}%")
     grid_table("Non-DPDK CPU %busy max",
                "non_dpdk_cpu_busy_max_pct", lambda v: f"{v:.1f}%")
-    grid_table("WEKA client Read sustained (MiB/s) — per-ts sum across 8 a100 frontends",
+    grid_table("WEKA client Read sustained (MiB/s) — per-ts sum across the client's frontends",
                "weka_read_sustained_bps", lambda v: f"{v/(1024**2):.1f}")
     grid_table("WEKA Ops/s sustained — per-ts sum",
                "weka_ops_sustained", lambda v: f"{v/1000:.1f}k" if v >= 1000 else f"{v:.0f}")

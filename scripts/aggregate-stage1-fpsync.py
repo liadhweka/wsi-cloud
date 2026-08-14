@@ -100,17 +100,15 @@ def parse_bps(s):
         return None
 
 
-def weka_a100_client_write_per_sec(run_dir: Path):
+def weka_client_write_per_sec(run_dir: Path):
     """Read weka-stats.csv and compute per-second total Write across all
-    wekafs frontend processes on host a100 (Mode=client).
+    wekafs frontend processes on the client host (Mode=client).
 
     The recorder captures one row per (Hostname, Roles, Mode, Node ID) per
-    second. The a100 wekafs client container has 8 frontend processes, so the
+    second. The wekafs client container runs multiple frontend processes, so the
     correct per-second client throughput is the SUM across those rows sharing
     one timestamp, not the mean across all rows in the file. Rows are selected
-    by Hostname=="a100" & Mode=="client" (NOT by Node ID — the global Node-ID
-    range is not stable across cluster reinstalls; post-2026-07 it is 15091-
-    15098, was 941-948, but the code never keys on it).
+    by Mode=="client" (never by hostname or Node ID — both rebuild-unstable).
 
     Returns a dict with mean / sustained_mean / active_window_mean / p95 / p99 / max of the
     per-second sums, or None if no rows match.
@@ -118,12 +116,13 @@ def weka_a100_client_write_per_sec(run_dir: Path):
     csv_path = run_dir / "raw" / "weka-stats.csv"
     if not csv_path.exists():
         return None
-    per_ts = {}  # timestamp -> sum of Write column (B/s) across a100 client processes
+    per_ts = {}  # timestamp -> sum of Write column (B/s) across client processes
     with csv_path.open(newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("Hostname") != "a100":
-                continue
+            # Selected by ROLE alone: hostnames and Node IDs are both rebuild-
+            # unstable, and this cluster runs exactly ONE client container by
+            # design, so Mode=="client" uniquely selects it.
             if row.get("Mode") != "client":
                 continue
             ts = row.get("timestamp")
@@ -203,16 +202,16 @@ def extract_cell_summary(run_dir: Path):
     # weka-stats client-side Write throughput. The pre-aggregated metric in
     # results.json is the mean across ALL (Hostname, Roles, Mode, Node ID)
     # tuples — diluted ~100x by idle backend rows. Re-derive directly from
-    # weka-stats.csv: per-second sum across our 8 a100 frontend client
+    # weka-stats.csv: per-second sum across our client frontend
     # processes. This is the number WEKAmon-Prometheus would scrape if
-    # filtered to (host=a100, mode=client).
-    a100_client = weka_a100_client_write_per_sec(run_dir)
-    if a100_client:
-        out["weka_write_sustained_bps"] = a100_client["sustained_mean"]
-        out["weka_write_mean_bps"]      = a100_client["mean"]
-        out["weka_write_p95_bps"]       = a100_client["p95"]
-        out["weka_write_max_bps"]       = a100_client["max"]
-        out["weka_write_n_seconds"]     = a100_client["n_seconds"]
+    # filtered to (mode=client).
+    client_agg = weka_client_write_per_sec(run_dir)
+    if client_agg:
+        out["weka_write_sustained_bps"] = client_agg["sustained_mean"]
+        out["weka_write_mean_bps"]      = client_agg["mean"]
+        out["weka_write_p95_bps"]       = client_agg["p95"]
+        out["weka_write_max_bps"]       = client_agg["max"]
+        out["weka_write_n_seconds"]     = client_agg["n_seconds"]
     else:
         out["weka_write_sustained_bps"] = None
     wk = sources.get("weka_stats") or {}

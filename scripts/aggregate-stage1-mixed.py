@@ -8,7 +8,7 @@ Usage:
 For each matching run dir:
   - parses results.json's `fio` block for read-side bw, IOPS, p99 latency
   - re-reads weka-stats.csv to compute per-timestamp-summed Read AND Write
-    on the a100 client (same pattern as aggregate-stage1-fpsync.py)
+    on the client (same pattern as aggregate-stage1-fpsync.py)
   - reads notes.md to extract fpsync (write-side) bytes-transferred
   - extracts RDMA xmit (writes) AND rcv (reads) sustained_mean per device
   - computes cross-source ratios: RDMA_xmit ≈ 2× write_app, RDMA_rcv ≈ 1× read_app
@@ -102,11 +102,11 @@ def parse_bps(s):
         return None
 
 
-def weka_a100_client_per_sec(run_dir: Path, col: str):
-    """Per-second total of a weka-stats column across all a100 client
-    frontend processes (selected by Hostname=="a100" & Mode=="client", NOT by
-    Node ID — that global range is reinstall-dependent: 15091-15098 post-2026-07,
-    was 941-948). Returns aggregate stats over the per-second sums.
+def weka_client_per_sec(run_dir: Path, col: str):
+    """Per-second total of a weka-stats column across all client
+    frontend processes (selected by Mode=="client" alone — never by
+    hostname or Node ID, both rebuild-unstable). Returns aggregate stats over
+    the per-second sums.
 
     `col` is the weka-stats column name (e.g. "Read", "Write").
     """
@@ -117,8 +117,9 @@ def weka_a100_client_per_sec(run_dir: Path, col: str):
     with csv_path.open(newline="") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("Hostname") != "a100":
-                continue
+            # Selected by ROLE alone: hostnames and Node IDs are both rebuild-
+            # unstable, and this cluster runs exactly ONE client container by
+            # design, so Mode=="client" uniquely selects it.
             if row.get("Mode") != "client":
                 continue
             ts = row.get("timestamp")
@@ -229,9 +230,9 @@ def extract_cell_summary(run_dir: Path):
         out["fpsync_bw_bytes_per_sec"] = None
         out["fpsync_bw_mib_per_sec"]   = None
 
-    # WEKA-side primary numbers (per-timestamp-sum across a100 client procs)
-    wk_read  = weka_a100_client_per_sec(run_dir, "Read")
-    wk_write = weka_a100_client_per_sec(run_dir, "Write")
+    # WEKA-side primary numbers (per-timestamp-sum across client procs)
+    wk_read  = weka_client_per_sec(run_dir, "Read")
+    wk_write = weka_client_per_sec(run_dir, "Write")
     out["weka_read_sustained_bps"]  = wk_read["sustained_mean"]  if wk_read  else None
     out["weka_write_sustained_bps"] = wk_write["sustained_mean"] if wk_write else None
     out["weka_read_max_bps"]  = wk_read["max"]  if wk_read  else None
@@ -329,9 +330,9 @@ def main():
                "fio_read_iops", lambda v: f"{v/1000:.1f}k" if v >= 1000 else f"{v:.0f}")
     grid_table("fpsync write bandwidth (MiB/s) — concurrent ingest stream",
                "fpsync_bw_mib_per_sec", lambda v: f"{v:.0f}")
-    grid_table("WEKA client Read sustained (MiB/s) — per-ts sum across 8 a100 frontends",
+    grid_table("WEKA client Read sustained (MiB/s) — per-ts sum across the client's frontends",
                "weka_read_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
-    grid_table("WEKA client Write sustained (MiB/s) — per-ts sum across 8 a100 frontends",
+    grid_table("WEKA client Write sustained (MiB/s) — per-ts sum across the client's frontends",
                "weka_write_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
     grid_table("RDMA rcv sustained (MiB/s) — wire-level read direction",
                "rdma_rcv_sustained_bps", lambda v: f"{v/(1024**2):.0f}")

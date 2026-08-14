@@ -101,13 +101,13 @@ def read_run_window(run_dir):
     return parse_iso_utc(rs.read_text()), parse_iso_utc(re_path.read_text())
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
+def weka_client_per_sec(run_dir, col, parser=parse_bps):
     p = run_dir / "raw" / "weka-stats.csv"
     if not p.exists(): return []
     sums = {}
     with p.open() as f:
         for row in csv.DictReader(f):
-            if row.get("Hostname") != "a100" or row.get("Mode") != "client":
+            if row.get("Mode") != "client":
                 continue
             ts = row.get("timestamp", "")
             if not ts: continue
@@ -190,8 +190,8 @@ def extract_nvidia_gpu(run_dir):
 
 
 def weka_ops_per_sec(run_dir):
-    """Returns list of per-timestamp Ops/s sums across a100 client frontends."""
-    return weka_a100_client_per_sec(run_dir, "Ops/s", parser=lambda s: parse_numeric(s))
+    """Returns list of per-timestamp Ops/s sums across client frontends."""
+    return weka_client_per_sec(run_dir, "Ops/s", parser=lambda s: parse_numeric(s))
 
 
 # ------------------------- 6.B.2 stress cell -------------------------
@@ -209,7 +209,7 @@ def extract_b2_summary(run_dir):
     rs_dt, re_dt = read_run_window(run_dir)
     duration = (re_dt - rs_dt).total_seconds() if rs_dt and re_dt else None
 
-    weka_read = weka_a100_client_per_sec(run_dir, "Read")
+    weka_read = weka_client_per_sec(run_dir, "Read")
     weka_read_mean = (_active_window_mean(weka_read) or 0.0)
     weka_read_full_mean = sum(weka_read) / len(weka_read) if weka_read else 0.0
     weka_read_max = max(weka_read) if weka_read else 0.0
@@ -307,7 +307,7 @@ def extract_b3_summary(run_dir):
     rs_dt, re_dt = read_run_window(run_dir)
     duration = (re_dt - rs_dt).total_seconds() if rs_dt and re_dt else None
 
-    weka_read = weka_a100_client_per_sec(run_dir, "Read")
+    weka_read = weka_client_per_sec(run_dir, "Read")
     weka_read_mean = (_active_window_mean(weka_read) or 0.0)
     weka_read_full_mean = sum(weka_read) / len(weka_read) if weka_read else 0.0
     weka_read_max = max(weka_read) if weka_read else 0.0

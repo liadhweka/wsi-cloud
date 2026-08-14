@@ -87,13 +87,13 @@ def _active_window_mean(seq):
     return sum(span) / len(span)
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=_bps):
+def weka_client_per_sec(run_dir, col, parser=_bps):
     p = run_dir / "raw" / "weka-stats.csv"
     if not p.exists(): return []
     sums = {}
     with p.open() as f:
         for row in csv.DictReader(f):
-            if row.get("Hostname") != "a100" or row.get("Mode") != "client": continue
+            if row.get("Mode") != "client": continue
             ts = row.get("timestamp", "")
             if not ts: continue
             sums[ts] = sums.get(ts, 0.0) + parser(row.get(col, ""))
@@ -261,8 +261,8 @@ def extract_cell_summary(run_dir):
             row[f"{wl}_present"] = 1
 
     # WEKA-side aggregate
-    weka_read = weka_a100_client_per_sec(run_dir, "Read")
-    weka_write = weka_a100_client_per_sec(run_dir, "Write")
+    weka_read = weka_client_per_sec(run_dir, "Read")
+    weka_write = weka_client_per_sec(run_dir, "Write")
     row["weka_read_MiBps_mean"] = ((_active_window_mean(weka_read) or 0.0) / (1024*1024)) if weka_read else 0.0
     row["weka_read_MiBps_full_mean"] = (sum(weka_read) / len(weka_read) / (1024*1024)) if weka_read else 0.0
     row["weka_write_MiBps_mean"] = ((_active_window_mean(weka_write) or 0.0) / (1024*1024)) if weka_write else 0.0

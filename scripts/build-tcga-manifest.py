@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """build-tcga-manifest.py — fetch a gdc-client manifest from the GDC API.
 
-Reusable across stages 1.1, 1.2, 1.3, etc. Output is a 5-column TSV that
-gdc-client consumes directly (id / filename / md5 / size / state).
+Reusable across stages 1.1, 1.2, 1.3, etc. Output is a 5-column TSV in the
+gdc-client manifest format (id / filename / md5 / size / state), consumed by
+prefetch-datasets-to-s3.sh via the GDC data API.
 
 Usage:
     build-tcga-manifest.py \\

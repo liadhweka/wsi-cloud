@@ -6,7 +6,7 @@ Per cell, reads:
   - extraction-steps.csv      (PRIMARY headline source — per-step dataload+forward timing)
   - per-slide.csv             (per-slide wallclock + tiles_per_sec)
   - .run_start / .run_end     (record-run.sh window)
-  - raw/weka-stats.csv        (per-ts sum across 8 a100 client frontends — WEKA Read)
+  - raw/weka-stats.csv        (per-ts sum across the client frontends — WEKA Read)
   - raw/rdma-counters.csv     (mlx5_0 rcv rate, cumulative-counter → rate diff)
   - raw/sar-cpu.csv           (non-DPDK per-core %busy aggregate)
   - raw/nvidia-smi.csv        (per-GPU util — PRIMARY for Stage 6.A)
@@ -139,7 +139,7 @@ def parse_numeric(s):
         return 0.0
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
+def weka_client_per_sec(run_dir, col, parser=parse_bps):
     p = run_dir / "raw" / "weka-stats.csv"
     if not p.exists():
         return []
@@ -147,8 +147,9 @@ def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
     with p.open() as f:
         reader = csv.DictReader(f)
         for row in reader:
-            if row.get("Hostname") != "a100":
-                continue
+            # Selected by ROLE alone: hostnames and Node IDs are both rebuild-
+            # unstable, and this cluster runs exactly ONE client container by
+            # design, so Mode=="client" uniquely selects it.
             if row.get("Mode") != "client":
                 continue
             ts = row.get("timestamp", "")  # lowercase per Stage 1.5 finding
@@ -436,7 +437,7 @@ def extract_cell_summary(run_dir: Path, model_override: str = None,
     rs_dt, re_dt = read_run_window(run_dir)
     duration = (re_dt - rs_dt).total_seconds() if (rs_dt and re_dt) else None
 
-    weka_read = weka_a100_client_per_sec(run_dir, "Read")
+    weka_read = weka_client_per_sec(run_dir, "Read")
     weka_read_mean = (_active_window_mean(weka_read) or 0.0)
     weka_read_full_mean = sum(weka_read) / len(weka_read) if weka_read else 0.0
     weka_read_max = max(weka_read) if weka_read else 0.0

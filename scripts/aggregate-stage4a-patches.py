@@ -8,7 +8,7 @@ Usage:
 For each matching run dir:
   - parses cmd.log for the extractor's '=== summary ===' block
   - reads .run_start/.run_end for the recorded window
-  - re-reads weka-stats.csv with per-timestamp summing across the 8 a100
+  - re-reads weka-stats.csv with per-timestamp summing across the client's
     wekafs client frontends (Read AND Write — Stage 4.A is write-heavy)
   - extracts RDMA xmit (writes) + rcv (reads) sustained
   - aggregate %busy from sar-cpu (now per-core available, but we still report
@@ -90,14 +90,14 @@ def parse_numeric(s):
     except (ValueError, TypeError): return None
 
 
-def weka_a100_client_per_sec(run_dir, col, parser=parse_bps):
-    """Per-second total of weka-stats `col` summed across the 8 a100 client frontends."""
+def weka_client_per_sec(run_dir, col, parser=parse_bps):
+    """Per-second total of weka-stats `col` summed across the client frontends."""
     csv_path = run_dir / "raw" / "weka-stats.csv"
     if not csv_path.exists(): return None
     per_ts = {}
     with csv_path.open(newline="") as f:
         for row in csv.DictReader(f):
-            if row.get("Hostname") != "a100" or row.get("Mode") != "client": continue
+            if row.get("Mode") != "client": continue
             ts = row.get("timestamp")
             v = parser(row.get(col))
             if ts is None or v is None: continue
@@ -212,9 +212,9 @@ def extract_cell_summary(run_dir):
     out["rdma_rcv_dev"] = rcv_dev
     out["rdma_rcv_sustained_bps"] = rcv_bps if rcv_bps > 0 else None
 
-    wk_read  = weka_a100_client_per_sec(run_dir, "Read", parse_bps)
-    wk_write = weka_a100_client_per_sec(run_dir, "Write", parse_bps)
-    wk_ops   = weka_a100_client_per_sec(run_dir, "Ops/s", parse_numeric)
+    wk_read  = weka_client_per_sec(run_dir, "Read", parse_bps)
+    wk_write = weka_client_per_sec(run_dir, "Write", parse_bps)
+    wk_ops   = weka_client_per_sec(run_dir, "Ops/s", parse_numeric)
     out["weka_read_sustained_bps"]  = wk_read["sustained_mean"]  if wk_read else None
     out["weka_write_sustained_bps"] = wk_write["sustained_mean"] if wk_write else None
     out["weka_ops_sustained"]       = wk_ops["sustained_mean"]   if wk_ops else None
