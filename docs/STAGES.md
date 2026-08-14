@@ -176,7 +176,7 @@ the S3 sync, and both canaries work on a newly provisioned environment **before*
 
 ## Stage 1 — Ingest
 Substages: **1.0a/b/c/d** synthetic ceilings (fio: seqw / seqr / randw IOPS / randr IOPS — anchor first);
-**1.4** local-NVMe scratch provisioning; **1.5** bulk local→filesystem copy (`fpsync`); **1.6** mixed
+**1.4** local-NVMe scratch smoke-proof (the RAID itself is built by the instance bootstrap); **1.5** bulk local→filesystem copy (`fpsync`); **1.6** mixed
 concurrent ingest + read; **1.7** S3 → filesystem hydration (the head-to-head ingest cell — identical method
 on both sides); **1.8** FSx-native S3 import (**Lustre leg only**, capability cell, not head-to-head).
 

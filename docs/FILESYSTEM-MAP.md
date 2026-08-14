@@ -152,9 +152,9 @@ Everything below is **created per leg** on `$FS_MOUNT`, using the identical layo
 | `staging/` | Download landing zone before pushing to S3 |
 | `runs/` | Overflow for in-flight telemetry before its S3 sync |
 
-**It dies with the instance**, including between legs. Provisioned by **1.4** on every instance build, with a
-smoke `fio` recorded to prove it out-runs the filesystem write ceiling (or 1.5 measures the source, not the
-filesystem).
+**It dies with the instance**, including between legs. The RAID is built by the instance bootstrap on every
+build; **1.4** records the smoke `fio` that proves it out-runs the filesystem write ceiling (or 1.5 measures
+the source, not the filesystem).
 
 ---
 
