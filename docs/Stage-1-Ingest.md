@@ -199,9 +199,9 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ one-time environment prep per instance build (not a comparison cell) |
-| **Tool** | `mdadm` + `mkfs.xfs` + fstab (via `sudo`, with explicit sign-off) |
-| **Methodology** | The instance's local NVMe devices (2 × 1900 GB on `g6e.24xlarge`) in RAID-0 → XFS → mounted at `/data/local-nvme` with `noatime,nofail`, owned by the benchmark user. Subdirs: `conda-envs/ fpsync-source/ staging/ runs/`. |
+| **Status** | ⏳ smoke-proof per instance build (the RAID itself is built by the instance bootstrap; not a comparison cell) |
+| **Tool** | the instance bootstrap (`mdadm` + `mkfs.xfs` + fstab, unattended at boot); `fio` for the smoke proof |
+| **Methodology** | Built by the bootstrap at every instance boot: the local NVMe devices (2 × 1900 GB on `g6e.24xlarge`) in RAID-0 → XFS → mounted at `/data/local-nvme` with `noatime,nofail`, owned by the benchmark user. Subdirs: `conda-envs/ fpsync-source/ staging/ runs/`. 1.4's own work is the recorded smoke `fio` that proves the source headroom. |
 | **Why this exists** | Prerequisite for 1.5: a bulk-copy benchmark needs a **local source comfortably faster than the filesystem's write ceiling**, or the source becomes the bottleneck and the cell measures the wrong thing. A smoke `fio` confirms that headroom before 1.5 runs. |
 | **⚠ Ephemeral** | Instance store **dies with the instance** and is re-provisioned on every rebuild — including between legs. Nothing that matters may rest here (`../CLAUDE.md` → Durability). It is scratch, not storage. |
 | **Held-constant note** | Because the instance is identical in both legs, the local tier is identical too — so 1.5's source is not a cross-leg variable. Re-run the smoke `fio` per build and record it, to prove that. |
@@ -275,8 +275,8 @@ aggregator that reads the parser's pre-aggregated filesystem-side metric can und
 because that metric is a mean across **all** rows in the stats stream — including many idle server-side
 rows that dilute the client's actual throughput. The correct pattern: **re-read the raw stats CSV, filter
 to the client's own rows, sum across the client's processes per timestamp, then aggregate the per-second
-sums.** Filter by a stable identity (hostname + role), **never** by a numeric process/node ID — those are
-reassigned on reinstall.
+sums.** Filter by a stable identity — **role** (`Mode=="client"`; this cluster runs exactly one client
+container by design) — never a hostname or a numeric process/node ID, both reassigned on rebuild or reinstall.
 
 > **Per-filesystem caveat:** the *pattern* generalises to both legs, but the *filter* does not — the WEKA
 > and Lustre stats streams have different schemas and different notions of "the client's rows." Each
@@ -310,7 +310,7 @@ data is actually fine. **Use `setsid` plus a process-group kill (`kill -- -PGID`
 |---|---|---|---|
 | `fio` | record at run time | system package | 1.0a–d, 1.4 smoke, 1.6 |
 | `fpsync` / `fpart` | record at run time | system package | 1.5, 1.6 |
-| `aws` CLI | record at run time | pip/system | 1.7, and the one-time dataset staging into S3 |
+| `aws` CLI | record at run time | system | 1.7, and the one-time dataset staging into S3 |
 | `mdadm`, `mkfs.xfs` | system | system | 1.4 |
 | `record-run.sh` | live | `../scripts/record-run.sh` | every substage |
 | `parse-results.py` | live | `../scripts/parse-results.py` | every substage |
