@@ -144,6 +144,14 @@ ABI mismatch inside `read_region()`). **Then regenerate the `scripts/env-specs/`
 actually built** — the route table lives in `docs/SCRIPT-TRACKER.md` § Environment specs; the explicit file
 is only a valid Leg-B target once it describes *this* environment.
 
+**Then close the provisioning-time values** (the open-items memory, the cost-and-ceiling item; **D15**;
+`./env.sh --check` shows exactly what is pending). Two kinds, handled differently: values that are **instance
+evidence** — `FS_CLIENT_RESERVED_CORES` from the client's own report, already in the discovery — you record
+directly. Values that are **external facts** — the four price inputs and the per-client-ceiling trio — you
+**fetch yourself from the vendor pages, with source URLs and the date checked, and propose to the human;
+they go into `env.sh` only after explicit confirmation.** Fetched, never recalled; proposed, never assumed —
+a wrong price silently rewrites the conclusion of the whole benchmark.
+
 ### 3 — GATE TIER 1: close these before any cell whose number is kept
 
 The next steps produce cells whose numbers are *kept*: the 1.7 hydration is a measured cell, and the
