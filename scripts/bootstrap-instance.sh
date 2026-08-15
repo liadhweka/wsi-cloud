@@ -352,7 +352,7 @@ if [ ! -f "$UH/.claude/settings.json" ]; then
   "autoCompactEnabled": false,
   "switchModelsOnFlag": false,
   "fileCheckpointingEnabled": false,
-  "model": "claude-fable-5"
+  "model": "claude-fable-5[1m]"
 }
 CCFG
   chown $U:$U "$UH/.claude/settings.json"
