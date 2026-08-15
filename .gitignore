@@ -63,9 +63,11 @@ runs/sweep-logs/
 # resurrect a marker deleted on purpose to force a re-run. Teardown commits everything
 # anyway, which is exactly the moment these need to be captured.
 
-# Large per-workload telemetry CSVs — per-interval output balloons on long endurance
-# cells (hundreds of MB each), exceeds GitHub per-file limits, and is regenerable from
-# the raw output that is already excluded. Headline numbers live in the summary CSVs.
+# Large per-workload CSVs — per-interval output balloons on long endurance cells
+# (hundreds of MB each) and exceeds GitHub per-file limits. NOT all regenerable:
+# Stage 7's per-process latency CSVs are primary measurements — which is why
+# sync-to-s3.sh archives run-root cmd.log and workload-*.csv to S3 alongside raw/.
+# Headline numbers live in the summary CSVs.
 **/workload-*.csv
 
 # Defensive: catch the same patterns at any depth, in case a subtree is ever added.

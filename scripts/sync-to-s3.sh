@@ -29,7 +29,8 @@
 #                           independently, so an exact reflection is safe and is what
 #                           we want (a deleted doc should disappear from S3 too).
 #
-#   ARCHIVE (no --delete)   raw telemetry + datasets.
+#   ARCHIVE (no --delete)   raw telemetry, run-root heavies (cmd.log, workload-*.csv)
+#                           + datasets.
 #                           New and changed files go up; NOTHING is ever removed from
 #                           S3 by this script. We WILL want to reclaim local disk by
 #                           cleaning old telemetry, and a --delete sync would then
@@ -168,6 +169,12 @@ case "$MODE" in
       for d in "$REPO_ROOT"/runs/*-"$LEG"-s*/; do
         [ -d "$d/raw" ] || continue
         do_sync archive "$d/raw/" "s3://$S3_BUCKET/runs/$LEG/$(basename "$d")/raw/"
+        # The run-root heavies that git deliberately excludes (.gitignore assigns
+        # them to S3): the benchmark's tee'd stdout+stderr, and the workloads' own
+        # per-interval/per-process CSVs — for Stage 7 those are PRIMARY latency
+        # measurements, not derivable from raw/ telemetry.
+        do_sync archive "$d" "s3://$S3_BUCKET/runs/$LEG/$(basename "$d")/" \
+          --exclude '*' --include 'cmd.log' --include 'workload-*.csv'
       done
       shopt -u nullglob
       do_sync archive "$REPO_ROOT/runs/sweep-logs/" "s3://$S3_BUCKET/runs/$LEG/sweep-logs/"
@@ -181,6 +188,8 @@ case "$MODE" in
     [ -n "${LEG:-}" ]     || die "--mode run requires LEG (weka|lustre)"
     [ -d "$RUN_DIR" ]     || die "run dir not found: $RUN_DIR"
     do_sync archive "$RUN_DIR/raw/" "s3://$S3_BUCKET/runs/$LEG/$(basename "${RUN_DIR%/}")/raw/"
+    do_sync archive "$RUN_DIR" "s3://$S3_BUCKET/runs/$LEG/$(basename "${RUN_DIR%/}")/" \
+      --exclude '*' --include 'cmd.log' --include 'workload-*.csv'
     ;;
 
   datasets)
