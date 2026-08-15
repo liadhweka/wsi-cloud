@@ -361,8 +361,7 @@ def worker_cucim(args):
         locs = [(int(coords[i, 0]), int(coords[i, 1])) for i in picks]
         # If sort_batches: sort tile coords by (y_tile_idx, x_tile_idx) so cuCIM's
         # nvjpeg_processor sees a tight max_offset-min_offset span per call. This is
-        # the 6× speedup discovered in the 2026-05-15 follow-up investigation —
-        # preserves random sampling across batches while exploiting within-batch locality.
+        # a ~6× speedup — preserves random sampling across batches while exploiting within-batch locality.
         if sort_batches:
             locs.sort(key=lambda p: (p[1] // patch_size, p[0] // patch_size))
 
@@ -431,7 +430,7 @@ def main():
     ap.add_argument("--sort-batches", action="store_true",
                     help="cuCIM-only: sort tile coords by (y_tile_idx, x_tile_idx) within each batch. "
                          "Empirically delivers ~6× speedup vs unsorted by keeping nvjpeg_processor's "
-                         "max_offset-min_offset span tight per call. Discovered 2026-05-15.")
+                         "max_offset-min_offset span tight per call.")
     args = ap.parse_args()
 
     print(f"[reader] backend={args.backend}", flush=True)

@@ -38,8 +38,8 @@ ceiling.** Do not tune blind.
 - `gdscheck -p` shows: **GDS 1.17.x / nvidia_fs 2.28**, `WekaFS : nvidia_peermem`,
   `Userspace RDMA : Supported`, `Mellanox PeerDirect : Enabled`, rdma library Loaded,
   `rdma_device_status Up`. (gdscheck at `/usr/local/cuda-12.6/gds/tools/gdscheck`.)
-- `LD_PRELOAD=/usr/local/cuda-13.2/targets/x86_64-linux/lib/libcufile.so.1.17.0` present
-  (must match the kernel `nvidia_fs 2.28`).
+- `LD_PRELOAD=$LIBCUFILE_PRELOAD` present and the file it names exists
+  (must version-match the loaded `nvidia_fs` kernel module).
 - conda env `wsi-cucim-2604` imports `kvikio`/`cupy` with `CONDA_PREFIX` exported.
 - `/dev/shm` is mode 1777 (see the env-check note — unrelated to GDS but gates the readers' multiprocessing).
 

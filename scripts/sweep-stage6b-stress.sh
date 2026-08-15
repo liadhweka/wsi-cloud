@@ -108,7 +108,7 @@ run_cell() {
 prep() {
   echo "=== Stage 6.B.1 — Generate standard synthetic corpus suite ==="
   echo "Corpora: {10K×50MB×fp32, 10K×50MB×fp16, 100K×50MB×fp32, 30K×{5,10,50,200}MB×fp32}"
-  echo "Total disk: ~13.75 TB; ~1.5 hr generation time. (200 MB tier restored 2026-05-25.)"
+  echo "Total disk: ~13.75 TB; ~1.5 hr generation time."
 
   local cell_name="generate-synthetic-corpora-standard"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
@@ -182,7 +182,7 @@ b2b_production() {
 }
 
 b2c_file_size() {
-  echo "=== Stage 6.B.2.c — File-size sensitivity (4 cells; 200 MB tier added 2026-05-25) ==="
+  echo "=== Stage 6.B.2.c — File-size sensitivity (4 cells) ==="
   for sz in 5 10 50 200; do
     local corpus="syn-N30000-sz${sz}MB-fp32"
     run_cell "$corpus" 64 random 600 300 || echo "  (cell failed; continuing)"

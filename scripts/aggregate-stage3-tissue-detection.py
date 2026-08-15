@@ -44,9 +44,10 @@ def _active_window_mean(seq):
     """Idle-robust mean: trim leading/trailing samples below 5% of peak, then
     average the contiguous active span (internal gaps kept). Immune to a
     storage-idle setup / model-load head or teardown tail inside the recording
-    window diluting a throughput headline. Added per the Tier-1 recording audit
-    (2026-07); replaces the old last-80%-chronological sustained_mean, whose
-    value is preserved as sustained_mean_last80."""
+    window diluting a throughput headline. The plain
+    last-80%-chronological mean is emitted alongside as sustained_mean_last80;
+    it dilutes when the workload finishes early inside the window, which is
+    why the active-window mean is the headline."""
     seq = list(seq)
     if not seq:
         return None

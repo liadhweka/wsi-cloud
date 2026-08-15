@@ -20,7 +20,7 @@
 #   here — a wallclock estimate from another environment would be fiction.
 #
 # WHY a new file (vs editing the single-model orchestrator):
-#   The single-model file was smoke-validated 2026-05-21 and is correct for
+#   The single-model file is validated and correct for
 #   the smoke + the future "one-off rerun a single model" workflow. New
 #   surface area, new file. Conversion logic is duplicated; if a conversion
 #   bug surfaces in one, fix both.

@@ -97,8 +97,8 @@ elif [[ "$TIER" == "tier4" ]]; then
   # Block H: cuCIM at extreme bs (at peak N=64 nw=16). Tests if bs scaling continues past 64.
   for BS in 128 256; do CUCIM_CELLS+=("64:16:$BS"); done
 elif [[ "$TIER" == "tier5" ]]; then
-  # Tier 5 (2026-05-15): re-measure key cuCIM CPU configs WITH --sort-batches optimization.
-  # Discovered in 2026-05-15 follow-up: sorting tile coords by tile-index within each
+  # Tier 5: re-measure key cuCIM CPU configs WITH --sort-batches optimization —
+  # sorting tile coords by tile-index within each
   # read_region batch delivers measurable speedup (1.4× at bs=64 from A/B test).
   OPENSLIDE_CELLS=()
   CUCIM_CELLS=()

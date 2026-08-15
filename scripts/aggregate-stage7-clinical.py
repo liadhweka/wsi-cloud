@@ -123,7 +123,7 @@ def _active_window_mean(seq):
     """Idle-robust mean: trim leading/trailing samples below 5% of peak, then
     average the contiguous active span (internal gaps kept). Immune to a
     storage-idle setup / model-load head or teardown tail inside the recording
-    window diluting a throughput headline (Tier-1 recording audit, 2026-07)."""
+    window diluting a throughput headline."""
     seq = list(seq)
     if not seq:
         return None
@@ -163,8 +163,7 @@ def weka_per_sec_sum(run_dir: Path, col: str, parser=_bps_or_zero):
 def rdma_per_sec_diff(run_dir: Path, device: str, counter: str):
     """Cumulative-counter diff between adjacent timestamps -> per-second bytes/s rate.
 
-    rdma-counters.csv (wide-format, per the actual recorder schema verified
-    2026-05-27):
+    rdma-counters.csv (wide-format, per the recorder's actual schema):
       timestamp,ibdev,xmit_bytes,rcv_bytes,xmit_packets,rcv_packets,xmit_wait,xmit_discards
     where xmit_bytes/rcv_bytes are cumulative bytes since boot (already in
     BYTES — recorder normalizes; no IB-spec 4-byte-chunk multiplier needed).

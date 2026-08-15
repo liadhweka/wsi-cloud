@@ -30,7 +30,7 @@
 #
 # Time-bounding: each workload polls a per-cell deadline = t0 + ramp + runtime
 # and exits cleanly (sends SIGTERM to its pgid via setsid). Awk %.6f for epoch
-# arithmetic (per the 2026-05-25 bug fix in 6.C — default %.6g emits
+# arithmetic (default %.6g emits
 # scientific notation that breaks bash lex compare).
 #
 # Usage (typically invoked by sweep-stage7-clinical.sh):
@@ -171,7 +171,7 @@ workload_inference() {
   # workers wait at --start-barrier-file before entering their slide loop, so
   # the deadline clock starts AFTER all models are loaded. This matters mostly
   # for short cells (smoke); for production 25-min Tier 2 cells the startup is
-  # noise. Fix from 2026-05-26 smoke iter 1 (cell #2 timed out during model load).
+  # noise — a cell can otherwise time out during model load.
   local proc_pids=()
   for ((i=0; i<N_CONCURRENT; i++)); do
     local gpu; gpu=$(gpu_for_proc "$i" "$N_CONCURRENT")

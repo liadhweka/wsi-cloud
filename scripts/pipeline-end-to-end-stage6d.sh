@@ -103,8 +103,8 @@ EMBED_DIM=1280
 [ "$MODEL" = "uni2-h" ] && EMBED_DIM=1536
 [ "$MODEL" = "gigapath" ] && EMBED_DIM=1536
 
-# UNI2-h conditional-use tag — 2026-05-19 plan: HF access granted, Mahmood Lab
-# publication permission pending. Per-cell metadata note marks the run dir clearly.
+# UNI2-h conditional-use tag — internal use is unrestricted; the tag is what gets
+# filtered before anything is externalised. Per-cell metadata marks the run dir clearly.
 PENDING_APPROVAL_TAG=""
 [ "$MODEL" = "uni2-h" ] && PENDING_APPROVAL_TAG="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
 

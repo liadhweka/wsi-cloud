@@ -14,8 +14,7 @@ DESIGN — single in-process reader per DDP rank, NOT PyTorch DataLoader workers
   add coordination overhead — for no measurable supply-side gain.
 
   This reuses the validated Stage 4.C / 4.B reader code directly, making the
-  storage-path measurement as direct as possible. Per Stage-5-Training.md
-  decision Q4 (locked 2026-05-16).
+  storage-path measurement as direct as possible. Recorded in Stage-5-Training.md.
 
 WHY 4096-byte aligned reads:
   cuFile silently falls back to a broken POSIX path on unaligned offsets, which

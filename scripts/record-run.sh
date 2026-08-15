@@ -89,9 +89,8 @@ REPO_ROOT="$(cd "$RUNS_ROOT/.." && pwd)"
 # If the caller pre-computed the run-dir (e.g., to pass paths into the wrapped
 # command's args before invoking us), respect it via $RECORD_RUN_DIR. Otherwise
 # we pick our own timestamp. Avoids a race where caller and wrapper each call
-# `date` and disagree by a second — diagnosed 2026-05-21 after Stage 6.A
-# Tier 2 GigaPath cuCIM cell failed with the extractor writing CSVs to a
-# nonexistent dir (run_cell precomputed 154713, record-run picked 154714).
+# `date` and disagree by a second — which leaves the wrapped command writing
+# into a run dir the wrapper never created.
 if [[ -n "${RECORD_RUN_DIR:-}" ]]; then
   RUN_DIR="$RECORD_RUN_DIR"
   TS=$(basename "$RUN_DIR" | grep -oE '^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' || date -u +%Y-%m-%d-%H%M%S)

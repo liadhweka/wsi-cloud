@@ -40,7 +40,7 @@ WHY single-process per inference job (mirrors Stage 7 roadmap Q8):
   slide chunks model the real "many users, distinct slides" workload. Storage
   pressure comes from the N processes competing for reads on the filesystem under test.
 
-WHY `--inference-batch-size` is a CLI knob (Q8 revision 2026-05-26):
+WHY `--inference-batch-size` is a CLI knob:
   Virchow2 forward at bs=256 fp16 holds ~21 GB per process (1.3 GB weights +
   ~20 GB activations through ViT-H 32 layers). At N≥16 concurrent processes
   per GPU this OOMs. Orchestrator scales bs down with N (N=1/4 → 256,

@@ -12,8 +12,8 @@ CLAM-MIL architecture (per Lu et al. 2021 + Mahmood Lab CLAM reference impl):
   - weighted sum across tiles → slide-level feature [D]
   - linear classifier → 2-way logits (binary classification)
 
-CANONICAL CLAM CONVENTION (architecture revised 2026-05-25 after first 6.B.3 sweep
-OOM'd at bs>=16): batch_size=1, one slide per forward step, no padding.
+CANONICAL CLAM CONVENTION (a padded-batch design OOMs at bs>=16):
+batch_size=1, one slide per forward step, no padding.
 `collate_MIL` returns the single slide's [N, D] feature tensor unchanged. Model
 forward takes h:[N, D] (2D, single-bag) and produces logits:[1, n_classes].
 This matches `dataset_modules/dataset_generic.py` + `utils/utils.py` (`collate_MIL`)

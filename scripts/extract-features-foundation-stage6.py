@@ -13,8 +13,8 @@ Pluggable along two axes (mirrors Stage 5's design):
   --model virchow2              : Paige Virchow2 (ViT-H/14, 1280-dim, Apache 2.0)
   --model gigapath              : MSR GigaPath tile encoder (ViT-G/14, 1536-dim, Apache 2.0)
   --model uni2-h                : Mahmood Lab UNI2-h (ViT-H/14, 1536-dim, CC-BY-NC-ND 4.0)
-                                  Use ONLY if license decision resolves; see Stage 6 roadmap
-                                  decision-log Q1-license-caveat entry (2026-05-19).
+                                  Internal use unrestricted; cells are tagged PENDING-APPROVAL
+                                  and stay internal-only until approval (see Stage 6 roadmap).
 
 DESIGN
 ======
@@ -537,9 +537,8 @@ class CuCIMSlideReader:
                     arr = np.asarray(batch)  # expect (n_take, 256, 256, 3) uint8 on host
                     # Defensive: cuCIM batched read_region collapses the leading
                     # batch dim when n_take==1 (returns (H,W,C) instead of
-                    # (1,H,W,C)). Diagnosed 2026-05-20 — Stage 6.A Tier 1 cuCIM
-                    # cells crashed at the slide-tail edge with a mixed-ndim
-                    # np.concatenate. Normalize to 4D unconditionally.
+                    # (1,H,W,C)) — otherwise a mixed-ndim np.concatenate crash
+                    # at the slide-tail edge. Normalize to 4D unconditionally.
                     if arr.ndim == 3:
                         arr = arr[None, ...]
                     buffered_chunks.append(arr)
@@ -614,7 +613,6 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
         # ranks reach it at different wallclocks because slide-tile-count
         # variance is high (CAM16 especially: tumor_NNN small, normal_NNN full).
         # 10 min isn't enough for a 30-min cell with one slow rank. Bump to 1 hr.
-        # Diagnosed 2026-05-21 — Stage 6.A Tier 3 cells hung on AllReduce timeout.
         dist.init_process_group(backend="nccl", rank=rank, world_size=world_size,
                                 init_method=f"tcp://127.0.0.1:{master_port}",
                                 timeout=timedelta(hours=1))

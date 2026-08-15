@@ -15,10 +15,11 @@
 # Total: ~18 cells, ~10-12 hr execution wallclock (endurance dominates).
 #
 # Per-cell:
-#   - RECORD_RUN_DIR pre-computed to avoid timestamp-race (per the 6.A bug fix pattern).
+#   - RECORD_RUN_DIR pre-computed to avoid the caller/wrapper timestamp race (see record-run.sh).
 #   - LD_PRELOAD scoped per-cell (kvikIO cells set the system libcufile; cuCIM unset).
 #   - UNI2-h cells auto-tagged [PENDING-APPROVAL-DO-NOT-EXTERNALIZE] (per uni2h memory).
-#   - Per-process inference batch size scales DOWN as N rises (Q8 revision 2026-05-26).
+#   - Per-process inference batch size scales DOWN as N rises (VRAM headroom;
+#     see inference-per-slide-stage7.py).
 set -uo pipefail
 
 # Repo root derived from this script's own location (scripts -> runs -> root),
@@ -187,22 +188,18 @@ smoke() {
   run_single_inference_cell "smoke-cucim-virchow2-warm" \
     cucim_batched_cpu virchow2 warm tiff5x 1 \
     "$BRCA_RAWTIFF" "$BRCA_SVS" "$BRCA_COORDS" "$BRCA_SUBSET_MANIFEST" 2
-  # Mini orchestrator smoke. Runtime bumped to 240s steady (was 60s) after
-  # smoke iter 4 (2026-05-26) found that Virchow2 ViT-H/14 forward at bs=256
-  # over a 37K-tile slide takes ~105 sec single-process — even at N=2 with
-  # NUMA-0 GPU pinning each process can't finish slide 0 in 90s. With 240s
-  # steady + 30s ramp = 270s, each process completes 2-3 slides.
-  # Soft-methodology finding: at single-process scale, kvikIO Virchow2 is
-  # COMPUTE-BOUND not storage-bound. See Stage 7 roadmap change log 2026-05-26
-  # smoke iter 4 entry.
+  # Mini orchestrator smoke, 240s steady: a Virchow2 ViT-H/14 forward at bs=256
+  # over a ~37K-tile slide can take minutes single-process, so a short steady
+  # window can't finish even slide 0. With 240s steady + 30s ramp, each process
+  # completes a few slides. At single-process scale this cell tends to be
+  # COMPUTE-bound, not storage-bound — never read the smoke as a storage number.
   run_orchestrator_cell "smoke-concurrent-N2" "inference" 2 30 240 ""
 }
 
 tier1_baselines() {
   echo "=== Tier 7.1 — Per-slide inference latency baselines (6 cells, 50 slides each) ==="
-  # 6 cells. Sample size revision 2026-05-28: 20 → 50 slides per cell to tighten
-  # p95/p99 distributions (with only 20 slides, percentile estimates were driven
-  # by 1-2 outlier slides). Plus smoother heatmap rendering (bilinear-interp)
+  # 6 cells, 50 slides each: with a smaller sample (e.g. 20), p95/p99 estimates
+  # are driven by 1-2 outlier slides. Plus smoother heatmap rendering (bilinear-interp)
   # gives production-realistic per-slide hm_write_ms.
   run_single_inference_cell "7.1.a-cucim-virchow2-cold"  cucim_batched_cpu virchow2 cold tiff5x 50 \
     "$BRCA_RAWTIFF" "$BRCA_SVS" "$BRCA_COORDS" "$BRCA_SUBSET_MANIFEST" 2
@@ -222,15 +219,14 @@ tier2_concurrent() {
   echo "=== Tier 7.2 — Latency under concurrent inference load (4 cells) ==="
   # Virchow2 kvikIO warm-cache; per-process bs scales DOWN with N per Q8.
   # Each cell: 5 min ramp + 25 min steady = 30 min.
-  # MANIFEST REVISION (2026-05-27): Tier 7.2 uses the FULL BRCA manifest
+  # Tier 7.2 uses the FULL BRCA manifest
   # (1073 slides — the uniform 40×-base cohort, STAGES.md D5; not the 1131-slide
   # pre-mpp-filter set, which is a different file in the same dir) rather than
   # the 50-slide subset used by 7.1. Reason: at
   # N=64 with the 50-slide subset, modulo partition leaves 14 of 64 procs
   # with 0 slides (idle), making N=64 throughput numbers asymmetric vs
   # N=1/4/16. Full manifest gives every proc at N=64 ~17 unique slides;
-  # also tightens p50/p95/p99 distribution by enlarging the sample. See
-  # Stage 7 roadmap change log 2026-05-27 entry.
+  # also tightens p50/p95/p99 distribution by enlarging the sample.
   local common_env="INFER_BACKEND=kvikio INFER_MODEL=virchow2 INFER_CACHE_POLICY=warm INFER_HEATMAP_FORMAT=tiff5x \
 INFER_MANIFEST=$REPO/scripts/manifests/tcga-brca-full40x-stage4a-format.tsv"
   run_orchestrator_cell "7.2-concurrent-virchow2-kvikio-warm-N1"  "inference" 1  300 1500 "$common_env"

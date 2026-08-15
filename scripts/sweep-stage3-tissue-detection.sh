@@ -140,8 +140,8 @@ for ds_entry in "${DATASETS[@]}"; do
   #     In stock CLAM: patch_size=512 step_size=512 at patch_level 0, so coords
   #     step by 512 in level-0 (40×) pixel space (footprint_level0 = 512 for both
   #     datasets — the divisor the raw-TIFF coord→tile mapping uses).
-  # Tiles are 20× / 256px uniform across all 3 foundation models (1b decision
-  # 2026-06-17): Virchow2's native 224 is reached by the model's own resize.
+  # Tiles are 20× / 256px uniform across all 3 foundation models: Virchow2's
+  # native 224 is reached by the model's own resize.
   case "$dataset" in
     camelyon16) PATCH_ARGS="--patch_level 1 --patch_size 256 --step_size 256" ;;
     tcga-brca)  PATCH_ARGS="--patch_level 0 --patch_size 512 --step_size 512" ;;

@@ -190,9 +190,8 @@ workload_extract() {
   while [ ! -f "$BARRIER" ]; do sleep 0.1; done
   local t0; t0=$(date +%s.%N)
 
-  # Time-bounded via kill-on-deadline (added 2026-05-25 after 6.C smoke exposed
-  # the extractor ran to manifest exhaustion ignoring RUNTIME — see Stage-6-
-  # Feature-Extraction.md change log for full rationale). Mirrors the ingest
+  # Time-bounded via kill-on-deadline (the extractor otherwise runs to manifest
+  # exhaustion, ignoring RUNTIME). Mirrors the ingest
   # pattern below. Uses setsid so the mp.spawn child process group can be killed
   # cleanly via SIGTERM to -$extract_pid (kills all DDP rank processes + master).
   local manifest="$REPO/scripts/manifests/tcga-brca-stage4a-subset.tsv"
@@ -266,7 +265,7 @@ workload_mil() {
   while [ ! -f "$BARRIER" ]; do sleep 0.1; done
 
   # MIL uses GPU 0 (NUMA-1) to stay out of the extract workload's GPUs
-  # Canonical CLAM bs=1 (revised 2026-05-25 — see Stage-6-Feature-Extraction.md Q10);
+  # Canonical CLAM bs=1 (see Stage-6-Feature-Extraction.md);
   # num_workers=16 is the saturation knee from 6.B.3 (peak ~8.6-8.8 slides/sec).
   CUDA_VISIBLE_DEVICES=0 \
   CONDA_PREFIX="$CONDA_ENV" \

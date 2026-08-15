@@ -125,7 +125,7 @@ for bs in "${BS_LIST[@]}"; do
     # record-run.sh via `bash -c`, so all primary sources record across the
     # combined window.
     #
-    # IMPORTANT (lesson learned 2026-05-07 mid-1.6-sweep): do NOT use
+    # IMPORTANT: do NOT use
     # `pkill -f "fpsync -v -n $INGEST_N -d $SHDIR"` to clean up — that pattern
     # also matches the PARENT bash's argv (because the bash -c string contains
     # the same literal substring), causing the cleanup to SIGTERM its own

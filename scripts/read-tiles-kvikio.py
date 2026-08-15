@@ -29,8 +29,7 @@ WHY two modes under one script:
 WHY 4096-byte aligned reads (NVIDIA's _get_aligned_read_props helper):
   - cuFile silently falls back to a broken POSIX path on unaligned offsets
     (errno EBADF), which surfaces as "Operation not permitted" at the Python
-    layer. NVIDIA's reference code handles this; we must too. See Stage 4.C
-    decision log entry 2026-05-16.
+    layer. NVIDIA's reference code handles this; we must too.
 
 WHY the system libcufile via LD_PRELOAD:
   - The conda env bundles its own libcufile, which is not matched to the

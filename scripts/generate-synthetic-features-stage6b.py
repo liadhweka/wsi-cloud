@@ -93,9 +93,9 @@ DTYPE_TORCH = {"fp32": torch.float32, "fp16": torch.float16}
 #   Saturation: N=10K × sz=50MB × {fp32, fp16} = 0.5 TB + 0.25 TB = 0.75 TB
 #   Production: N=100K × sz=50MB × fp32 only    = 5 TB
 #   File-size sensitivity: N=30K × sz∈{5,10,50} MB × fp32 = ~2 TB
-# Total disk budget: ~13.75 TB (under 21 TB free post-Stage-6.A; revised 2026-05-25)
-# 200 MB tier restored 2026-05-25 (Q3 revision): real Stage 6.A features at full
-# BRCA cluster around 150-250 MB per slide for ViT-H/G foundation models.
+# Total disk budget: ~13.75 TB — confirm free capacity on the target filesystem
+# before generating. 200 MB tier: real Stage 6.A features at full BRCA cluster
+# around 150-250 MB per slide for ViT-H/G foundation models.
 STANDARD_CORPORA = [
     # Saturation tier (the main concurrency × pattern sweep target)
     {"count": 10000, "file_size_mb": 50, "dtype": "fp32"},
@@ -103,7 +103,7 @@ STANDARD_CORPORA = [
     # Production-scale (the 100K-file headline cell)
     {"count": 100000, "file_size_mb": 50, "dtype": "fp32"},
     # File-size sensitivity (fixed N=30K, vary file size)
-    # 200 MB tier added 2026-05-25 to match real Stage 6.A feature-size distribution.
+    # 200 MB tier matches the real Stage 6.A feature-size distribution.
     {"count": 30000, "file_size_mb": 5,   "dtype": "fp32"},
     {"count": 30000, "file_size_mb": 10,  "dtype": "fp32"},
     {"count": 30000, "file_size_mb": 50,  "dtype": "fp32"},

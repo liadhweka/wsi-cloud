@@ -6,7 +6,7 @@
 > script** — it is the single source of truth for names, and the reason `$FS_MOUNT` exists.
 >
 > The remaining per-filesystem adapter and environment-value work is listed under **Deferred work** below.
-> Retargeting itself is complete — see the two "Done" tables.
+> Retargeting itself is complete.
 
 For *what* each stage is see `STAGES.md`; for how to run a cell `RUNBOOK.md`; for where things live
 `FILESYSTEM-MAP.md`; for the rules `../CLAUDE.md`.
@@ -29,46 +29,7 @@ cannot be lost by living only here.
 None of this could be done meaningfully before the environment exists. All of it is a **hard prerequisite**
 for a valid cell.
 
-### ✅ Done before leaving the build machine
-
-These were mechanical rather than environment-dependent, so they were completed here to shorten the cloud
-session's critical path — and because each has a **silent** failure mode that a guard can convert into a loud
-one.
-
-| # | Work | What was done | Verification |
-|---|---|---|---|
-| **D-1** | Mount retargeting to `$FS_MOUNT` | `/mnt/liad` → `${FS_MOUNT}` in **25 shell files**; the **7 real Python argparse defaults** across **4 files** rewritten to derive from `FS_MOUNT`, each with a fail-loud guard | `grep`: **0 files** retain the old mount path; the 4 Python files exit with `FATAL: FS_MOUNT is unset` |
-| **D-2** | Repo-root retargeting | The hardcoded `REPO=` line in **28 shell files** replaced with derivation from the script's own location; 14 further files cleaned of other absolute paths | `grep`: **0 files** retain the old repo path |
-| **D-3** | Filesystem labelling | `record-run.sh` **requires** the filesystem, takes `--fs {weka\|lustre}` and **falls back to `$LEG`** when the flag is absent (so the argument-free sweep drivers work), puts it in the run-dir name and as a first-class `metadata.json` field, and **cross-validates it against `FS_MOUNT`** | All paths tested: neither set, invalid, `--fs` vs `FS_MOUNT` mismatch, `LEG` vs `FS_MOUNT` mismatch, agreeing — each exits 2 with the right message |
-| **D-12** | Environment contract | `env-contract.py` — `write` / `verify` / `show`, with the **held-constant vs expected-to-differ field split** that makes verification meaningful | Round-tripped: 0 violations, unrecorded fields correctly reported as *unverifiable* and failing |
-| **D-14** | Leg orchestrator | `run-leg.sh` — 22 steps in dependency order, with all five unattended guards | `--list`, `--dry-run`, and every refusal path tested (incl. the **D16** transport gate: unset, wrong-transport, waived, correct) |
-
-### ✅ Done during the pre-deployment audit
-
-Found by auditing the above against the actual code. Each was a case of the mechanism being right in one
-place and missing in others — the class of defect that produces a plausible-looking wrong number.
-
-| # | Work | What was wrong | What was done |
-|---|---|---|---|
-| **A-1** | Run-dir names lacked the filesystem segment | **9 drivers** pre-computed run-dir names as `<ts>-s<stage>-<name>`, with no `-<leg>-`. `sync-to-s3.sh` and `teardown-preflight.sh` both glob `runs/*-$LEG-s*/`, so **every cell from those sweeps would never reach S3 and the teardown gate would still say GO** | `${LEG}` inserted into all **21** pre-computed names; a `: "${LEG:?…}"` guard added to all 9 drivers |
-| **A-2** | Pre-computed run dir never handed to the wrapper | `sweep-stage4c-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6c.sh` and `sweep-stage6a-extract.sh`'s `smoke()` interpolated `$run_dir/…` into the child's arguments but never set `RECORD_RUN_DIR` — so the child `mkdir -p`'d an **orphan directory** and wrote the cell's app-level primary source there, outside the run dir (cross-cutting pattern **#4**, applied in 6 places and missing in 4) | `RECORD_RUN_DIR="$run_dir"` added to all 4; invariant now checked mechanically |
-| **A-3** | `0_README.md` was always empty | `record-run.sh` referenced `${REPO}`, which D-2 removed. Under `set -u` the heredoc redirection failed, so the file was created at **0 bytes on every run** | Derives `REPO_ROOT` from its own location; title and `INDEX.md` line now carry the `-<fs>-` segment and match the dir exactly |
-| **A-4** | Conda interpreter path hardcoded | `CONDA_ENV=/data/local-nvme/conda-envs/wsi-cucim-2604` literal in **16 drivers** — documented nowhere, and it happens to match the *planned* value, so it would work until it silently didn't | New `CONDA_ENVS_DIR` (Table 1) + fail-loud derivation from `$CONDA_ENV_MAIN` / `$CONDA_ENV_ALT` |
-| **A-5** | libcufile path hardcoded to another machine | `LIBCUFILE_117=/usr/local/cuda-13.2/…/libcufile.so.1.17.0` in **8 files**, and **5 of them never checked the file exists** — a missing preload is a silent no-op, so the GPU-direct cells would run on the conda-bundled libcufile and still report numbers | All 8 read the documented `$LIBCUFILE_PRELOAD`, refuse if unset, and verify the file exists |
-| **A-6** | Local-scratch paths hardcoded | `/data/local-nvme/...` literals for the fpsync source and the 4.B pool cache in 5 drivers | Derived from `$SCRATCH_DIR`, fail-loud |
-| **A-7** | Prior-environment results and narrative inside recorded notes | Cell `--note` strings — written into every run's `metadata.json` and `0_README.md` — carried measured figures from another environment, a previous host's NUMA/NIC map, WEKA-only source lists, and pre-assigned conclusions (one asserted an outcome outright). A `../PROJECT-THESIS.md` §10 framing violation embedded in the results themselves | All notes rewritten leg-agnostic, with the methodology *why* kept and every prior number and expectation removed |
-| **A-8** | Contract never reached S3 | `sync-to-s3.sh` had no `env-contracts/` path, yet `teardown-preflight.sh` NO-GOes without it and Leg B fetches Leg A's contract from there | Added, with archive (never-delete) semantics |
-| **A-9** | Duplicated held-constant field list had drifted | `teardown-preflight.sh` checked **9** fields against the contract's **17** — it would call a contract "complete" that `env-contract.py write` had itself rejected | Imports `MUST_MATCH` from `env-contract.py`; one source of truth |
-| **A-10** | `runs/.leg-state/` markers had no durable home | `run-leg.sh`'s per-step done-markers are the only thing that stops a resumed leg re-running completed steps, and `teardown-preflight.sh` NO-GOes on a dirty tree — so they were neither committed nor synced, and died with the instance. A rebuilt `run-leg.sh` would silently redo hours of sweeps into duplicate run dirs while the rebuild doc claimed it "picks up where it stopped" | **git-tracked** — git is authoritative for small text (`../CLAUDE.md`), and teardown step 5's `git add -A` captures them at exactly the point they need capturing |
-| **A-11** | `run-leg.sh` could not execute 7 of its steps | It invoked each driver bare, but seven dispatch on `$1` and exit 2 with a usage message when given none — the chain would have aborted at step 4.C. `--from`/`--only` were also unvalidated, so a typo silently skipped every step and exited **0** | Each step carries its target with the choice justified inline; the runner word-splits it; both selectors validated against the step-id list. **A missing step surfaced in the process: `sweep-stage6a-extract.sh tier3` existed but nothing ran it**, so 6.A Tier 3 was absent from every leg — now step `6.A.3`. 22 steps |
-| **A-12** | Stage-7 aggregator matched zero cells | Its regex anchored `-s7-` to the timestamp and its glob missed `-s7.N-`. Partly *caused* by `A-1`: it was the only aggregator anchoring on the timestamp, which is why the re-verification pass exists | Stage part unanchored, sub-stage optional, glob widened; 5 naming cases tested |
-| **A-13** | Four smaller confirmed defects | `sweep-stage1-mixed.sh` called `fio` at `/usr/local/bin/fio` while all four siblings use bare `fio` and apt installs `/usr/bin/fio`; `inference-per-slide-stage7.py` silently defaulted to GPU 2 (an index encoding a previous machine's NIC adjacency); `sweep-stage6b-stress.sh` understated `b2c` as 3 cells and `all` as 24 (really 4 and 25); both Tier-2 orchestrators justified `CHUNK_SIZE` with another environment's capacity | Path made bare; the GPU pin now **refuses** rather than defaulting (all four callers pin it explicitly); counts corrected; capacity figures removed and re-derivation tracked as open item **9d** — the *value* still needs the real capacity |
-
-**The safety property common to all of them:** an unset or inconsistent mount now **aborts loudly** instead of
-defaulting. That converts this project's worst failure mode — *silently measures the wrong filesystem while
-the number still looks correct* — into *refuses to run*.
-
-### ⏳ Still deferred — genuinely needs the real environment
+### ⏳ Deferred — genuinely needs the real environment
 
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
@@ -110,7 +71,10 @@ the number still looks correct* — into *refuses to run*.
 
 ## Cross-cutting patterns (learned the hard way — preserve these)
 
-These recur across scripts and each one exists because its absence caused a real failure.
+These recur across scripts and each one exists because its absence caused a real failure. The safety
+property they share: an unset or inconsistent input **aborts loudly** instead of defaulting — the project's
+worst failure mode, *silently measures the wrong filesystem while the number still looks correct*, is
+converted into *refuses to run*.
 
 1. **Per-timestamp client summing, not a pre-aggregated mean.** An aggregator that reads a pre-aggregated
    filesystem-side metric can under-report by ~100×, because that metric averages across **all** rows in the

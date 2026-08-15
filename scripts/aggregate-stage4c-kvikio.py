@@ -55,7 +55,7 @@ def _active_window_mean(seq):
     """Idle-robust mean: trim leading/trailing samples below 5% of peak, then
     average the contiguous active span (internal gaps kept). Immune to a
     storage-idle setup / model-load head or teardown tail inside the recording
-    window diluting a throughput headline (Tier-1 recording audit, 2026-07)."""
+    window diluting a throughput headline."""
     seq = list(seq)
     if not seq:
         return None

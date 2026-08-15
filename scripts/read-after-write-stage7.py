@@ -65,7 +65,7 @@ def writer_process(slide_id: str, out_path: Path, bytes_target: int,
     atomic-rename to out_path. Reader sees out_path appear only AFTER the
     rename — establishes a proper happens-before for the consistency check.
 
-    Pre-rename-fix bug (2026-05-27): tifffile.imwrite() opens the final file
+    WHY not write the final path directly: tifffile.imwrite() opens the file
     and writes incrementally; reader's Path.exists() returned True the moment
     the file was created (size 0), giving negative consistency latencies. The
     .tmp + rename pattern fixes this — out_path doesn't appear at all until

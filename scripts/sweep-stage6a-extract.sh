@@ -210,7 +210,7 @@ run_cell() {
   # makes every non-first benchmark-sweep cell do zero work because the prior
   # cell already wrote .pt files. Tier 1 + Tier 3 are throughput-measurement
   # sweeps; their features are NOT the deliverable (Tier 2 full-BRCA features
-  # are). Wiping between cells gives each cell a cold start. Found 2026-05-20.
+  # are). Wiping between cells gives each cell a cold start.
   local n_pt_before
   n_pt_before=$(find "$features_out" -maxdepth 1 -name '*.pt' 2>/dev/null | wc -l)
   if [ "$n_pt_before" -gt 0 ]; then
@@ -218,9 +218,9 @@ run_cell() {
     find "$features_out" -maxdepth 1 -name '*.pt' -print -delete | wc -l >/dev/null
   fi
 
-  # Prepend PENDING-APPROVAL tag for UNI2-h cells (per 2026-05-19 conditional-use plan:
-  # HF access granted, Mahmood Lab publication permission pending; results tagged
-  # in run-dir metadata so they're easy to filter from any external materials).
+  # Prepend PENDING-APPROVAL tag for UNI2-h cells — internal use is unrestricted;
+  # the tag in run-dir metadata is what gets filtered before anything is
+  # externalised (Mahmood Lab written approval pending; see Stage 6 roadmap).
   local approval_tag=""
   if [ "$model" = "uni2-h" ]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
@@ -272,9 +272,9 @@ run_cell() {
 
 tier1_scaling() {
   echo "=== Stage 6.A Tier 1: scaling sweep on 50-slide subset (3 models) ==="
-  # All three foundation models are first-class as of 2026-05-19. UNI2-h cells
-  # are tagged PENDING-APPROVAL in metadata (see run_cell); HF access granted,
-  # Mahmood Lab written approval awaited before external publication.
+  # All three foundation models are first-class. UNI2-h cells are tagged
+  # PENDING-APPROVAL in metadata (see run_cell) and stay internal-only until
+  # Mahmood Lab written approval lands.
   for model in virchow2 gigapath uni2-h; do
     for n in 1 2 4; do
       local gpus
@@ -298,7 +298,6 @@ tier1_uni2h() {
 
 
 tier1_cucim_scaling_fill() {
-  # Added 2026-05-24 — Stage 6.A Tier 1 cuCIM scaling fill-in (task #15).
   # Completes the cuCIM scaling curve for the foundation models at the 50-slide
   # BRCA subset, so 6.A has a full cuCIM curve to set against the kvikIO one rather
   # than a single comparator point. Runs the low-N cells that the main Tier 1
@@ -361,7 +360,7 @@ run_tier2_kvikio_chunked() {
   # is correct WITHIN the chunked run (so chunk N+1 doesn't redo chunk N's
   # slides). But BEFORE the chunked run, any .pt left over from a prior cuCIM
   # Tier 2 cell for the same model must be wiped so kvikIO actually does work.
-  # See cleanup rationale in run_cell. Found 2026-05-20.
+  # See cleanup rationale in run_cell.
   local n_pt_before
   n_pt_before=$(find "$features_out" -maxdepth 1 -name '*.pt' 2>/dev/null | wc -l)
   if [ "$n_pt_before" -gt 0 ]; then

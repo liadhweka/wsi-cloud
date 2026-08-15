@@ -1,16 +1,15 @@
 #!/usr/bin/env bash
 # Stage 6.B.3 MIL classifier training sweep driver — canonical CLAM bs=1.
 #
-# Architecture revised 2026-05-25 after first sweep attempt OOM'd at the
-# non-canonical [B, max_N, D] padded-batch design. Canonical CLAM uses
+# The non-canonical [B, max_N, D] padded-batch design OOMs at production
+# feature sizes; canonical CLAM uses
 # batch_size=1 with a custom collate that concatenates along the patch dim;
 # the storage-concurrency axis is num_workers (each DataLoader worker
 # prefetches one slide via torch.load). Verified against mahmoodlab/CLAM
 # utils/utils.py (collate_MIL + get_split_loader bs=1) and models/model_clam.py
-# (CLAM_SB.forward([N,D]) single-bag). See Stage-6-Feature-Extraction.md
-# decision log entry 2026-05-25 for full rationale + literature consult.
+# (CLAM_SB.forward([N,D]) single-bag).
 #
-# 3 cells per `runs/Stage-6-Feature-Extraction.md` 6.B.3:
+# 3 cells per `docs/Stage-6-Feature-Extraction.md` 6.B.3:
 #   bs=1 × num_workers ∈ {4, 16, 32}
 # Single-GPU (MIL aggregator is small; multi-GPU DDP unnecessary).
 #

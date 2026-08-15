@@ -124,7 +124,7 @@ echo ""
 # convert-rawtiff-20x.py streams tiles straight to $dst.partial via tifffile —
 # no CWD mmap temp files, so the per-process scratch-dir workaround the old
 # `cucim convert` path needed (its level*.mmap files collided + SIGBUS'd under
-# parallelism, 2026-05-16) is GONE. Per-dataset 20× read params (the SAME
+# parallelism) is GONE. Per-dataset 20× read params (the SAME
 # contract as the readers): CAM16 reads native level 1 @ 256px (no resize);
 # BRCA reads 512px@40× and resizes to 256 (= 20×).
 #

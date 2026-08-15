@@ -46,7 +46,8 @@ run_cell() {
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.C-${cell_name}"
 
   # If the concurrent extract workload uses UNI2-h (via EXTRACT_MODEL env var),
-  # tag the cell as PENDING-APPROVAL — see 2026-05-19 UNI2-h conditional-use plan.
+  # tag the cell as PENDING-APPROVAL — UNI2-h stays internal-only; the tag is
+  # what gets filtered before anything is externalised.
   local approval_tag=""
   [ "${EXTRACT_MODEL:-virchow2}" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   local note="${approval_tag}Stage 6.C concurrent multi-workload cell on fs=${LEG}: workloads={$workloads} extract_model=${EXTRACT_MODEL:-virchow2} ramp=${ramp}s steady=${runtime}s. WHY: concurrent heterogeneous load on one namespace is where storage architectures diverge, and no single-workload cell surfaces it. Retention is measured against THIS leg's own solo baselines re-measured at the same concurrent config, so the cross-leg comparison is of retention percentages, not absolute rates. Per D15, check the core accounting before attributing any interference to the filesystem rather than the host."

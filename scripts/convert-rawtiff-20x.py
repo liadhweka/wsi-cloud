@@ -9,8 +9,8 @@ map to a tile index via coord // 512.
 
 WHY a custom writer instead of `cucim convert`: cucim convert always treats the
 SVS's OpenSlide level 0 (= 40× base) as the output level-0 (it has no --mag /
---level flag — verified against cucim 26.4.0 cli.py + the 2026-06-17 tooling
-research), so it can only emit a 40× raw-TIFF. We need a true 20× artifact:
+--level flag — verified against cucim 26.4.0 cli.py), so it can only emit a
+40× raw-TIFF. We need a true 20× artifact:
 ~4× smaller, ~4× faster downstream, and it is what a 20× GPU-direct customer
 actually stores. The throughput a storage benchmark measures is identical to
 reading the matching level of a 40× file, but the file size / layout / total
