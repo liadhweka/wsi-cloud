@@ -95,6 +95,13 @@ with; *what each configuration cost to complete the same pipeline* is a number.
 Prices are **fetched from the vendor's current pricing, never recalled, and stamped with the date checked** —
 cloud prices change without notice, and a stale price silently rewrites the conclusion.
 
+**The published headline is repriced at publication time, from one snapshot.** Because no cell ever stores a
+computed cost — only prices and the measured wallclock — cost is re-derivable arithmetic. At writing time,
+**one fresh, dated price snapshot is fetched and applied to both legs' recorded wallclocks**
+(`prompts/prompt-reprice-at-publication.md`), so the headline cannot be attacked as "two legs priced on
+different days." The as-run `cost_inputs` are **never overwritten** — they remain per cell as provenance, and
+any drift between as-run and publication pricing is shown, not discovered by a reviewer.
+
 **Run-to-run variance is measured, not assumed away.** Cloud performance drifts — noisy neighbours, network
 weather, allocation luck — and the two legs run days apart on rebuilt hardware, so a cross-leg delta must be
 shown to exceed the noise before it is a finding. Three mechanisms, identical on both legs (STAGES.md

@@ -31,7 +31,10 @@ A pointer cannot go stale in that way; at worst it dangles, which is visible.
   the software input's asymmetry stated per **D7** (FSx software-inclusive; WEKA at the dated public
   Marketplace rate) — alongside the throughput or latency figure it belongs to. It is the figure the buyer
   actually faces, and the only place the provisioning asymmetry stops being a caveat and becomes arithmetic.
-  Which basis leads the writeup is a writing-time choice made with both present.
+  Which basis leads the writeup is a writing-time choice made with both present. **Headline costs come from
+  the publication-time reprice** (`../PROJECT-THESIS.md` §4; `../prompts/prompt-reprice-at-publication.md`):
+  one fresh dated snapshot applied to both legs' recorded wallclocks, with the as-run prices retained per
+  cell as provenance.
 - **Which axis was decisive, as a finding.** No metric was designated primary in advance, so what turned out
   to discriminate between the two architectures is itself a result worth stating.
 - **The caveats that change how the number is read** — cache state achieved, the I/O path proven, whether the
