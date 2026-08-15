@@ -123,15 +123,15 @@ These change what the numbers mean, so resolving them after cells have run means
     possible. A leg-conditional requirement would catch it but changes *when* the gate blocks: it would fail
     before the filesystem is provisioned. *Recommend* a separate `--check-ready` mode meaning "ready to
     measure", distinct from "configured" — the two questions are genuinely different.
-18. **Cost + ceiling inputs — WRITTEN into env.sh 2026-08-15 (ratified). Two remainders:** (a) the software
-    basis is **raw NVMe** ($1,000/TB/12mo × 40 TB = 4.566/hr) per the ratification; **the human checks the
-    raw-vs-usable metering basis with WEKA Sales** — the usable-capacity alternative (22.49 TB → 2.567/hr)
-    is recorded in env.sh's comment; prices are backfillable as long as methodology/sources/dates stay
-    recorded (all are). (b) **Re-derive `FS_USD_PER_HR`, `SOFTWARE_USD_PER_HR`, `WEKA_BACKEND_RAM_TOTAL`,
-    `WEKA_BACKEND_TYPE` and capacity after the ratified backend switch** (item 22): 8 × i8ge.6xlarge →
-    infra 8 × 3.3516 = **26.8128/hr**, raw NVMe 120 TB → software **13.699/hr** (fewer-drives-per-host, if
-    the terraform module supports it, shrinks this). Leg B's documented per-client caps (2026-08-15,
-    performance.html): EFA 700 Gbps, EFA+GDS 1200 Gbps — set at Leg-B spin-up.
+18. **Cost + ceiling inputs — env.sh carries the RATIFIED 6xlarge-target values (written 2026-08-15,
+    prices re-confirmed same day): instance 18.52234, FS 26.8128 (8 × i8ge.6xlarge @ 3.3516), software
+    13.699 (raw 120 TB @ 0.1141553/TB-hr), ceiling 200 Gbps instance-line-rate.** Two remainders: (a) the
+    human checks the raw-vs-usable metering basis with WEKA Sales — usable alternative (~67.5 TB →
+    ~7.70/hr) is in env.sh's comment; prices are backfillable while methodology/sources/dates stay recorded
+    (all are). (b) **Spin-up verification on the new cluster**: backend type/count from describe-instances,
+    usable capacity + EC scheme from `weka status` (WEKA_CAPACITY_TB deliberately blank until measured),
+    reserved-core pinning re-verified. Leg B's documented per-client caps (2026-08-15, performance.html):
+    EFA 700 Gbps, EFA+GDS 1200 Gbps — set at Leg-B spin-up.
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
     "% of this filesystem's metadata capability", and 1.0d's random-read IOPS would be a mismatched one. Stage 2
@@ -174,11 +174,12 @@ These change what the numbers mean, so resolving them after cells have run means
     hands the human the GO; human: destroy → flip instance_type → apply), since env.sh and the mount die
     with it and Tier 0 must be re-evidenced against the NEW cluster. Timing: AFTER the full prefetch
     completes and verifies clean. On the rebuilt
-    environment: (a) re-verify transport (DPDK) from the client's own report; (b) re-derive
-    `WEKA_BACKEND_TYPE/RAM_TOTAL`, capacity, EC scheme, `FS_CLIENT_RESERVED_CORES`, `FS_USD_PER_HR`,
-    `SOFTWARE_USD_PER_HR` (item 18); (c) **sweep every stale `i8ge.2xlarge` reference out of docs, env.sh
-    and memory** (human asked explicitly); (d) keep protection 5+2 + hot spare identical unless deliberately
-    changed (the D-5 relation derives from the actual scheme either way). ⚠ Surfaced consequences: raw NVMe
+    environment: (a) re-verify transport (DPDK) from the client's own report; (b) VERIFY the
+    pre-written 6xlarge values (env.sh already carries them, 2026-08-15 — item 18b lists what to check
+    at spin-up: type/count, usable capacity, EC scheme, reserved-core pinning); (c) stale-reference sweep
+    DONE 2026-08-15 (env.sh was the only live carrier; run-dir READMEs are forensic artifacts, never
+    edited); (d) keep protection 5+2 + hot spare identical unless deliberately changed (the D-5 relation
+    derives from the actual scheme either way). ⚠ Surfaced consequences: raw NVMe
     becomes 120 TB → software 13.699/hr at the raw basis (ask whether the terraform module can give WEKA one
     drive per host — 60 TB → 6.85/hr — before locking); backend RAM 1536 GiB → corpus sizes per item 7.
     Frontend stays one g6e.24xlarge with 4 FE cores unless the human ratifies otherwise (thesis §9:
