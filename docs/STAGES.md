@@ -305,6 +305,17 @@ floored by the same rule**, because a filesystem provisioned below the client's 
 sizing rather than its architecture, and any delta that follows is a sizing artifact. This is a provisioning
 requirement, not a prediction about results. The provisioned configuration of **both** sides is recorded into
 the environment contract, so the fairness basis is verifiable after the fact rather than asserted.
+
+**"At maximum" is a backend claim; the measurement is single-client — say both, with the ceiling on the
+page.** A single client cannot drive a maximally-provisioned backend's aggregate limits, so any externalized
+form of this framing reads: *a maximally-provisioned FSx filesystem, measured at single-client scale, with the
+documented per-client ceilings quoted beside the results.* To make that mechanical rather than aspirational,
+**the per-client throughput ceiling is fetched and recorded at provisioning time exactly like a price** —
+dated, from the same AWS performance page cited below on the Lustre leg (which documents per-client caps; EFA
+escaping the per-client-per-server cap is **D16**'s subject), and from the instance's own documented line rate
+on the WEKA leg (no per-client cap is documented, so the physical NIC is the honest ceiling; the recorded
+basis says which kind it is). The contract carries `per_client_ceiling_gbps` + basis + date per leg, so the
+writeup shows **measured versus documented ceiling** side by side — the objection becomes a table.
 *Sources:* [FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html),
 [SSD storage performance characteristics](https://docs.aws.amazon.com/fsx/latest/LustreGuide/ssd-storage.html)
 — fetch both at provisioning time; tier names, per-TiB figures and limits change.

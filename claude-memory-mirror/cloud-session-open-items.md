@@ -150,11 +150,12 @@ These change what the numbers mean, so resolving them after cells have run means
     possible. A leg-conditional requirement would catch it but changes *when* the gate blocks: it would fail
     before the filesystem is provisioned. *Recommend* a separate `--check-ready` mode meaning "ready to
     measure", distinct from "configured" — the two questions are genuinely different.
-18. **[USER] Set the four cost inputs at each leg's setup, from that day's pricing.** The licensing question
-    is decided (record both bases; presentation chosen at writing time — `docs/STAGES.md` **D7**): what
+18. **[USER] Set the cost AND ceiling inputs at each leg's setup, from that day's pages.** The licensing
+    question is decided (record both bases; presentation at writing time — `docs/STAGES.md` **D7**): what
     remains is the per-leg values — `INSTANCE_USD_PER_HR`, `FS_USD_PER_HR`, `SOFTWARE_USD_PER_HR` (WEKA: the
-    **public AWS Marketplace rate**; Lustre: `0`, FSx is software-inclusive), `PRICE_CHECKED_UTC`. Fetch,
-    don't recall. Detail: `docs/RUNBOOK.md` "Cost inputs".
+    **public AWS Marketplace rate**; Lustre: `0`, FSx is software-inclusive), `PRICE_CHECKED_UTC`; plus the
+    per-client ceiling trio `FS_PER_CLIENT_CEILING_{GBPS,BASIS}` + `CEILING_CHECKED_UTC` (Lustre: documented
+    per-client cap from the D7-cited AWS page; WEKA: instance line rate). Fetch, don't recall.
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
     "% of this filesystem's metadata capability", and 1.0d's random-read IOPS would be a mismatched one. Stage 2

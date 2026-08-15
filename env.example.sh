@@ -147,6 +147,16 @@ export FS_USD_PER_HR=""                          # per leg: the provisioned file
 # Lustre leg: 0 — the FSx service rate is software-inclusive (basis recorded per cell).
 export SOFTWARE_USD_PER_HR=""
 export PRICE_CHECKED_UTC=""                      # e.g. 2026-08-15 — undated is unusable
+
+# ── Per-client throughput ceiling (STAGES.md D7) ─────────────────────────────────
+# Fetched DATED, like a price. Lustre leg: the DOCUMENTED per-client throughput cap
+# from the AWS FSx performance page D7 cites. WEKA leg: no per-client cap is
+# documented, so record the instance's own line rate (g6e.24xlarge network
+# bandwidth) with basis "instance-line-rate". Results are then quotable as
+# measured-vs-documented-ceiling per leg.
+export FS_PER_CLIENT_CEILING_GBPS=""
+export FS_PER_CLIENT_CEILING_BASIS=""            # "vendor-documented: <url>" | "instance-line-rate: <url>"
+export CEILING_CHECKED_UTC=""
 export LUSTRE_STRIPE_LAYOUT=""                   # REQUIRED to derive the Lustre canary relation (D12)
 # SCRIPT_COMMIT is deliberately NOT here: env-contract.py collects it itself, from
 # `git rev-parse HEAD` at contract-write time. A hand-typed copy would be a second

@@ -100,6 +100,13 @@ later. Fetch the current parameter names from the AWS CLI reference — do not r
 Creation takes roughly ten minutes. **Record `FSX_TIER`, `FSX_CAPACITY_TIB`, `FSX_METADATA_IOPS`,
 `FSX_EFA_ENABLED` into `env.sh` yourself** once it reports available.
 
+**Also record the documented per-client throughput ceiling, dated like a price (D7):** fetch the per-client
+throughput figure for this tier from the same AWS FSx performance page D7 cites, and set
+`FS_PER_CLIENT_CEILING_GBPS`, `FS_PER_CLIENT_CEILING_BASIS` (`"vendor-documented: <url>"`), and
+`CEILING_CHECKED_UTC` in `env.sh`. The environment contract carries all three, so every result on this leg is
+quotable as *measured versus documented per-client ceiling* — a single client cannot drive the aggregate
+maximum, and this is what makes that a table instead of an objection.
+
 ## Step 3 — EFA software on the instance *(ask first; reboots)*
 
 Install the EC2 EFA software per AWS's current EFA getting-started guide, then verify the provider exists:

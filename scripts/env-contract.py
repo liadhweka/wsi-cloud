@@ -194,6 +194,16 @@ def collect(leg, repo_root):
         "fsx_capacity_tib":       env("FSX_CAPACITY_TIB"),
         "fsx_metadata_iops":      env("FSX_METADATA_IOPS"),
         "fsx_efa_enabled":        env("FSX_EFA_ENABLED"),
+        # Per-client throughput ceiling (D7): the vendor-DOCUMENTED per-client cap
+        # where one is documented (FSx publishes per-client throughput); the
+        # instance's own line rate otherwise (WEKA publishes no per-client cap, so
+        # the physical NIC is the honest ceiling). Recorded dated, like every
+        # price, so the writeup can put measured-vs-documented-ceiling side by
+        # side per leg and the "single client can't drive an aggregate maximum"
+        # objection becomes a table instead of an argument.
+        "per_client_ceiling_gbps":  env("FS_PER_CLIENT_CEILING_GBPS"),
+        "per_client_ceiling_basis": env("FS_PER_CLIENT_CEILING_BASIS"),
+        "ceiling_checked_utc":      env("CEILING_CHECKED_UTC"),
         "lustre_stripe_layout":   (sh(f"lfs getstripe -d {fs_mount} 2>/dev/null | tr '\\n' ' '")
                                    or env("LUSTRE_STRIPE_LAYOUT")) if fs_mount else None,
         "instance_id":     _reconcile(conflicts, "instance_id", "INSTANCE_ID", "instance-id"),
