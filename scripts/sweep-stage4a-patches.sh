@@ -55,6 +55,7 @@ mkdir -p "$LOG_DIR" "$PATCHES_OUT" "$LATENCY_DIR"
 SWEEP_LOG="$LOG_DIR/$(date -u +%F-%H%M)-stage4a-patches.log"
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
+FAILED_CELLS=0
 
 if [[ ! -x "$PYTHON" ]]; then
   log "FATAL: conda env Python not found at $PYTHON. See Stage-4-Patching.md install note."
@@ -128,6 +129,8 @@ for n in "${CONCURRENCIES[@]}"; do
         --latency-csv "$latency_csv" \
         --manifest "$manifest" \
       2>&1 | tee -a "$SWEEP_LOG"
+      cell_rc=${PIPESTATUS[0]}
+      if (( cell_rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: cell rc=$cell_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 
     # Archive per-slide latency CSV into the run dir
     RUN_DIR=$(ls -td "$REPO/runs/"*-s4.A-${name} 2>/dev/null | head -1)
@@ -143,3 +146,9 @@ done
 log "=== sweep done ==="
 log "review:  cat runs/INDEX.md | tail -$(( TOTAL + 5 ))"
 log "next:    scripts/aggregate-stage4a-patches.py 'runs/2026-*-s4.A-patches-*'"
+
+if (( FAILED_CELLS > 0 )); then
+  log "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation),"
+  log "        and this exit tells the chain a hole exists rather than letting the step be marked done."
+  exit 1
+fi

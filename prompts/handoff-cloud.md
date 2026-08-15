@@ -250,8 +250,8 @@ scoped as half an unfinished comparison.
   storage-independent and must match across legs; a divergence is fail-loud.
 - **MIL is canonical `batch_size=1` + `collate_MIL`**; concurrency via `num_workers`.
 - **UNI2-h stays internal-only** — don't strip the tags; filter before anything is externalised.
-- **Git: the human commits and pushes.** Run `./backup.sh` before every commit; remind them if you changed
-  memories. **Ephemerality:** both mounts, local scratch, and your context die with the instance — only
+- **Git: Claude commits and pushes autonomously** — a commit per coherent work block, `./backup.sh` first,
+  push promptly. **Ephemerality:** both mounts, local scratch, and your context die with the instance — only
   git, the memory mirror, and S3 survive. Persist continuously.
 
 ## Your first response

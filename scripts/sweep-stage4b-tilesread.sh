@@ -65,48 +65,42 @@ DATASETS=(
   "camelyon16:${FS_MOUNT}/data/camelyon16/images:${FS_MOUNT}/tissue-detection/3.0/camelyon16/n64/patches"
 )
 
-# Cell definitions per tier
+# Cell definitions per tier. Every list is a FIXED, deliberately DE-ORDERED
+# sequence (never ascending in N): at high worker counts the repeatedly
+# re-drawn coord-pool subset becomes cache-resident, and if warmth rises with
+# the swept variable the crossover cannot be located afterwards (D13; the
+# Stage-4 roadmap's cache-discipline row). Identical on both legs by being
+# committed here.
+#
+# Entries suffixed ':cold' are COLD REFERENCE CELLS (D13 route 2): the same
+# grid point re-run after vm.drop_caches=3, with the acknowledgment recorded
+# into the run dir. They sit at the worker counts where the working-set-vs-
+# cache crossover is expected — the high-N points, run cold AFTER their warm
+# twins so the comparison is steady-state-vs-cold at maximum accumulated
+# warmth. Client-side only: the server side is not clearable from here and the
+# residual is recorded, not asserted.
 if [[ "$TIER" == "tier1" ]]; then
-  OPENSLIDE_CELLS=()
-  for N in 1 4 16 64 256; do OPENSLIDE_CELLS+=("$N"); done
-  CUCIM_CELLS=()
-  for N in 1 4 16 64; do CUCIM_CELLS+=("$N:16:4"); done   # N:nw:bs
+  OPENSLIDE_CELLS=(64 1 256 4 16 "256:cold" "64:cold")
+  CUCIM_CELLS=("16:16:4" "1:16:4" "64:16:4" "4:16:4" "64:16:4:cold" "16:16:4:cold")   # N:nw:bs[:cold]
 elif [[ "$TIER" == "tier2" ]]; then
   # Block A: OpenSlide further N values
-  OPENSLIDE_CELLS=()
-  for N in 32 96 128 192 384 512 768 1024; do OPENSLIDE_CELLS+=("$N"); done
-  # Block B + C: cuCIM 2D (N × nw) surface + bs sensitivity
-  CUCIM_CELLS=()
-  # Block B: N ∈ {1,4,16} × nw ∈ {4,8,32}
-  for N in 1 4 16; do for NW in 4 8 32; do CUCIM_CELLS+=("$N:$NW:4"); done; done
-  # Block C: bs sensitivity at N=16 nw=16 (Tier 1 strong-scaling sweet spot)
-  for BS in 1 16 64; do CUCIM_CELLS+=("16:16:$BS"); done
+  OPENSLIDE_CELLS=(128 32 768 96 1024 192 512 384)
+  # Block B (N × nw surface) + Block C (bs sensitivity at the Tier-1 sweet spot)
+  CUCIM_CELLS=("4:8:4" "1:4:4" "16:32:4" "4:4:4" "1:32:4" "16:4:4" "4:32:4" "1:8:4" "16:8:4"
+               "16:16:16" "16:16:1" "16:16:64")
 elif [[ "$TIER" == "tier3" ]]; then
-  # Block E (OpenSlide + drop_caches) DROPPED — cold-WEKA-read story already covered by Tier 2 BRCA
-  # cells (BRCA's 1.05 TiB compressed total exceeds host RAM, so caches were naturally busted).
+  # Block F: cuCIM at bs=64 across (N, nw), de-ordered.
   OPENSLIDE_CELLS=()
-  # Block F: cuCIM at bs=64 across (N, nw). 12 cells.
-  CUCIM_CELLS=()
-  for N in 4 16 64; do for NW in 4 16; do CUCIM_CELLS+=("$N:$NW:64"); done; done
+  CUCIM_CELLS=("16:4:64" "4:16:64" "64:4:64" "4:4:64" "64:16:64" "16:16:64")
 elif [[ "$TIER" == "tier4" ]]; then
-  # Tier 4: push for WEKA's cold-read ceiling + find cuCIM saturation.
+  # Push past Tier 1's max toward the read ceiling; find cuCIM saturation.
   OPENSLIDE_CELLS=()
-  CUCIM_CELLS=()
-  # Block G: cuCIM bs=64 at higher N (does scaling continue past N=64?)
-  for N in 128 256; do for NW in 4 16; do CUCIM_CELLS+=("$N:$NW:64"); done; done
-  # Block H: cuCIM at extreme bs (at peak N=64 nw=16). Tests if bs scaling continues past 64.
-  for BS in 128 256; do CUCIM_CELLS+=("64:16:$BS"); done
+  CUCIM_CELLS=("256:4:64" "128:16:64" "64:16:256" "128:4:64" "64:16:128" "256:16:64")
 elif [[ "$TIER" == "tier5" ]]; then
-  # Tier 5: re-measure key cuCIM CPU configs WITH --sort-batches optimization —
-  # sorting tile coords by tile-index within each
-  # read_region batch delivers measurable speedup (1.4× at bs=64 from A/B test).
+  # Re-measure key cuCIM configs WITH --sort-batches (within-batch tile-index
+  # sorting for read locality); invoked with --sort-batches by the builder below.
   OPENSLIDE_CELLS=()
-  CUCIM_CELLS=()
-  # Sweep the key (N, nw, bs) configs from Stage 4.B Tier 1/2/3 where sorting could matter
-  # All cells will be invoked with --sort-batches by the per-cell command builder below.
-  for N in 1 4 16 64; do CUCIM_CELLS+=("$N:16:64"); done       # bs=64 sweep
-  for N in 16 64;   do CUCIM_CELLS+=("$N:4:64");  done       # bs=64 nw=4 to compare against Tier 2 nw=4 winner
-  for N in 4 16 64; do CUCIM_CELLS+=("$N:16:4");  done       # bs=4 sweep at peak nw=16
+  CUCIM_CELLS=("16:16:64" "1:16:64" "64:4:64" "4:16:4" "64:16:64" "16:4:64" "4:16:64" "64:16:4" "16:16:4")
 else
   log "FATAL: unsupported tier '$TIER'"
   exit 2
@@ -115,8 +109,21 @@ fi
 TIER5_SORT=0
 if [[ "$TIER" == "tier5" ]]; then TIER5_SORT=1; fi
 
-# (Tier 3 drop_caches disabled — see Block E comment above.)
-TIER3_DROP_CACHES=0
+drop_caches_evidenced() { # drop_caches_evidenced <evidence-file>
+  local ev="$1" rc
+  sync
+  sudo -n sysctl vm.drop_caches=3 > "$ev.tmp" 2>&1
+  rc=$?
+  {
+    echo "action=vm.drop_caches=3 (client page cache + dentries + inodes)"
+    echo "timestamp=$(date -u +%FT%TZ)"
+    echo "rc=$rc"
+    cat "$ev.tmp"
+    echo "server_side=not clearable from the client; residual uncertainty stated, not hidden (D13)"
+  } > "$ev"
+  rm -f "$ev.tmp"
+  return $rc
+}
 
 TOTAL=$(( ${#DATASETS[@]} * ( ${#OPENSLIDE_CELLS[@]} + ${#CUCIM_CELLS[@]} ) ))
 log "=== Stage 4.B $TIER sweep starting ==="
@@ -130,6 +137,7 @@ log "  total cells: $TOTAL"
 log ""
 
 i=0
+FAILED_CELLS=0
 for ds_entry in "${DATASETS[@]}"; do
   IFS=':' read -r dataset svs_dir coords_dir <<< "$ds_entry"
   pool_cache="$POOL_CACHE_DIR/${dataset}.pkl"
@@ -139,20 +147,27 @@ for ds_entry in "${DATASETS[@]}"; do
   fi
 
   # ===== OpenSlide cells =====
-  for N in "${OPENSLIDE_CELLS[@]}"; do
+  for cellspec in "${OPENSLIDE_CELLS[@]}"; do
+    N="${cellspec%%:*}"
+    arm=$([[ "$cellspec" == *:cold ]] && echo cold || echo warm)
     i=$(( i + 1 ))
-    # Tier 3: drop caches before OpenSlide cells to expose cold WEKA reads
-    if [[ "$TIER3_DROP_CACHES" -eq 1 ]]; then
-      log "  dropping kernel page caches (vm.drop_caches=3) for cold-read measurement..."
-      sync && sudo sysctl vm.drop_caches=3 2>&1 | tee -a "$SWEEP_LOG"
-      sleep 2
-    fi
-    name="tilesread-${dataset}-openslide-N${N}$([ "$TIER" = "tier3" ] && echo "-cold")"
+    name="tilesread-${dataset}-openslide-N${N}$([[ "$arm" == cold ]] && echo "-coldref")"
     latency_csv="$LATENCY_DIR/${name}.csv"
     summary_json="$LATENCY_DIR/${name}.summary.json"
-    note="Stage 4.B Tier 1 cell $i/$TOTAL: random tile reads. Backend=openslide (per-tile via multiprocessing.Pool). Dataset=$dataset (full coord pool from CLAM 3.0 n64 outputs). N_processes=$N. LRU(8) slide handle cache per worker. seed=42. runtime=${RUNTIME}s + ${RAMP}s ramp."
-    log "=== [cell $i/$TOTAL] $name ==="
-    "$REPO/scripts/record-run.sh" \
+    note="Stage 4.B $TIER cell $i/$TOTAL: random tile reads. Backend=openslide (per-tile via multiprocessing.Pool). Dataset=$dataset (full coord pool from CLAM 3.0 n64 outputs). N_processes=$N. LRU(8) slide handle cache per worker. seed=42. runtime=${RUNTIME}s + ${RAMP}s ramp. Cache arm=$arm$([[ "$arm" == cold ]] && echo ' (COLD REFERENCE CELL at an expected crossover point: vm.drop_caches=3 with recorded acknowledgment, run after its warm twin; server-side residual stated)'). Cell order fixed and de-ordered in N (D13)."
+    log "=== [cell $i/$TOTAL] $name (arm=$arm) ==="
+
+    export RECORD_RUN_DIR="$REPO/runs/$(date -u +%Y-%m-%d-%H%M%S)-${LEG:?LEG is unset}-s4.B-${name}"
+    mkdir -p "$RECORD_RUN_DIR"
+    if [[ "$arm" == "cold" ]]; then
+      if ! drop_caches_evidenced "$RECORD_RUN_DIR/cache-evidence.txt"; then
+        log "FATAL: vm.drop_caches=3 failed — the cold reference cell would be mislabelled. Aborting."
+        exit 1
+      fi
+      sleep 2
+    fi
+
+    RECORD_CACHE_STATE="$arm" "$REPO/scripts/record-run.sh" \
       --run-name "$name" --stage 4.B --note "$note" \
       -- env CONDA_PREFIX="$CONDA_ENV" "$PYTHON" "$READER" \
         --backend openslide --n-processes "$N" \
@@ -161,9 +176,11 @@ for ds_entry in "${DATASETS[@]}"; do
         --coord-pool-pickle "$pool_cache" \
         --latency-csv "$latency_csv" --summary-json "$summary_json" \
         --seed 42 2>&1 | tee -a "$SWEEP_LOG"
+    cell_rc=${PIPESTATUS[0]}
+    (( cell_rc != 0 )) && { FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: cell rc=$cell_rc — INCOMPLETE; sweep continues (fails loud at the end)"; }
 
     # Archive per-cell artifacts into the run dir
-    RUN_DIR=$(ls -td "$REPO/runs/"*-s4.B-${name} 2>/dev/null | head -1)
+    RUN_DIR="$RECORD_RUN_DIR"; unset RECORD_RUN_DIR
     if [[ -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
       cp "$latency_csv" "$RUN_DIR/per-tile-latencies.csv" 2>/dev/null && log "  archived latencies"
       cp "$summary_json" "$RUN_DIR/reader-summary.json" 2>/dev/null && log "  archived summary"
@@ -173,7 +190,8 @@ for ds_entry in "${DATASETS[@]}"; do
 
   # ===== cuCIM batched-CPU cells =====
   for spec in "${CUCIM_CELLS[@]}"; do
-    IFS=':' read -r N NW BS <<< "$spec"
+    IFS=':' read -r N NW BS ARM <<< "$spec"
+    arm=$([[ "${ARM:-}" == "cold" ]] && echo cold || echo warm)
     i=$(( i + 1 ))
     sort_tag=""
     sort_flag=()
@@ -181,12 +199,23 @@ for ds_entry in "${DATASETS[@]}"; do
       sort_tag="-sorted"
       sort_flag=(--sort-batches)
     fi
-    name="tilesread-${dataset}-cucim-N${N}-nw${NW}-bs${BS}${sort_tag}"
+    name="tilesread-${dataset}-cucim-N${N}-nw${NW}-bs${BS}${sort_tag}$([[ "$arm" == cold ]] && echo "-coldref")"
     latency_csv="$LATENCY_DIR/${name}.csv"
     summary_json="$LATENCY_DIR/${name}.summary.json"
-    note="Stage 4.B $TIER cell $i/$TOTAL: random tile reads. Backend=cucim CPU batched$([ -n "$sort_tag" ] && echo " (with --sort-batches optimization)"). Dataset=$dataset. N_processes=$N, num_workers=$NW (cuCIM C++ thread pool), batch_size=$BS, prefetch_factor=2. LRU(8) slide handle cache per worker. seed=42. runtime=${RUNTIME}s + ${RAMP}s ramp."
-    log "=== [cell $i/$TOTAL] $name ==="
-    "$REPO/scripts/record-run.sh" \
+    note="Stage 4.B $TIER cell $i/$TOTAL: random tile reads. Backend=cucim CPU batched$([ -n "$sort_tag" ] && echo " (with --sort-batches optimization)"). Dataset=$dataset. N_processes=$N, num_workers=$NW (cuCIM C++ thread pool), batch_size=$BS, prefetch_factor=2. LRU(8) slide handle cache per worker. seed=42. runtime=${RUNTIME}s + ${RAMP}s ramp. Cache arm=$arm$([[ "$arm" == cold ]] && echo ' (COLD REFERENCE CELL at an expected crossover point: vm.drop_caches=3 with recorded acknowledgment, run after its warm twin; server-side residual stated)'). Cell order fixed and de-ordered in N (D13)."
+    log "=== [cell $i/$TOTAL] $name (arm=$arm) ==="
+
+    export RECORD_RUN_DIR="$REPO/runs/$(date -u +%Y-%m-%d-%H%M%S)-${LEG:?LEG is unset}-s4.B-${name}"
+    mkdir -p "$RECORD_RUN_DIR"
+    if [[ "$arm" == "cold" ]]; then
+      if ! drop_caches_evidenced "$RECORD_RUN_DIR/cache-evidence.txt"; then
+        log "FATAL: vm.drop_caches=3 failed — the cold reference cell would be mislabelled. Aborting."
+        exit 1
+      fi
+      sleep 2
+    fi
+
+    RECORD_CACHE_STATE="$arm" "$REPO/scripts/record-run.sh" \
       --run-name "$name" --stage 4.B --note "$note" \
       -- env CONDA_PREFIX="$CONDA_ENV" "$PYTHON" "$READER" \
         --backend cucim --n-processes "$N" --num-workers "$NW" --batch-size "$BS" \
@@ -196,8 +225,10 @@ for ds_entry in "${DATASETS[@]}"; do
         --coord-pool-pickle "$pool_cache" \
         --latency-csv "$latency_csv" --summary-json "$summary_json" \
         --seed 42 2>&1 | tee -a "$SWEEP_LOG"
+    cell_rc=${PIPESTATUS[0]}
+    (( cell_rc != 0 )) && { FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: cell rc=$cell_rc — INCOMPLETE; sweep continues (fails loud at the end)"; }
 
-    RUN_DIR=$(ls -td "$REPO/runs/"*-s4.B-${name} 2>/dev/null | head -1)
+    RUN_DIR="$RECORD_RUN_DIR"; unset RECORD_RUN_DIR
     if [[ -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
       cp "$latency_csv" "$RUN_DIR/per-tile-latencies.csv" 2>/dev/null && log "  archived latencies"
       cp "$summary_json" "$RUN_DIR/reader-summary.json" 2>/dev/null && log "  archived summary"
@@ -209,3 +240,8 @@ done
 log "=== sweep done ==="
 log "review:  cat runs/INDEX.md | tail -$(( TOTAL + 5 ))"
 log "aggregate next: scripts/aggregate-stage4b-tilesread.py 'runs/2026-*-s4.B-tilesread-*'"
+if (( FAILED_CELLS > 0 )); then
+  log "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation),"
+  log "        and this exit tells the chain a hole exists rather than letting the step be marked done."
+  exit 1
+fi

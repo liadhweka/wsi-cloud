@@ -64,7 +64,7 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Provision the environment | **`docs/cloud-setup/SPINUP-CHECKLIST.md`** — the reasoning; the build itself is Terraform + `scripts/bootstrap-instance.sh` |
 | Create + mount a filesystem for a leg | Leg A: Terraform + the bootstrap, automatic. Leg B: **`prompts/prompt-lustre-cluster-cloud.md`** — paste-to-Claude |
 | Know what every path / name / variable should be | **`docs/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
-| Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — `scripts/teardown-prep.sh` mechanises it, gated by `scripts/teardown-preflight.sh`; the human only commits, pushes, and destroys |
+| Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — Claude runs the whole prep (`scripts/teardown-prep.sh`, gated by `scripts/teardown-preflight.sh`) and hands over a GO; the human only destroys |
 | Pick up where the last session stopped | **`prompts/handoff-cloud.md`** — the living handoff, edited to current state at every teardown, because Claude's context does not survive one |
 
 **A fresh Claude session continuing this work** starts with the `cloud-session-open-items` memory (the work
@@ -132,4 +132,5 @@ runs/                  one directory per run, plus INDEX.md, the per-leg resume 
   this project decided not to measure.
 - **Both mounts and local scratch are ephemeral.** git is authoritative for small text; **S3** for heavy
   write-once telemetry and datasets. Run `./backup.sh` before every commit and every teardown.
-- **The human commits and pushes.** Never do it autonomously.
+- **Claude commits and pushes autonomously**, batched at coherent work-block boundaries, `./backup.sh`
+  first. Destruction (terraform, filesystem deletion) stays human.

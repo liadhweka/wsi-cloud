@@ -28,16 +28,15 @@ from pathlib import Path
 
 # Run-name patterns:
 #   tilesread-<dataset>-openslide-N<n>
-#   tilesread-<dataset>-openslide-N<n>-cold      (Tier 3 OpenSlide cell; the driver appends
-#                                                 "-cold" on tier3 regardless of whether the
-#                                                 drop_caches step ran -- see variant_from_name)
+#   tilesread-<dataset>-openslide-N<n>-coldref            (D13 route-2 cold reference cell)
 #   tilesread-<dataset>-cucim-N<n>-nw<w>-bs<b>
-#   tilesread-<dataset>-cucim-N<n>-nw<w>-bs<b>-sorted  (Tier 5 sort-batches variant)
+#   tilesread-<dataset>-cucim-N<n>-nw<w>-bs<b>-coldref
+#   tilesread-<dataset>-cucim-N<n>-nw<w>-bs<b>-sorted     (Tier 5 sort-batches variant)
 RUN_NAME_RE = re.compile(
     r"-s4\.B-tilesread-(?P<dataset>[a-zA-Z0-9_-]+?)-"
     r"(?P<backend>openslide|cucim)-N(?P<N>\d+)"
     r"(?:-nw(?P<nw>\d+)-bs(?P<bs>\d+))?"
-    r"(?P<suffix>-cold|-sorted)?$"
+    r"(?:-(?P<sorted>sorted))?(?:-(?P<coldref>coldref))?$"
 )
 _BPS_RE = re.compile(r"^\s*([\d.eE+-]+)\s*B/s\s*$")
 
@@ -76,16 +75,15 @@ def parse_run_dir_name(p):
     out["num_workers"] = int(d["nw"]) if d["nw"] else None
     out["batch_size"] = int(d["bs"]) if d["bs"] else None
     # REQUESTED variant, read off the run-dir name. This says what the cell was
-    # ASKED to do -- never what it did. It is deliberately NOT called "variant"
-    # and NOT called "cache_state": sweep-stage4b-tilesread.sh appends "-cold"
-    # whenever $TIER is tier3, while the sysctl vm.drop_caches step is gated on
-    # $TIER3_DROP_CACHES, so a run dir can carry "cold" with no cache-clearing
-    # action having occurred. A column named "variant=cold" is then an asserted
-    # cache state, which thesis §6 forbids -- cache state is recorded as
-    # achieved, per cell. Same rule as aggregate-stage4c-kvikio.py's
-    # cufile_mode_requested / gds_engaged split: a name-derived value may be
-    # reported as what was requested, never as what was achieved.
-    out["variant_from_name"] = d["suffix"][1:] if d["suffix"] else ""  # "", "cold", or "sorted"
+    # ASKED to do -- never what it did (the achieved evidence is the run dir's
+    # cache-evidence.txt drop acknowledgment plus the recorded cache_state; a
+    # name-derived value may be reported as what was requested, never as what
+    # was achieved -- same rule as aggregate-stage4c-kvikio.py's
+    # cufile_mode_requested / gds_engaged split). "-coldref" marks a D13
+    # route-2 cold reference cell at an expected crossover point; it must stay
+    # a distinct row, never collapse into its warm twin.
+    out["sorted_from_name"] = bool(d["sorted"])
+    out["coldref_from_name"] = bool(d["coldref"])
     return out
 
 
@@ -301,7 +299,8 @@ def main():
         sys.exit(1)
     rows = [extract_cell_summary(d) for d in dirs]
     rows = [r for r in rows if r is not None]
-    rows.sort(key=lambda r: (r["dataset"], r["backend"], r["n_processes"], r.get("num_workers") or 0))
+    rows.sort(key=lambda r: (r["dataset"], r["backend"], r["n_processes"],
+                             r.get("num_workers") or 0, r["coldref_from_name"]))
 
     out_csv = dirs[0].parent / "s4.B-tilesread-summary.csv"
     with out_csv.open("w", newline="") as f:

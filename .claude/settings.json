@@ -87,6 +87,9 @@
       "Bash(git show:*)",
       "Bash(git remote -v)",
       "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
       "Bash(git clone https://github.com/mahmoodlab/CLAM:*)",
 
       "Bash(python --version)",
@@ -169,8 +172,6 @@
       "Bash(mdadm:*)",
       "Bash(sgdisk:*)",
       "Bash(umount:*)",
-      "Bash(git push:*)",
-      "Bash(git commit:*)",
       "Bash(git reset --hard:*)",
       "Bash(git clean -f:*)",
       "Bash(dnf:*)",

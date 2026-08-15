@@ -1,10 +1,20 @@
 #!/usr/bin/env bash
-# Stage 4.C prep — convert Stage 4.A subset slides (50 BRCA + 50 CAMELYON16) to
-# uncompressed raw TIFF on ${FS_MOUNT} for the kvikIO+GDS sweep.
+# Stage 4.D — convert the FULL BRCA cohort (1073 slides) + the 50-slide
+# CAMELYON16 subset to uncompressed 20x raw TIFF on ${FS_MOUNT}, RETAINED at
+# rest (ratified 2026-08-15, was tracker D-28).
 #
-# WHY this is a recorded "Stage 4.C-convert" cell rather than a flat tee'd log:
-#   - 100 slides of uncompressed raw output is TB-scale sustained writes to
-#     $FS_MOUNT — the artifact is order ~7 TB at the full cohort (STAGES.md D4).
+# WHY the full BRCA cohort rather than the 50-slide subset:
+#   - Stage 7.2 (the SLA cell) walks the 1073-slide cohort through the
+#     kvikIO/raw-TIFF backend with DISJOINT per-process slide chunks — its N=64
+#     cell is arithmetically impossible on a 50-slide artifact — and 7.5's
+#     inference workload shares the same configuration. The artifact must
+#     pre-exist at rest; 6.A Tier 2's chunks are transient by design and stay
+#     that way (the chunk cadence is part of what Tier 2 measures).
+#   - Capacity fits on both legs (the open-items capacity arithmetic counts it).
+#
+# WHY this is a recorded "Stage 4.D" cell rather than a flat tee'd log:
+#   - The full-cohort uncompressed output is order ~7 TB of sustained writes to
+#     $FS_MOUNT (STAGES.md D4).
 #   - That is a genuine recordable workload in its own right (substage 4.D), so it
 #     runs through record-run.sh rather than as a side task: the recording captures
 #     sustained write throughput under parallel conversion at scale.
@@ -37,7 +47,7 @@
 #     from a run that did the work.
 #
 # Usage:
-#   ./scripts/convert-stage4c-rawtiff.sh           # convert all 100 slides
+#   ./scripts/convert-stage4c-rawtiff.sh           # convert 1073 BRCA + 50 CAM16
 #   PARALLEL=8 ./scripts/convert-stage4c-rawtiff.sh  # override parallelism
 
 set -uo pipefail
@@ -58,7 +68,10 @@ CONVERTER="$REPO/scripts/convert-rawtiff-20x.py"
 # params are set in convert_one (CAM16 native level 1 @ 256; BRCA 512@40× → 256).
 PARALLEL="${PARALLEL:-4}"
 
-BRCA_MANIFEST="$REPO/scripts/manifests/tcga-brca-stage4a-subset.tsv"
+# Full-cohort BRCA (D-28, ratified): the uniform 1073-slide 40x-base cohort
+# (STAGES.md D5). CAM16 stays the 50-slide subset — only 4.C, 6.A Tier 3 and
+# 7.6 read CAM16 raw-TIFF, all subset-scoped.
+BRCA_MANIFEST="$REPO/scripts/manifests/tcga-brca-full40x-stage4a-format.tsv"
 CAM_MANIFEST="$REPO/scripts/manifests/camelyon16-stage4a-subset.tsv"
 
 BRCA_SRC_DIR=${FS_MOUNT}/data/tcga-brca
@@ -68,6 +81,16 @@ BRCA_DST_DIR=${FS_MOUNT}/data/tcga-brca-rawtiff
 CAM_DST_DIR=${FS_MOUNT}/data/camelyon16-rawtiff
 
 mkdir -p "$BRCA_DST_DIR" "$CAM_DST_DIR"
+
+# The full-cohort artifact is order ~7 TB (D4) and a conversion that dies on
+# ENOSPC mid-cohort wastes hours — refuse up front without the headroom.
+RAWTIFF_MIN_FREE_TB="${RAWTIFF_MIN_FREE_TB:-8}"
+AVAIL_BYTES=$(df --output=avail -B1 "$FS_MOUNT" | tail -1 | tr -d ' ')
+NEED_BYTES=$(( RAWTIFF_MIN_FREE_TB * 1000 * 1000 * 1000 * 1000 ))
+if [ "$AVAIL_BYTES" -lt "$NEED_BYTES" ]; then
+  echo "FATAL: $FS_MOUNT has $AVAIL_BYTES B free; the full-cohort raw-TIFF needs ~${RAWTIFF_MIN_FREE_TB} TB headroom." >&2
+  exit 1
+fi
 
 # Per-slide conversion log — one row per slide attempted.
 LOG_TSV="${LOG_TSV:-$REPO/runs/stage4c-convert-log.tsv}"
@@ -85,8 +108,13 @@ trap 'echo "[$(date -u +%FT%TZ)] got SIGTERM, killing process group"; kill -TERM
 WORK_TSV=$(mktemp)
 trap 'rm -f "$WORK_TSV"' EXIT
 
+# Comment-aware manifest parsing, NOT a fixed tail count: the full-cohort
+# manifest carries a longer comment header AND commented excluded-slide IDs at
+# the file end — a fixed line offset would ingest both as slide ids.
+manifest_ids() { grep -v '^\s*#' "$1" | grep -v '^slide_id$' | grep -v '^\s*$'; }
+
 build_brca_work() {
-  tail -n +6 "$BRCA_MANIFEST" | while read -r sid; do
+  manifest_ids "$BRCA_MANIFEST" | while read -r sid; do
     [ -z "$sid" ] && continue
     src=$(find "$BRCA_SRC_DIR" -name "${sid}.svs" 2>/dev/null | head -1)
     if [ -z "$src" ]; then
@@ -99,7 +127,7 @@ build_brca_work() {
 }
 
 build_cam_work() {
-  tail -n +6 "$CAM_MANIFEST" | while read -r sid; do
+  manifest_ids "$CAM_MANIFEST" | while read -r sid; do
     [ -z "$sid" ] && continue
     src="$CAM_SRC_DIR/${sid}.tif"
     if [ ! -f "$src" ]; then

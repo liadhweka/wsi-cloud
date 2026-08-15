@@ -491,6 +491,23 @@ transport fallback is a stop; a cuFile compat-mode result is data. *Sources:* `d
 `net=` mount options and the UDP-mode limitations (a UDP client "cannot be configured in high availability
 mode"); AWS FSx for Lustre client documentation for the EFA client configuration.
 
+**D19 — Cross-leg artifact fingerprints: four per-class definitions, computed and compared mechanically.**
+The four storage-independent integrity gates (`RUNBOOK.md`) were declared with no code computing them — a
+declared gate no code implements reads as covered. *The ratified definitions (2026-08-15), one per artifact
+class, each captured into `runs/.leg-state/<leg>/fingerprints/<class>.json` (git-tracked, so Leg B compares
+against Leg A's committed capture) and compared fail-loud:*
+**(1) Dataset bytes** — sorted (relative path, size, md5 for TCGA / size-only for CAMELYON16 with the basis
+stated) → one SHA-256 over the list, plus file count and total bytes; the hydration verifier's own data
+re-emitted comparably. **(2) 3.0 coords** — per slide: coord count plus a SHA-256 of the raw coords array
+*contents* — the array, not the HDF5 container, whose bytes can differ while the coordinates are identical;
+catches a missing slide and a shifted grid alike. **(3) 4.D raw-TIFF** — per slide: output byte count +
+tile-grid dimensions; pixel content is not hashed because it follows from source bytes + converter commit,
+and count + grid catch every truncation or mis-magnification failure mode at a fraction of the read cost.
+**(4) 6.A features** — per (model, dataset): file count, per-slide tile count, tensor shape and dtype —
+**deliberately not tensor values**: GPU reduction order makes bitwise equality a false gate, and shapes are
+the storage-independent invariant. *Build timing:* the `capture`/`compare` CLI is built once 3.0 has real
+output (tracker `D-24`); a fingerprint format designed against imagined output would be rewritten anyway.
+
 **D18 — Run-to-run variance is measured, and deltas must clear the noise band.** *Why:* every cell is
 single-shot by default and the two legs run days apart on rebuilt hardware in a shared cloud — without a
 measured noise band, any cross-leg delta is arguable as jitter, and that argument lands on the weakest point

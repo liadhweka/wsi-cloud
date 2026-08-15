@@ -31,7 +31,11 @@ from datetime import datetime
 from pathlib import Path
 
 
-RUN_NAME_RE = re.compile(r"-s1\.6-mixed-bs([0-9a-zA-Z]+)-jobs(\d+)$")
+# The optional -coldref suffix marks the D13 route-2 cold reference cell — the
+# evidence for the grid's recorded steady-state exemption. It must stay a
+# distinct row (never collapse into its warm twin): the comparison between the
+# two is the whole point of the cell.
+RUN_NAME_RE = re.compile(r"-s1\.6-mixed-bs([0-9a-zA-Z]+)-jobs(\d+)(-coldref)?$")
 _BPS_RE = re.compile(r"^\s*([\d.eE+-]+)\s*B/s\s*$")
 
 
@@ -60,8 +64,9 @@ def parse_run_dir_name(p: Path):
     m = RUN_NAME_RE.search(p.name)
     if not m:
         return None
-    bs, jobs = m.groups()
-    return {"bs": bs, "jobs": int(jobs), "bs_bytes": bs_to_bytes(bs)}
+    bs, jobs, coldref = m.groups()
+    return {"bs": bs, "jobs": int(jobs), "bs_bytes": bs_to_bytes(bs),
+            "cache_arm": "cold-ref" if coldref else "warm-exempt"}
 
 
 def bs_to_bytes(bs_str):
@@ -295,9 +300,14 @@ def main():
             w.writerow(r)
     print(f"wrote {out_csv}", file=sys.stderr)
 
-    bs_set   = sorted(set(r["bs"] for r in rows), key=bs_to_bytes)
-    jobs_set = sorted(set(r["jobs"] for r in rows))
-    grid     = {(r["bs"], r["jobs"]): r for r in rows}
+    # The cold reference cell renders as its own comparison block, never as a
+    # grid cell — keyed on (bs, jobs) it would silently collide with (and
+    # overwrite) its warm twin, which is the exact pair the cell exists to compare.
+    coldrefs  = [r for r in rows if r["cache_arm"] == "cold-ref"]
+    grid_rows = [r for r in rows if r["cache_arm"] != "cold-ref"]
+    bs_set   = sorted(set(r["bs"] for r in grid_rows), key=bs_to_bytes)
+    jobs_set = sorted(set(r["jobs"] for r in grid_rows))
+    grid     = {(r["bs"], r["jobs"]): r for r in grid_rows}
 
     print()
     print("# Stage 1.6 mixed sweep — concurrent fpsync ingest + fio randread")
@@ -339,6 +349,29 @@ def main():
                "rdma_rcv_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
     grid_table("RDMA xmit sustained (MiB/s) — wire-level write direction (EC-amplified)",
                "rdma_xmit_sustained_bps", lambda v: f"{v/(1024**2):.0f}")
+
+    # Cold reference cell vs its warm twin — the evidence for the grid's
+    # recorded steady-state exemption (D13 routes 2+4). A match confirms the
+    # exemption cheaply; a mismatch says server-side cache is material at this
+    # grid point, which is precisely when the grid should grow a cold arm.
+    if coldrefs:
+        print("## Cold reference cell vs warm twin (D13 exemption evidence)")
+        print()
+        print("| metric | cold-ref | warm twin | cold/warm |")
+        print("|---|---|---|---|")
+        for cr in coldrefs:
+            twin = grid.get((cr["bs"], cr["jobs"]))
+            for label, key in [("read bw (MiB/s)", "fio_read_bw_kib"),
+                               ("read lat mean (ms)", "fio_read_lat_mean_ns"),
+                               ("read lat p99 (ms)", "fio_read_lat_p99_ns")]:
+                cv = cr.get(key)
+                tv = twin.get(key) if twin else None
+                scale = 1/1024 if "bw" in key else 1/1e6
+                cv_s = f"{cv*scale:.2f}" if cv is not None else "—"
+                tv_s = f"{tv*scale:.2f}" if tv is not None else "—"
+                ratio = f"{cv/tv:.2f}" if (cv and tv) else "—"
+                print(f"| {label} (bs={cr['bs']}, jobs={cr['jobs']}) | {cv_s} | {tv_s} | {ratio} |")
+        print()
 
     # Cross-source ratio canary
     print("## Cross-source consistency canary")

@@ -113,6 +113,14 @@ run_cell() {
   local ramp="$1"; shift
   local runtime="$1"; shift
 
+  # A non-default cuFile mode becomes part of the cell NAME, not only the note:
+  # the mode-controlled paired cell (docs/STAGES.md) would otherwise share its
+  # twin's name, and the aggregators group configs by name — the pair would
+  # silently collapse into one config.
+  if [ "$backend" = "kvikio" ] && [ "$CUFILE_COMPAT_MODE" != "off" ]; then
+    cell_name="${cell_name}-compat${CUFILE_COMPAT_MODE}"
+  fi
+
   local now_utc
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s${substage}-${cell_name}"

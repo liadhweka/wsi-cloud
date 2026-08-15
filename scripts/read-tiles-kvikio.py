@@ -73,6 +73,11 @@ Usage (4.C.2 random):
 """
 import argparse
 import json
+
+# Same-directory import: cuFile path accounting (D-6/D8) — a config flag is not
+# proof of which path a read took, so every cell records the byte split.
+sys_path_note = None
+from wsi_cufile_accounting import PathAccounting
 import os
 import random
 import sys
@@ -200,6 +205,7 @@ def faithful_read_slide(fh, page, n_buffer, buffers):
 
 def mode_faithful(args):
     setup_kvikio(args.compat_mode, args.num_threads, args.task_size)
+    acct = PathAccounting(requested_compat_mode=args.compat_mode)
     slide_ids = load_manifest(args.manifest)
     print(f"[faithful] manifest has {len(slide_ids)} slides", file=sys.stderr)
 
@@ -329,6 +335,12 @@ def mode_faithful(args):
         "cache_state_achieved": "unknown",
         "total_tiles": total_tiles,
         "total_bytes_aligned": total_bytes,
+        # D-6/D8: the recorded GPU-direct-vs-bounced byte split — the achieved
+        # path, distinct from compat_mode above (the request). Under
+        # multi-process cells the nvidia-fs delta is device-global, so the
+        # per-process split is an upper bound; the cell-level split comes from
+        # the wrapper's recorded nvidia-fs timeline.
+        "path_accounting": acct.finish(total_bytes),
         "cell_wallclock_s": cell_wall,
         "sum_slide_wallclock_s": total_slide_wall,
         "tiles_per_sec_cell": total_tiles / cell_wall if cell_wall > 0 else 0.0,
@@ -415,6 +427,7 @@ def pixel_to_tile_index(x_pixel, y_pixel, idx_meta, footprint_level0):
 
 def mode_random(args):
     setup_kvikio(args.compat_mode, args.num_threads, args.task_size)
+    acct = PathAccounting(requested_compat_mode=args.compat_mode)
     slide_ids = load_manifest(args.manifest)
     print(f"[random] manifest has {len(slide_ids)} slides", file=sys.stderr)
 
@@ -616,6 +629,16 @@ def mode_random(args):
         "tiles_per_sec_steady": n_tiles_done_steady / t_steady if t_steady > 0 else 0.0,
         "gbps_steady": bytes_steady / t_steady / 1e9 if t_steady > 0 else 0.0,
         "latency_stats_per_tile_batch": lat_stats,
+        # D-6/D8: the achieved GPU-direct-vs-bounced byte split, distinct from
+        # compat_mode above (the request). app bytes here are estimated for the
+        # WHOLE window (the loop counts steady-window bytes; the nvidia-fs delta
+        # spans ramp + steady, so the split is scaled by the tile ratio). Under
+        # multi-process cells the nvidia-fs delta is device-global — the
+        # per-process split is an upper bound; the cell-level split comes from
+        # the wrapper's recorded nvidia-fs timeline.
+        "path_accounting": acct.finish(
+            int(bytes_steady * (n_tiles_done_total / n_tiles_done_steady))
+            if n_tiles_done_steady else 0),
     }
 
     if args.latency_csv and per_tile_latencies:
@@ -667,7 +690,7 @@ def main():
                     help="random mode: LRU slide-handle cache size per worker. WHY default 64: "
                          "the Stage 4.A subset pool is 50 slides; with LRU<pool_size, every "
                          "random.choice() risks a cache miss → kvikio.CuFile open + tifffile "
-                         "index parse (~10-100 ms each); per-batch of 256 preads with 84% miss "
+                         "index parse (~10-100 ms each); per-batch of 256 preads with 84%% miss "
                          "rate would dominate wallclock. Production DataLoaders pre-open all "
                          "training slides at process start; --lru-size 64 matches that.")
     ap.add_argument("--seed", type=int, default=42, help="random-tile sampling seed")

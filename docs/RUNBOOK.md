@@ -236,6 +236,14 @@ Additional rules that apply on both legs:
 the canary **aborts the chain itself** rather than waiting to be noticed — otherwise a 3am failure yields hours
 of contaminated cells that look fine.
 
+**The evaluator is `scripts/wsi_agg_helper.py check <run-dir>`** — verdict per direction, every widening
+named, exit non-zero on FAIL **or** UNCALIBRATED. Its bands come from the leg's
+`runs/.leg-state/$LEG/canary-bands.json`, written by calibration cells on the **provisioned** cluster (≥3
+repeats of a read and a write probe cell; lo/hi from the observed ratio spread plus margin) — with no
+calibration file the canary refuses loudly rather than invent a tolerance, because a guessed band can both
+mask a real inconsistency and manufacture a false one. `wsi_agg_helper.py cache <run-dir>` is the
+declared-vs-achieved cache reconciliation (**D13**).
+
 **Cache state is reconciled, not trusted (D13):** a cell's declared `cache_state` must be matched by its
 achieved evidence (the readers' recorded discard returns, drop_caches acknowledgments, the canary's own
 check). Declared-without-evidence or declared-versus-evidence disagreement → the cell is **marked and never
@@ -369,12 +377,16 @@ two legs really did process identical inputs. A divergence is **fail-loud and in
 comparison** — it means different bytes, a truncated hydration, or a different code version, none of which is
 visible in the throughput data.
 
-| Artifact | Check | Gate before |
+| Artifact | Check (fingerprint definition: **D19**) | Gate before |
 |---|---|---|
-| Dataset bytes | Byte-verified against the manifest after hydration (1.7) | Anything |
-| 3.0 coords | Same slides producing coords; same per-slide tile counts | Stage 4 of the second leg |
-| 4.D raw-TIFF | Same output byte counts and tile-grid dimensions | Stage 4.C |
-| 6.A features | Same file count, per-slide tile count, tensor shapes | 6.B.3 and 7.3 |
+| Dataset bytes | SHA-256 over the sorted (relpath, size, md5-TCGA / size-only-CAM16) list + counts — the 1.7 verifier's data, re-emitted comparably | Anything |
+| 3.0 coords | Per slide: coord count + SHA-256 of the raw coords **array contents** (not the HDF5 container) | Stage 4 of the second leg |
+| 4.D raw-TIFF | Per slide: output byte count + tile-grid dimensions | Stage 4.C |
+| 6.A features | Per (model, dataset): file count, per-slide tile count, tensor shape + dtype — never tensor values (GPU reduction order breaks bitwise equality) | 6.B.3 and 7.3 |
+
+Fingerprints are captured into `runs/.leg-state/<leg>/fingerprints/<class>.json` (git-tracked, so the
+second leg compares against the first's committed capture); the `capture`/`compare` CLI is built once 3.0
+has real output (tracker `D-24`).
 
 ---
 

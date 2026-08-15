@@ -68,6 +68,7 @@ CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 [ -f "$CUFILE_JSON" ] || { echo "missing corrected cufile.json at $CUFILE_JSON" >&2; exit 1; }
 [ -f "$READER" ] || { echo "missing reader script at $READER" >&2; exit 1; }
 [ -x "$RECORD" ] || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
+FAILED_CELLS=0
 
 BRCA_RAWTIFF=${FS_MOUNT}/data/tcga-brca-rawtiff
 CAM_RAWTIFF=${FS_MOUNT}/data/camelyon16-rawtiff
@@ -144,6 +145,7 @@ run_cell() {
     --stage 4.C \
     --note "$note" \
     -- "$PY" "$READER" "${reader_args[@]}"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 tier1() {
@@ -285,6 +287,7 @@ tier2_mp() {
       "$RECORD" \
         --run-name "$run_name" --stage 4.C --note "$note" \
         -- "$WRAPPER" "$N" "$gpus" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
+      _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
     done
   done
 }
@@ -316,6 +319,7 @@ tier3() {
     "$RECORD" \
       --run-name "$run_name" --stage 4.C --note "$note" \
       -- "$WRAPPER" 8 "0,1,2,3,0,1,2,3" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
+    _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
   done
 
   # ---- N=4 CAM16 (cross-dataset multi-process) ----
@@ -329,6 +333,7 @@ tier3() {
     "$RECORD" \
       --run-name "$run_name" --stage 4.C --note "$note" \
       -- env DATASET=cam16 "$WRAPPER" 4 "0,1,2,3" "$compat" "$PEAK_NB" "$PEAK_NT" "$run_dir"
+    _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
   done
 }
 
@@ -340,3 +345,9 @@ case "${1:-}" in
   smoke)    tier1 1;;
   *) echo "usage: $0 {tier1 [smoke]|tier2|tier2_mp|tier3|smoke}" >&2; exit 2;;
 esac
+
+if (( FAILED_CELLS > 0 )); then
+  echo "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation)," >&2
+  echo "        and this exit tells the chain a hole exists rather than letting the step be marked done." >&2
+  exit 1
+fi

@@ -55,6 +55,12 @@ if [ "$WRITE_CONTRACT" -eq 1 ]; then
   python3 scripts/env-contract.py write --leg "$LEG" || { echo "contract write FAILED"; exit 1; }
 fi
 
+# ---- 1.5 Prove both sync semantics BEFORE relying on them ----------------------
+# Cheap, and the archive assertion is the one that protects pruned telemetry's
+# only remaining copy — a broken --delete flag discovered after the instance is
+# gone is unrecoverable.
+scripts/sync-to-s3.sh --self-test || { echo "sync-to-s3 SELF-TEST FAILED — NOT safe to tear down"; exit 1; }
+
 # ---- 2. Memory mirror + full S3 sync ------------------------------------------
 # backup.sh = live-memory -> repo mirror, then sync-to-s3.sh --mode full. Its one
 # legitimate failure: no live memory exists (no Claude session ever ran here) —

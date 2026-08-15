@@ -162,6 +162,13 @@ def main():
     rows = [extract_cell_summary(d) for d in dirs]
     rows = [r for r in rows if r is not None]
 
+    # Reference cells (workload 'warmref' — the D13 evidence cells the 1.0b/d
+    # sweeps carry) are excluded from the grid: keyed on (bs, jobs) they would
+    # silently collide with the grid cell at the same point, which is the exact
+    # pair the reference exists to contrast with. Printed separately below.
+    refrows = [r for r in rows if r["workload"] == "warmref"]
+    rows = [r for r in rows if r["workload"] != "warmref"]
+
     # Group by (workload, stage) — typically all the same in one sweep.
     if not rows:
         print("no parseable rows", file=sys.stderr)
@@ -289,6 +296,21 @@ def main():
             peak_iops = max(valid_iops, key=lambda r: r[iops_key])
             print(f"**Peak fio {side} IOPS:** {peak_iops[iops_key]:,.0f} "
                   f"at bs={peak_iops['bs']}, jobs={peak_iops['jobs']}")
+
+    # Reference cells — the D13 evidence the grid's cold construction rests on.
+    # Their informative content is the warm-vs-cold contrast: the second half of
+    # a warmref's own timeline (split-window) is deliberately cache-served, and
+    # for randr the whole cell re-reads a just-touched region. Compare against
+    # the matching grid cell; never fold into the grid.
+    if refrows:
+        print()
+        print("## Reference cells (D13 evidence — not grid cells)")
+        for r in refrows:
+            grid_twin = grid.get((r["bs"], r["jobs"]))
+            twin_bw = f'{grid_twin["fio_read_bw_kib"]/1024:.0f} MiB/s' if grid_twin and grid_twin.get("fio_read_bw_kib") else "—"
+            own_bw = f'{r["fio_read_bw_kib"]/1024:.0f} MiB/s' if r.get("fio_read_bw_kib") else "—"
+            print(f"- `{r['run_dir']}` (bs={r['bs']}, jobs={r['jobs']}): warmref mean {own_bw} "
+                  f"vs grid twin {twin_bw} — split-window detail in the run's results.json/timeline")
 
 
 if __name__ == "__main__":

@@ -40,6 +40,7 @@ RECORD="$REPO/scripts/record-run.sh"
 
 [ -f "$TRAINER" ] || { echo "missing trainer $TRAINER" >&2; exit 1; }
 [ -x "$RECORD" ]  || { echo "missing record-run.sh" >&2; exit 1; }
+FAILED_CELLS=0
 
 MODEL="${MODEL:-virchow2}"
 FEATURES_TAG="${FEATURES_TAG:-brca_full}"
@@ -89,6 +90,7 @@ run_cell() {
        --ramp "$ramp" --runtime "$runtime" \
        --training-steps-csv "$run_dir/training-steps.csv" \
        --summary-json "$run_dir/training-summary.json"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 smoke() {
@@ -119,3 +121,9 @@ case "${1:-}" in
   all_models)  all_models ;;
   *) echo "usage: $0 {smoke|all|all_models}" >&2; exit 2 ;;
 esac
+
+if (( FAILED_CELLS > 0 )); then
+  echo "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation)," >&2
+  echo "        and this exit tells the chain a hole exists rather than letting the step be marked done." >&2
+  exit 1
+fi

@@ -38,6 +38,8 @@ DEFAULT_RAMP="${DEFAULT_RAMP:-300}"
 DEFAULT_RUNTIME="${DEFAULT_RUNTIME:-1500}"   # 25 min steady (so cell = ~30 min)
 ENDURANCE_RUNTIME="${ENDURANCE_RUNTIME:-17700}"  # 4 hr 55 min steady (so cell = ~5 hr)
 
+FAILED_CELLS=0
+
 run_cell() {
   local workloads="$1"; local ramp="$2"; local runtime="$3"
   local tag; tag=$(echo "$workloads" | tr ',' '+')
@@ -66,6 +68,11 @@ run_cell() {
     --note "$note" \
     -- "$ORCH" --workloads "$workloads" --ramp "$ramp" --runtime "$runtime" \
        --run-dir "$run_dir"
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    FAILED_CELLS=$((FAILED_CELLS + 1))
+    echo "WARN: cell $cell_name exited rc=$rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"
+  fi
 }
 
 tier1_solo() {
@@ -125,3 +132,9 @@ case "${1:-}" in
   all)   all ;;
   *) echo "usage: $0 {smoke|tier1|tier2|tier3|tier4|tier5|all}" >&2; exit 2 ;;
 esac
+
+if [ "$FAILED_CELLS" -gt 0 ]; then
+  echo "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation)," >&2
+  echo "        and this exit tells the chain a hole exists rather than letting the step be marked done." >&2
+  exit 1
+fi

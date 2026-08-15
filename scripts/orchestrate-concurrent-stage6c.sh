@@ -248,15 +248,17 @@ workload_mil() {
   local csv="$RUN_DIR/workload-mil.csv"
   echo "[mil] init" >> "$log"
   local features_dir="${FS_MOUNT}/features/6.A/${EXTRACT_MODEL}/${MIL_FEATURES_TAG}"
+  # FAIL, never substitute or skip (ratified 2026-08-15, with the sweep-level
+  # fail-loud pattern): 6.C exists to measure four named workloads contending,
+  # so a cell that silently ran three of them — or ran MIL against a corpus
+  # nobody configured — reports a concurrency figure for a mix nobody chose,
+  # and only a log line would know. The .mil-failed marker lets the orchestrator
+  # abort BEFORE the barrier instead of burning the cell's full runtime on a
+  # cell already known INCOMPLETE.
   if [ ! -d "$features_dir" ] || [ "$(ls "$features_dir"/*.pt 2>/dev/null | wc -l)" -lt 10 ]; then
-    echo "[mil] ERR: features dir $features_dir empty or missing — falling back to smoke test mode" >> "$log"
-    # Try the 50-slide subset features instead
-    features_dir="${FS_MOUNT}/features/6.A/${EXTRACT_MODEL}/brca50"
-    if [ ! -d "$features_dir" ] || [ "$(ls "$features_dir"/*.pt 2>/dev/null | wc -l)" -lt 10 ]; then
-      echo "[mil] ERR: no usable features dir; skipping" >> "$log"
-      touch "$READY_DIR/.mil-skipped"
-      return 0
-    fi
+    echo "[mil] FATAL: features dir $features_dir missing or under 10 .pt files — refusing to substitute or skip (the cell FAILS)" >> "$log"
+    touch "$READY_DIR/.mil-failed"
+    return 1
   fi
   local embed_dim=1280
   [ "$EXTRACT_MODEL" = "uni2-h" ] && embed_dim=1536
@@ -322,7 +324,8 @@ DEADLINE_READY=$(($(date +%s) + 120))  # 2-minute cap
 while true; do
   READY=0
   for wl in "${WL_ARR[@]}"; do
-    if [ -f "$READY_DIR/.${wl}-ready" ] || [ -f "$READY_DIR/.${wl}-skipped" ]; then
+    if [ -f "$READY_DIR/.${wl}-ready" ] || [ -f "$READY_DIR/.${wl}-skipped" ] \
+       || [ -f "$READY_DIR/.${wl}-failed" ]; then
       READY=$((READY + 1))
     fi
   done
@@ -332,6 +335,19 @@ while true; do
     break
   fi
   sleep 0.5
+done
+
+# A workload that FAILED at init aborts the whole cell before the barrier: the
+# cell is already INCOMPLETE by definition (a named workload is missing), so
+# running the survivors would spend the full runtime measuring a mix nobody
+# chose. Never lift the barrier; kill the waiting workloads and fail loud.
+for wl in "${WL_ARR[@]}"; do
+  if [ -f "$READY_DIR/.${wl}-failed" ]; then
+    echo "[orch] FATAL: workload '$wl' failed at init — aborting the cell before the barrier" | tee -a "$ORCH_LOG"
+    for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null; done
+    wait 2>/dev/null
+    exit 1
+  fi
 done
 
 # Touch the barrier — all workloads now proceed

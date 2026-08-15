@@ -137,6 +137,15 @@ export FSX_CAPACITY_TIB=""
 export FSX_METADATA_IOPS=""
 export FSX_EFA_ENABLED=""
 
+# ── Stage-1.0 read-corpora sizing (D13; ratified 2026-08-15) ─────────────────────
+# Cache-derived provisioning parameters — NEVER literals in a driver. One
+# identical definition serves both legs: size the seq corpus >= ~2x the LARGER
+# of the two filesystems' server-side caches, and the one-touch region pool at
+# 21 grid cells + reserve regions for the D18 repeats.
+export STAGE1_SEQ_CORPUS_GIB=""         # 1.0b scan corpus (GiB)
+export STAGE1_RANDR_REGION_GIB=""       # 1.0d one-touch region size (GiB)
+export STAGE1_RANDR_REGIONS=""          # region count (21 grid + reserve)
+
 # ── Cost inputs (PROJECT-THESIS.md §4, STAGES.md D7) ─────────────────────────────
 # Fetch from CURRENT vendor pricing THE DAY you set these — never recall a price.
 # record-run.sh records all four per cell (null + warned when unset, never guessed);
@@ -252,6 +261,9 @@ if [ "${1:-}" = "--check" ]; then
   _rec     WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12) — Leg A"
   _rec     LUSTRE_STRIPE_LAYOUT   "needed to derive the Lustre canary relation (D12) — Leg B"
   _rec     WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
+  _rec     STAGE1_SEQ_CORPUS_GIB  "1.0b scan corpus size — cache-derived (D13); prep + both read sweeps refuse without it"
+  _rec     STAGE1_RANDR_REGION_GIB "1.0d one-touch region size — cache-derived (D13)"
+  _rec     STAGE1_RANDR_REGIONS   "1.0d region count (21 grid + D18-repeat reserve)"
   _rec     FS_CLIENT_RESERVED_CORES "record-run.sh records cores_reserved from it; CPU aggregation REFUSES runs recorded without it (D15). Set 'none' on a leg that reserves none"
   _rec     INSTANCE_USD_PER_HR    "cost input (D7) — fetch dated, never recall"
   _rec     FS_USD_PER_HR          "cost input (D7) — per leg, fetch dated"

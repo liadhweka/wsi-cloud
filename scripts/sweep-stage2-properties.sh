@@ -9,28 +9,33 @@
 # ⚠ Cross-leg headline is APP-LEVEL throughput. Filesystem-reported ops/s counts
 # are within-leg diagnostics until counter equivalence is verified (open item 6).
 #
-# 2D grid: datasets ∈ {tcga-brca, camelyon16} × concurrency ∈ {1, 8, 64, 256}
-# = 8 cells. Per cell: single-pass over the full dataset via openslide-python's
-# multiprocessing.Pool, JSON sidecar per slide written under $FS_MOUNT.
+# 3D grid: datasets ∈ {tcga-brca, camelyon16} × concurrency ∈ {1, 8, 64, 256}
+# × cache arm ∈ {cold, warm} = 16 cells (D13 route 3 — the explicit axis, because
+# no corpus of slide headers can exceed either side's cache).
 #
-# Per-cell wallclock estimate based on smoke-test timings (~30-75 ms per slide
-# on warmed cache):
-#   n=1:   ~60-120s
-#   n=8:   ~10-15s
-#   n=64:  ~2-5s
-#   n=256: ~1-3s (likely metadata-server saturated)
-# Plus per-cell record-run.sh overhead ~25-30s (pre/post snapshot, parser,
-# INDEX.md append). Total estimated: ~6-8 min.
+# Cache discipline (D13, Stage-2 roadmap):
+#   cold — `sudo sysctl vm.drop_caches=3` (dentries+inodes, not just page cache:
+#          a warm dentry cache serves open() client-side on BOTH legs alike,
+#          compressing the very difference this stage exists to find). The
+#          acknowledgment (rc + output) is written into the run dir as achieved
+#          evidence; a failed drop aborts the sweep rather than mislabel a cell.
+#          Server-side state is only partly ours — recorded, not asserted.
+#   warm — an UNRECORDED warmup pass over the same dataset immediately before
+#          the cell, so "warm" is established by construction regardless of
+#          cell order, not inherited by accident from whatever ran before.
+# Cell order is FIXED and deliberately de-ordered in concurrency (never
+# ascending: warmth must not track the swept variable), identical on both legs.
 #
 # Per-cell isolation via record-run.sh: any cell failure leaves rest intact.
 #
 # Run with:
 #   scripts/sweep-stage2-properties.sh
 # Output:
-#   - one runs/<TS>-s2.0-properties-<dataset>-n<N>/ per cell
+#   - one runs/<TS>-<fs>-s2.0-properties-<dataset>-n<N>-<arm>/ per cell,
+#     carrying cache-evidence.txt (the drop acknowledgment / warmup record)
 #   - one consolidated log at runs/sweep-logs/<TS>-stage2-properties.log
 #   - per-run per-slide-latencies.csv archived inside each run dir
-#   - JSON sidecars at ${FS_MOUNT}/cataloging/2.0/<dataset>/n<N>/
+#   - JSON sidecars at ${FS_MOUNT}/cataloging/2.0/<dataset>/n<N>-<arm>/
 #
 # Prerequisites:
 #   - the pinned main conda env built (bootstrap does this) — it carries
@@ -85,12 +90,32 @@ if [[ $BRCA_COUNT -eq 0 || $CAM_COUNT -eq 0 ]]; then
   exit 2
 fi
 
-CONCURRENCIES=(1 8 64 256)
+# Fixed de-ordered (n, arm) sequence — NOT ascending in n, arms interleaved,
+# identical on both legs by being committed here. 8 cells per dataset.
+CELLS=("64:cold" "1:warm" "256:cold" "8:warm" "1:cold" "64:warm" "8:cold" "256:warm")
 DATASETS=(
   "tcga-brca:$BRCA_MANIFEST:$BRCA_COUNT"
   "camelyon16:$CAM_MANIFEST:$CAM_COUNT"
 )
-TOTAL=$(( ${#DATASETS[@]} * ${#CONCURRENCIES[@]} ))
+TOTAL=$(( ${#DATASETS[@]} * ${#CELLS[@]} ))
+
+drop_caches_evidenced() { # drop_caches_evidenced <evidence-file>
+  # vm.drop_caches=3: page cache + dentries + inodes. sudo -n so an unattended
+  # chain fails fast instead of hanging on a password prompt.
+  local ev="$1" rc
+  sync
+  sudo -n sysctl vm.drop_caches=3 > "$ev.tmp" 2>&1
+  rc=$?
+  {
+    echo "action=vm.drop_caches=3 (client page cache + dentries + inodes)"
+    echo "timestamp=$(date -u +%FT%TZ)"
+    echo "rc=$rc"
+    cat "$ev.tmp"
+    echo "server_side=not clearable from the client; state recorded, not asserted (D13)"
+  } > "$ev"
+  rm -f "$ev.tmp"
+  return $rc
+}
 
 log ""
 log "=== Stage 2.0 sweep starting ==="
@@ -101,29 +126,60 @@ log "  log:     $SWEEP_LOG"
 log ""
 
 i=0
+FAILED_CELLS=0
 for ds_entry in "${DATASETS[@]}"; do
   dataset="${ds_entry%%:*}"
   rest="${ds_entry#*:}"
   manifest="${rest%%:*}"
   count="${rest##*:}"
 
-  for n in "${CONCURRENCIES[@]}"; do
+  for cell in "${CELLS[@]}"; do
+    n="${cell%%:*}"
+    arm="${cell##*:}"
     i=$(( i + 1 ))
-    name="properties-${dataset}-n${n}"
-    out_dir="$CATALOG_OUT/${dataset}/n${n}"
-    latency_csv="$MANIFEST_DIR/${dataset}-n${n}-latencies.csv"
+    name="properties-${dataset}-n${n}-${arm}"
+    out_dir="$CATALOG_OUT/${dataset}/n${n}-${arm}"
+    latency_csv="$MANIFEST_DIR/${dataset}-n${n}-${arm}-latencies.csv"
 
-    note="Stage 2.0 cell $i/$TOTAL: OpenSlide property extraction. Dataset=${dataset} ($count slides), concurrency=$n. Single-pass full dataset via openslide-python + multiprocessing.Pool. JSON sidecars to $out_dir; per-slide latency to $latency_csv (archived into the run dir post-cell). The customer-quotable headline number is 'cataloged $count slides in X seconds at concurrency $n.'"
+    note="Stage 2.0 cell $i/$TOTAL: OpenSlide property extraction. Dataset=${dataset} ($count slides), concurrency=$n, cache arm=$arm (cold: vm.drop_caches=3 with recorded acknowledgment; warm: unrecorded n=64 warmup pass immediately before). Single-pass full dataset via openslide-python + multiprocessing.Pool. Headline: 'cataloged $count slides in X seconds at concurrency $n, $arm'."
 
     log "=== [cell $i/$TOTAL] $name ==="
-    log "  dataset:     $dataset ($count slides)"
-    log "  concurrency: $n"
-    log "  out_dir:     $out_dir"
-    log "  cleaning prior output dir ..."
+    log "  dataset: $dataset ($count slides) · n=$n · arm=$arm · out: $out_dir"
     rm -rf "$out_dir"
     mkdir -p "$out_dir"
 
-    "$REPO/scripts/record-run.sh" \
+    # Pre-compute the run dir (pattern #4) so the cache-arm evidence lands
+    # inside it before the wrapper starts.
+    export RECORD_RUN_DIR="$REPO/runs/$(date -u +%Y-%m-%d-%H%M%S)-${LEG:?LEG is unset}-s2.0-${name}"
+    mkdir -p "$RECORD_RUN_DIR"
+
+    if [[ "$arm" == "cold" ]]; then
+      if ! drop_caches_evidenced "$RECORD_RUN_DIR/cache-evidence.txt"; then
+        log "FATAL: vm.drop_caches=3 failed — a cell run now would be warm while labelled cold."
+        log "       Aborting the sweep rather than mislabel; evidence: $RECORD_RUN_DIR/cache-evidence.txt"
+        exit 1
+      fi
+      log "  cold: caches dropped (acknowledgment in the run dir)"
+    else
+      # Warm by construction: an unrecorded warmup pass reads every slide's
+      # header once, immediately before the cell — so warm does not depend on
+      # what happened to run earlier in the de-ordered sequence.
+      warm_dir="$MANIFEST_DIR/warmup-${dataset}"
+      rm -rf "$warm_dir"; mkdir -p "$warm_dir"
+      if CONDA_PREFIX="$CONDA_ENV" "$PYTHON" "$EXTRACTOR" \
+           --concurrency 64 --output-dir "$warm_dir" --manifest "$manifest" \
+           --latency-csv "$warm_dir/latencies.csv" > /dev/null 2>&1; then
+        printf 'action=warmup pass (unrecorded, n=64, full dataset)\ntimestamp=%s\nrc=0\n' \
+          "$(date -u +%FT%TZ)" > "$RECORD_RUN_DIR/cache-evidence.txt"
+        log "  warm: warmup pass complete (evidence in the run dir)"
+      else
+        log "FATAL: warmup pass failed — the warm label would be an assertion, not a construction."
+        exit 1
+      fi
+      rm -rf "$warm_dir"
+    fi
+
+    RECORD_CACHE_STATE="$arm" "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
       --stage 2.0 \
       --note "$note" \
@@ -133,15 +189,18 @@ for ds_entry in "${DATASETS[@]}"; do
         --manifest "$manifest" \
         --latency-csv "$latency_csv" \
       2>&1 | tee -a "$SWEEP_LOG"
+    cell_rc=${PIPESTATUS[0]}
+    if (( cell_rc != 0 )); then
+      FAILED_CELLS=$(( FAILED_CELLS + 1 ))
+      log "  WARN: cell exited rc=$cell_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"
+    fi
 
     # Archive the per-slide latency CSV into the run dir for offline analysis
-    RUN_DIR=$(ls -td "$REPO/runs/"*-s2.0-${name} 2>/dev/null | head -1)
-    if [[ -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
-      cp "$latency_csv" "$RUN_DIR/per-slide-latencies.csv" 2>/dev/null && \
-        log "  archived per-slide latencies → $RUN_DIR/per-slide-latencies.csv"
-    else
-      log "  WARN: could not locate run dir to archive per-slide-latencies.csv"
+    if [[ -d "$RECORD_RUN_DIR" ]]; then
+      cp "$latency_csv" "$RECORD_RUN_DIR/per-slide-latencies.csv" 2>/dev/null && \
+        log "  archived per-slide latencies → $RECORD_RUN_DIR/per-slide-latencies.csv"
     fi
+    unset RECORD_RUN_DIR
     log ""
   done
 done
@@ -149,4 +208,9 @@ done
 log "=== sweep done ==="
 log "review:  cat runs/INDEX.md | tail -$(( TOTAL + 5 ))"
 log "next:    scripts/aggregate-stage2-properties.py 'runs/2026-*-s2.0-properties-*'"
-log "cleanup: rm -rf $CATALOG_OUT (JSON sidecars; ~280 MB across all cells, removable post-presentation)"
+log "cleanup: rm -rf $CATALOG_OUT (JSON sidecars; removable post-presentation)"
+if (( FAILED_CELLS > 0 )); then
+  log "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation),"
+  log "        and this exit tells the chain a hole exists rather than letting the step be marked done."
+  exit 1
+fi

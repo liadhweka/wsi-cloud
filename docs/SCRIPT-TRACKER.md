@@ -34,8 +34,8 @@ for a valid cell.
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
 | **D-4** | **Per-filesystem recording adapters — WEKA-leg recorder half DONE; remaining: the shared aggregation helper, and the Lustre half on Leg B** | the aggregators' filesystem-side parsers (helper); `record-run.sh` + `parse-results.py` (Lustre half) | **Done on the Leg-A instance against live streams:** `record-run.sh` now carries a per-`$FS` recorder set and required-stream list, the INCOMPLETE rule evaluates against the leg's own list, and a Stage-0 cell records `OK` with the WEKA primaries live (verified: client-summed WEKA-side vs fio app-level agree within ~5%). `parse-results.py` emits `weka_stats_client` — the pattern-#1 client-filtered per-timestamp-summed series — beside the whole-stream context aggregates. The wrapper **refuses `--fs lustre`** until the Lustre recorder set is written against the live `/proc/fs/lustre` + `lctl get_param` (`osc.*.stats` / `llite.*.stats`) streams on the provisioned Leg-B cluster — never a recalled format. **Still deferred:** the **shared per-leg schema helper** (one module the aggregators import) replacing the per-file filesystem-side parsers; B-1's `_reserved_cores` folds into it; it owns **metric-key naming** (normalize the `non_dpdk_*` / `agg_cpu_busy_ex_dpdk_*` keys to leg-neutral names while no sweep exists), groups rep-indexed runs (**D18**) reporting **median + spread**, computes the stability-canary noise band per leg, and **reconciles declared vs achieved cache state per cell** (**D13**) — a declaration without its achieved evidence is marked and never quoted as its declared regime; the Lustre-side evidence source gets named during the Leg-B build. Capture note: flag-less `sar -o` verified on this instance's sysstat — all converted categories populated on the Stage-0 smoke |
-| **D-5** | **Per-filesystem consistency relation** | The canary logic in the aggregators | Must be derived from the actual EC scheme (WEKA) and the actual stripe layout (Lustre) — neither exists yet |
-| **D-6** | **cuFile path accounting as a recorded source** | `record-run.sh` + the kvikIO readers. **`aggregate-stage4c-kvikio.py` is the concrete consumer:** its `gds_engaged` column is hardcoded `"unknown"` and stays that way until this source exists — so closing D-6 has a defined finish line, namely that column carrying a recorded value | Needs the real cuFile/nvidia-fs stats format. Every kvikIO cell must record GPU-direct-vs-bounced bytes or it is incomplete (**D8**) |
+| **D-5** | **Per-filesystem consistency relation — WEKA derivation + evaluator BUILT; remaining: band calibration on the post-switch cluster, and the Lustre half on Leg B** | `wsi_agg_helper.py` (`check <run-dir>`) | The WEKA relation is derived and written down (helper docstring + Stage-1 register): clients place EC stripes on backends directly, so write wire/app = (D+P)/D from `WEKA_EC_SCHEME` and read = 1.0 — anchored by the 2026-08-15 Stage-0 probes (5+2: write 1.455 = 1.40 × ~1.04 protocol; read 1.034). **Bands are loaded from `runs/.leg-state/$LEG/canary-bands.json`, written by calibration cells on the PROVISIONED cluster — absent, the canary exits non-zero as UNCALIBRATED rather than inventing a tolerance.** Calibrate post-switch: repeat the two probe-shaped cells ≥3×, set lo/hi from the observed ratio spread + margin, record the cells in the JSON. The Lustre relation derives from the actual stripe layout on Leg B; the helper refuses (`NotImplementedError`) until then |
+| **D-6** | **cuFile path accounting — 4.C recorded source + consumer BUILT; remaining: the Stage-5/6 worker wiring, the recorded Phase-0 verification cell, and the INCOMPLETE-requirement wiring** | `wsi_cufile_accounting.py` (new shared module); `read-tiles-kvikio.py` + `aggregate-stage4c-kvikio.py` (done); `train-resnet50-stage5.py` + `extract-features-foundation-stage6.py` (pending); `record-run.sh` (pending, with **D-30**) | **Done:** the shared module snapshots `/proc/driver/nvidia-fs/stats` (live ver-4.0 format), emits the per-cell `path_accounting` split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged ∈ {gds, partial, none, no-reads, unknown-accounting-off}` — plus both kvikio compat fields, because path accounting has **three layers** (kvikio's own compat can serve reads via POSIX without entering cuFile at all — verified live 2026-08-15). `aggregate-stage4c-kvikio.py`'s `gds_engaged` now carries the recorded value (per-process consensus on mp cells; disagreement reports as `mixed(...)`); an accounting-off state reports as unknown, never zero. **Remaining:** wire the same module into the Stage-5 trainer and Stage-6 extractor rank paths (before Stage 5 runs); the recorded known-good-read Phase-0 cell on the post-switch cluster (**D8**); and record-run marking a kvikIO cell INCOMPLETE without the split — decide with **D-30** |
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
 | **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
 | **D-9** | **Core-accounting values** | `env.sh`, per leg | The exclusion **mechanism** is in place — `record-run.sh` records `cores_reserved` from `FS_CLIENT_RESERVED_CORES` and every CPU aggregator reads it per run, refusing null. What remains is the per-leg **value**: measure the reserved-core list on each real client (**D15**) and set the variable (`none` on a leg that reserves none) |
@@ -46,12 +46,9 @@ for a valid cell.
 | **D-17** | **Leg-B kernel-vs-contract policy** | `../prompts/prompt-lustre-cluster-cloud.md` | The documented Lustre client install can pull a newer kernel, and `kernel` is a `MUST_MATCH` contract field — so the Leg-B procedure can invalidate the comparison the contract exists to protect; any OS upgrade can too. Decide: pin the kernel and install a client build matching the running kernel (per AWS's install docs for this OS), or re-baseline both legs |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 | **D-21** | **A contract-verified marker `run-leg.sh` refuses without** | `env-contract.py`, `run-leg.sh` | The rebuild runs `env-contract.py verify` as "the gate", then starts the leg **without checking the gate ever ran or passed.** Phase 1 (safe): `verify` writes `runs/.leg-state/$LEG/contract-verified` on PASS and unlinks it on FAIL; `run-leg.sh` warns loudly when it is absent or older than the contract. Phase 2 — promoting that to a refusal — **needs explicit ratification**, since it can abort a leg |
-| **D-23** | **`sync-to-s3.sh --self-test`** | `../scripts/sync-to-s3.sh` | Its header carries a seven-step manual first-run procedure, including the one that matters: prove a file under a MIRROR path disappears when deleted locally and a file under an ARCHIVE path does **not**. Mechanise it under a namespaced `_selftest/` prefix, print (don't run) the cleanup command, and make removing the file's `UNVERIFIED` banner conditional on it passing. Needs the real bucket |
-| **D-24** | **Cross-leg artifact fingerprints** | new `capture`/`compare` in `../scripts/`, defined in `STAGES.md` | `RUNBOOK.md` declares four cross-leg integrity gates — same slides producing coords and same per-slide tile counts; same raw-TIFF byte counts and tile-grid dimensions; same feature file count, per-slide tile count and tensor shapes — each "fail-loud and invalidates downstream comparison", and **nothing computes or compares them.** A declared gate that no code implements is worse than no gate: it reads as covered. Propose the per-artifact-class fingerprint definitions for ratification now; build after Stage 3.0 has real output |
+| **D-24** | **Cross-leg artifact fingerprints — definitions RATIFIED (2026-08-15, register entry D19); build the `capture`/`compare` CLI once 3.0 has real output** | new `capture`/`compare` in `../scripts/`; definitions in `STAGES.md` **D19** + the `RUNBOOK.md` gates table | The four per-class definitions are decided (dataset bytes: hashed path/size/md5 list; coords: per-slide count + array-contents hash; raw-TIFF: byte count + tile grid; features: counts + shapes + dtype, never values) and fingerprints land in `runs/.leg-state/<leg>/fingerprints/` (git-tracked). Building the CLI against imagined 3.0 output would be rewritten anyway — build it right after 3.0's first real cells, before Stage 4 consumes the coords |
 | **D-25** | **Stage 6.C's 4-GPU partition** | `orchestrate-concurrent-stage6c.sh` | 6.C pins MIL to GPU 0 "to stay out of the extract workload's GPUs" while extract requests 4 — an isolation that is arithmetically impossible on a 4-GPU instance. Decide the partition (extract on 3 + MIL on 1, or accept sharing and delete the isolation claim); either way the retention denominators change, so it is a methodology call, not a tuning one |
 | **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
-| **D-27** | **`--compat-mode` knob for the Stage-5 trainer and Stage-6 extractor** | `train-resnet50-stage5.py:480`, `extract-features-foundation-stage6.py:636`, their drivers | Both hardcode `compat_mode="off"` citing a **previous environment's** "Stage 4.C winner", with no CLI knob — so **`STAGES.md`'s mode-controlled paired cell for 5.A/6.A cannot be run at all**, and a leg where GDS is unachievable has no way to request compat. The reader classes already validate `off\|on\|auto`; adding the flag needs no target value. Only the per-leg *value* is a cloud input |
-| **D-28** | **Stage 7.2 reads full-cohort raw-TIFF that no step produces** | `sweep-stage7-clinical.sh:227-232`, `convert-stage4c-rawtiff.sh` | 7.2 is configured against the 1073-slide cohort through the kvikIO/raw-TIFF backend, but 4.D converts only the subset and 6.A Tier 2's chunks are transient. Either 4.D retains the full cohort (order ~7 TB — a capacity input, **D7**/**D4**) or 7.2 runs on the subset. Record the choice in the Stage-4 and Stage-7 roadmaps |
 | **D-30** | **`record-run.sh`'s OK/INCOMPLETE verdict enforces none of RUNBOOK's per-cell requirements** | `record-run.sh:394-422` | A cell missing cost inputs, cache state, core accounting or cuFile path proof is still stamped `OK`. Decide what blocks versus warns — same shape as **D-21** phase 2, and it should be decided with it |
 | **D-31** | **The environment contract omits the 20 workload-shape variables** | `env-contract.py:48-72` | `docs/NAMING-AND-VARIABLES.md` Table 5 declares them identical-across-legs, but the contract records none. **Do not simply append them to `MUST_MATCH`:** `verify()` pushes a null-vs-null pair into `unrecorded` and returns FAILED, so the normal case (both legs on defaults) would fail. Needs a tri-state or a defaults-aware comparison |
 | **D-32** | **`dataset_manifest_sha` hashes the manifest, not the dataset bytes** | `env-contract.py:174-175` | The held-constant field "the datasets and their byte contents" is therefore asserted, never verified. Full rehashing costs hours of leg wallclock, so the cheaper options (file count + total bytes + newest mtime; or a sampled hash) are a methodology call |
@@ -130,6 +127,23 @@ Leg B (D-4).
 **⏳ DEFER:** the Lustre recorder half (D-4); cuFile path accounting's reader half + the kvikIO-cell
 requirement wiring (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
 
+### `wsi_agg_helper.py` — the shared per-leg aggregation helper (D-4 remainder, D-5, D-13, D-18)
+**What.** One importable module (stdlib-only, same directory as the aggregators) holding the per-leg logic:
+the **consistency relation** (WEKA: (D+P)/D writes, 1.0 reads, from `WEKA_EC_SCHEME`; Lustre: refuses until
+built on Leg B), the **canary evaluator** (`check <run-dir>` — verdict per direction with every widening
+named; bands from `runs/.leg-state/$LEG/canary-bands.json`, and **UNCALIBRATED exits non-zero** rather than
+inventing a tolerance), the pattern-#1 **client series**, **D18 rep grouping** (median + spread;
+`single_shot` flagged) and the **stability noise band**, **D13 cache reconciliation** (`cache <run-dir>` —
+declared vs achieved; verdicts CONSISTENT / DECLARED_WITHOUT_EVIDENCE / CONTRADICTED / NOT_APPLICABLE /
+UNDECLARED, and anything not CONSISTENT is marked, never quoted as its declared regime), and the
+**leg-neutral metric-key map** (`non_dpdk_*` → `app_cores_*`).
+**Why one module.** Per-leg logic in fourteen aggregators drifts fourteen ways; the stale copy is invisible.
+**Caveats.** `selftest` runs without any environment. Evidence sources for cache reconciliation: the run
+dir's `cache-evidence.txt` (rc must be 0), the workers' `client_page_cache_discarded` (false CONTRADICTS a
+cold declaration), and the drivers' recorded construction wording. **⏳ DEFER:** migrating the aggregators'
+filesystem-side parsers onto it (with the Lustre schemas, Leg B); band calibration post-switch (D-5); the
+Lustre-side cache-evidence source gets named during the Leg-B build.
+
 ### `parse-results.py` — raw CSVs → `results.json`
 **What.** Reads a run dir's `raw/` time series and writes aggregate statistics.
 **Why.** Independent of the wrapper, so a parser fix or a new derived metric never requires re-running the
@@ -156,6 +170,8 @@ parser is written against the enabled-under-load format (D-6).
 **What.** Rolls N run dirs into a summary CSV, including block-size × concurrency grids.
 **Why.** The `fio` sweeps share one shape, so one generic aggregator serves all of them.
 **Caveats.** The only aggregator taking an **explicit glob**; the per-stage ones self-locate via `__file__`.
+`warmref` cells (the 1.0b/d D13 evidence cells) are excluded from the grid — keyed on (bs, jobs) they would
+collide with the grid cell they exist to contrast with — and printed as a separate reference block.
 **⏳ DEFER:** the `--fs` pivot. `metadata.json` carries the `fs` field already; teaching the aggregators to
 group on it is part of the per-filesystem adapter work (D-4).
 
@@ -182,11 +198,11 @@ newer) is what handles growing files. Documented in the script header so it isn'
 **Caveats.** Fails early and loudly on missing credentials or an unreachable bucket, so a sweep does not
 discover at 4am that hours of telemetry had nowhere to land. **Every guard path exits non-zero**, which is
 what lets a sweep chain abort on a failed sync. Verifies object count after syncing rather than assuming
-success (Rule 11).
-**⏳ `UNVERIFIED AGAINST A REAL BUCKET`** — written before the environment existed. Its header carries a
-**7-step FIRST-RUN PROCEDURE**; run it before trusting the script and then remove the banner. **Step 6 is the
-one that matters:** create a throwaway file under an *archive* path, sync, delete it locally, sync again, and
-confirm it does **not** disappear from S3. Also tracked as open item `D-7`.
+success (Rule 11). **Verified against the real bucket 2026-08-15**, including `--self-test` (was `D-23`):
+the mechanised semantics proof under `s3://$S3_BUCKET/_selftest/` — mirror probe must disappear on a local
+delete, archive probe must survive it — with a named non-zero exit per failed assertion and the leftover
+cleanup command **printed, never run** (removing anything from S3 stays a manual act, per the semantics it
+proves). **Re-run `--self-test` before every teardown.**
 
 ### `env-contract.py` — cross-leg comparability enforcement ⭐ NEW (`D-12`)
 **What.** `write` collects every environment fact into JSON at the end of a leg; `verify` compares the current
@@ -228,9 +244,9 @@ recovery source for. It is invisible to `verify` and to `write`'s completeness c
 other two lists.
 
 ### `run-leg.sh` — unattended leg orchestrator ⭐ NEW (`D-14`)
-**What.** Drives one whole leg's sweeps in dependency order: **31 steps** (22 sweeps + the 9 interleaved
-stability-canary invocations `C0`–`C8`, **D18**), `--dry-run`, `--list`, `--from`,
-`--only`. Each step carries its driver **and that driver's target** where the driver dispatches on `$1`
+**What.** Drives one whole leg's sweeps in dependency order: **32 steps** (22 sweeps + the `1.0r-prep`
+corpus-staging step + the 9 interleaved stability-canary invocations `C0`–`C8`, **D18**), `--dry-run`,
+`--list`, `--from`, `--only`. Each step carries its driver **and that driver's target** where the driver dispatches on `$1`
 (4.C `tier1`, 5 `all`, 6.A `tier1`, 6.A.3 `tier3`, 6.B.3 `all`, 6.B.2 `all`, 6.C `all`, 7 `all`) — the runner
 word-splits the command, and `--from`/`--only` are validated against the step-id list so a typo cannot
 silently skip the whole leg.
@@ -356,25 +372,48 @@ the preparation makes the steps unskippable, while the **destruction itself stay
 never terminates anything.
 
 **Caveats.** Gated on the preflight, which demands the next-session handoff written and dated — so the
-handoff must exist before this runs. The commit it makes is the human-initiated teardown commit, not an
-autonomous one. First real teardown must also run `sync-to-s3.sh`'s FIRST-RUN procedure (open-items
-memory).
+handoff must exist before this runs. Claude runs the whole prep including the commit + push (the
+autonomous-git convention, ratified 2026-08-15); it also runs `sync-to-s3.sh --self-test` before relying on
+the sync. Only the destruction stays human.
 
 ---
 
 ## Stage 1 — Ingest
 
 ### `sweep-stage1-{seqw,seqr,randw,randr}.sh` — synthetic ceiling sweeps
-**What.** Four `fio` drivers: sequential write, sequential read, random write IOPS, random read IOPS. Block
-size × concurrency grids; sequential grids at iodepth=1, IOPS grids at iodepth=8.
+**What.** Four `fio` drivers: sequential write, sequential read, random write IOPS, random read IOPS.
+Sequential grids at iodepth=1, IOPS grids at iodepth=8.
 **Why.** These anchor the whole project: **every downstream "% of ceiling" divides by one of these cells at
 the matching block size.** Throughput is strongly block-size-dependent, so a single ceiling number would make
 mid-block workloads look artificially high or low. They are also the cleanest apples-to-apples cells in the
 project, since `fio` is filesystem-agnostic.
-**I/O.** Host RAM ↔ `$FS_MOUNT/benchmarks/fio-scratch/` → per-cell run dirs.
-**Caveats.** `--unlink=1` cleans per cell. Read sweeps need a layout phase before the timed window.
-**⏳ DEFER:** nothing driver-side — mount, repo root and filesystem labelling are all done. The remaining
-work for these cells is in the aggregator: per-filesystem sources (D-4) and the consistency relation (D-5).
+**The write sweeps (1.0a seqw, 1.0c randw)** write to `$FS_MOUNT/benchmarks/fio-scratch/`, `--unlink=1`
+cleans per cell — a write cell has no cold/warm regime to protect.
+**The read sweeps (1.0b seqr, 1.0d randr) are cold by construction (D13; ratified 2026-08-15)** and read the
+corpora staged by `prep-stage1-read-corpora.sh` — they **refuse without its marker** and cross-check the
+staged sizes against the `STAGE1_*` env parameters. 1.0b: shared scan corpus (≥ ~2× the larger server
+cache; cyclic-scan LRU self-eviction), single pass per cell, per-cell offset rotation. 1.0d: per-cell
+disjoint **one-touch regions** (each block ≤ once per sweep — no cache-behavior assumptions; the
+corpus-exceeds-cache rule fails for random access, where LRU serves ≈ cache/corpus and the legs' unequal
+caches make hit rates asymmetric); **D18 repeats claim fresh reserve regions** via
+`runs/.leg-state/$LEG/randr-region-claims`. Both run fixed de-ordered sequences, carry a **warm reference
+cell** (route-2 evidence, inverted because the default regime is cold), declare `RECORD_CACHE_STATE` per
+cell, and exit non-zero if any cell failed.
+**⏳ DEFER:** aggregator-side per-filesystem sources (D-4) and the consistency relation (D-5).
+
+### `prep-stage1-read-corpora.sh` — stage + evict the 1.0b/1.0d read corpora
+**What.** One recorded prep cell (a real sustained-write + sustained-read workload, not a comparison cell),
+three phases: write the 1.0b scan corpus, write the 1.0d one-touch region pool, then an **eviction pass**
+(full sequential read of the scan corpus) so the staging writes' server-RAM tail is flushed before any cell
+runs. Verifies every file at full size, then writes `runs/.leg-state/$LEG/stage1-read-corpus-staged`
+carrying the staged sizes — the marker both read sweeps gate on.
+**Why.** Data written immediately before it is read is server-cache-resident whatever the client does; the
+corpora must pre-exist the sweeps, and the staging warmth itself must be gone.
+**I/O.** Env parameters `STAGE1_SEQ_CORPUS_GIB` / `STAGE1_RANDR_REGION_GIB` / `STAGE1_RANDR_REGIONS` →
+`$FS_MOUNT/benchmarks/stage1-read-corpus/`. Refuses without corpus+10% free space.
+**Caveats.** Idempotent via the marker (re-run exits 0); to restage after a cluster rebuild, remove the
+marker — the corpora themselves are **retained** deliberately (capacity inputs, SPINUP-CHECKLIST item 12).
+`run-leg.sh` runs it as step `1.0r-prep`, between 1.0a and 1.0b.
 
 ### `sweep-stage1-hydrate.sh` — Stage 1.7 S3 → filesystem hydration (was `D-13`)
 **What.** The head-to-head ingest sweep: `max_concurrent_requests ∈ {4, 16, 64, 256}` = 4 cells, each a
@@ -420,6 +459,9 @@ at once: can readers work at acceptable latency during ingest, and does reader l
 **Caveats.** Uses pattern **#2** (`setsid` + process-group kill). **Mixed cells need wider canary bands than
 single-direction cells**, and the bands must be re-derived per filesystem — the wire carries payload plus
 acknowledgements in both directions, and at small block sizes the non-payload share is material.
+Runs a fixed, de-ordered cell sequence whose **first entry is the cold reference cell** at (4K, jobs=1) —
+`vm.drop_caches=3` with the acknowledgment written into the run dir; the aggregator renders a dedicated
+cold-vs-warm-twin block as the D13 exemption evidence. Attempts every cell; exits non-zero if any failed.
 **⏳ DEFER:** the fixed ingest rate is set as a **fraction of each leg's own write ceiling**, not an absolute
 — so it is parameterised from that leg's 1.5 curve.
 
@@ -435,7 +477,11 @@ published work. Concurrency via a persistent worker pool.
 legs read byte-identical inputs.
 
 ### `sweep-stage2-properties.sh` + `aggregate-stage2-properties.py`
-**What.** Dataset × concurrency grid, single pass per cell.
+**What.** Dataset × concurrency × **cache-arm** grid (16 cells per leg), single pass per cell, in a fixed
+de-ordered sequence. Cold cells: `vm.drop_caches=3` with the acknowledgment recorded into the run dir (a
+failed drop aborts the sweep); warm cells: an unrecorded n=64 warmup pass immediately before, so warm is a
+construction, not an inheritance. The aggregator parses the arm from the run name and keys the grid
+`(dataset, arm, concurrency)`. Attempts every cell; exits non-zero if any failed.
 **Why.** Single-pass matches how a real cataloging job runs and keeps the unit of work identical across legs.
 **Caveats.** **High-concurrency cells finish in under a second**, so 1 Hz recorders capture 1–3 samples and
 any sustained mean is ill-defined — a sampling limit, not a recording failure. The app-level rate is
@@ -490,7 +536,10 @@ tile-read path. The index preserves the original probe order (flat `.tif`, flat 
 whole offset range, unbundled decoder, pre-GA upstream), therefore **filesystem-independent and not a
 comparison axis**; never report it as a storage finding for either side. **Cache discipline is load-bearing
 here** (**D13**): at high worker counts the coord pool can become cache-resident, and the two filesystems
-cache differently, so the crossover must be characterised per filesystem rather than assumed shared.
+cache differently, so the crossover must be characterised per filesystem rather than assumed shared. The
+driver runs every tier's cells in a fixed de-ordered sequence, with Tier-1 **cold reference cells**
+(`-coldref`, drop acknowledgment recorded per cell) at the high-N crossover points, placed after their warm
+twins; the aggregator keeps coldref rows distinct. Attempts every cell; exits non-zero if any failed.
 
 ### `convert-rawtiff-20x.py` + `convert-stage4c-rawtiff.sh` — the 20× raw-TIFF writer
 **What.** Writes a single-level, 256-tiled, uncompressed TIFF whose **level-0 is the 20× image**, so cuFile
@@ -502,7 +551,11 @@ decisive point — **not the artifact a 20× GPU-direct customer stores** (**D4*
 resize interpolation means both backends see the same pixels.
 **Caveats.** **Idempotent skip on existing non-empty output** — so a stale artifact from another magnification
 or converter version is **silently reused**. Delete before regenerating. The output is a large capacity cost
-on both filesystems (order ~7 TB at full cohort) and thus a sizing input to **D7**.
+on both filesystems (order ~7 TB) and thus a sizing input to **D7**. **Scope (ratified 2026-08-15, was
+D-28): full BRCA cohort (1073, retained at rest — 7.2's disjoint-chunk N=64 cell needs it) + the CAM16
+50-slide subset.** Manifests are parsed comment-aware (the full-cohort manifest carries commented excluded
+IDs at its tail; a fixed line offset would ingest them), and the driver refuses without ~8 TB free headroom
+(ENOSPC mid-cohort wastes hours).
 
 ### `read-tiles-kvikio.py` + `run-multiproc-kvikio.sh` + `sweep-stage4c-kvikio.sh` + `aggregate-stage4c-kvikio.py`
 **What.** cuFile reads of tile byte ranges straight into GPU buffers, in two modes: a faithful sequential
@@ -555,6 +608,9 @@ launcher whose rendezvous binds to a resolved hostname that may not be on a loca
 path (its internal pipelining already provides the parallelism). The cuCIM reader configuration is **re-tuned
 per filesystem, never copied** — the optimum reflects a decode-vs-storage-latency interaction, so imposing
 one side's optimum on the other is a fairness bug that reads as a filesystem difference.
+The **mode-controlled paired cell** (`STAGES.md`) is requested by exporting `CUFILE_COMPAT_MODE=on` for one
+invocation; a non-default mode joins the **cell name** (`-compat<mode>`), because the aggregators group
+configs by name and the pair must never collapse into its best-mode twin.
 **⏳ DEFER:** NUMA-aware GPU pinning order (D-8); cuFile env values (D-10). The GPU-count *range* is set:
 N ∈ {1, 2, 4} on both blocks, matching the 4-GPU instance.
 
@@ -578,7 +634,10 @@ whenever it is above zero, so no driver can mark the step done on a feature set 
 without a wipe every cell after the first short-circuits and reports a plausible-looking meaningless number.
 Ranks take **disjoint** partitions (the model is frozen, so DDP is throughput-only). The largest model may
 need a reduced batch size — if so, apply it **identically on both legs** or it becomes a fake filesystem
-difference.
+difference. cuFile mode plumbing matches Stage 5: `CUFILE_COMPAT_MODE` (validated `off|on|auto`, default
+`off`) → `--compat-mode` on kvikIO cells only, recorded as REQUESTED in the note, and a non-default mode
+joins the cell name; both Tier-2 chunked orchestrators carry the same knob for the per-leg best-available
+mode.
 
 ### `run-stage6a-tier2-chunked.sh` · `run-stage6a-tier2-chunked-multimodel.sh` — production-scale orchestrators
 **What.** Convert a chunk of slides to raw-TIFF → extract → delete the chunk → advance. The multi-model

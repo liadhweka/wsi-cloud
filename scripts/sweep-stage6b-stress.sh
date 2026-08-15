@@ -55,6 +55,7 @@ RECORD="$REPO/scripts/record-run.sh"
 [ -f "$READER" ] || { echo "missing reader $READER" >&2; exit 1; }
 [ -f "$GENERATOR" ] || { echo "missing generator $GENERATOR" >&2; exit 1; }
 [ -x "$RECORD" ] || { echo "missing record-run.sh $RECORD" >&2; exit 1; }
+FAILED_CELLS=0
 
 CORPUS_BASE=${FS_MOUNT}/features-6.B-synthetic
 
@@ -102,6 +103,7 @@ run_cell() {
 
   local rc=$?
   echo "[$cell_name] record-run.sh exited rc=$rc"
+  (( rc != 0 )) && FAILED_CELLS=$(( FAILED_CELLS + 1 ))
   return "$rc"
 }
 
@@ -124,6 +126,7 @@ prep() {
        --output-base "$CORPUS_BASE" \
        --n-workers 32 \
        --summary-json "$run_dir/generation-summary.json"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 smoke() {
@@ -157,6 +160,7 @@ smoke() {
        --runtime 60 --ramp 30 \
        --latency-csv "$run_dir/per-file-latencies.csv" \
        --summary-json "$run_dir/file-io-summary.json"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 b2a_saturation() {
@@ -210,3 +214,9 @@ case "${1:-}" in
     exit 2
     ;;
 esac
+
+if (( FAILED_CELLS > 0 )); then
+  echo "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation)," >&2
+  echo "        and this exit tells the chain a hole exists rather than letting the step be marked done." >&2
+  exit 1
+fi

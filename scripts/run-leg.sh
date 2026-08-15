@@ -94,6 +94,7 @@ STEPS=(
   # is the leg's noise band (RUNBOOK.md, "Run-to-run variance").
   "C0|Stability canary (D18) — leg start|$LIB/sweep-stability-canary.sh"
   "1.0a|Synthetic ceiling: sequential write|$LIB/sweep-stage1-seqw.sh"
+  "1.0r-prep|Stage + evict the 1.0b/1.0d read corpora (recorded prep, not a comparison cell)|$LIB/prep-stage1-read-corpora.sh"
   "1.0b|Synthetic ceiling: sequential read|$LIB/sweep-stage1-seqr.sh"
   "1.0c|Synthetic ceiling: random write IOPS|$LIB/sweep-stage1-randw.sh"
   "1.0d|Synthetic ceiling: random read IOPS|$LIB/sweep-stage1-randr.sh"

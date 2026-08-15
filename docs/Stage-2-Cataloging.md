@@ -197,19 +197,15 @@ discovery made during analysis.
 | **Recorded per cell** | slides catalogued and cell wallclock at that concurrency point; the per-slide latency distribution; the filesystem-side metadata operation rate (within-leg only, per the caveat above); the nominal concurrency and the effective parallelism; the dataset's on-disk layout; the **cache arm** the cell belongs to together with the clearing steps actually applied and what they are known to have cleared — plus the full measurement set, the cache state achieved, and the cost inputs (`RUNBOOK.md`) |
 | **Directory-layout observation to record** | The hydrated layouts follow the S3 staging, which is what both legs read: **BRCA is one flat directory of 1133 SVS files** (the prefetch stages per-file GDC API pulls flat — not the per-slide subdirectories a `gdc-client` download would create), and **CAMELYON16's WSIs sit flat under `images/`** (399 files) beside sibling prefixes. Directory shape affects how many metadata operations an `open()` requires and how directory-entry lookup scales with entry count, so **the two datasets are reported separately and never averaged**, and the layout is noted alongside each number. The contrast the layouts actually offer is directory *size* (1133-entry vs 399-entry directories), not nesting depth. Identical on both legs by construction — both hydrate from the same S3 layout. |
 
-> ⚠ **Standing constraint — do not run `../scripts/sweep-stage2-properties.sh` as it stands.** The driver
-> implements no cache handling: no `drop_caches` step, no cold/warm cell token, and a cell loop that walks
-> concurrency in ascending order (verified against the script — its only mention of cache is a comment
-> noting its own per-cell timings came from a warmed one). Run as-is it yields 8 cells whose cache state is
-> neither controlled nor labelled and which warm monotonically with concurrency: a plausible-looking number
-> that is unattributable to either filesystem's metadata path and cannot be repaired after the fact. It must
-> gain the cold/warm arm, the `vm.drop_caches=3` step and de-ordered cells before the stage is run.
->
-> **The aggregator has to move with it, in the same change.** It parses each cell from a run name required to
-> end in `-n<N>` and keys its grid on `(dataset, concurrency)` alone, so a 16-cell sweep either loses the
-> cells whose names carry an arm suffix or collapses each cold cell against its warm twin — both silent.
-> The cache arm has to become a parsed field and a grid dimension, not a name fragment. Both items are
-> tracked in the open-items memory (the driver-changes item).
+> **How the driver implements the axis** (driver and aggregator moved together, deliberately). The 16 cells
+> run in a **fixed, de-ordered (n, arm) sequence committed in the script** — identical on both legs, never
+> ascending in concurrency. Cold cells run `vm.drop_caches=3` and write the acknowledgment (rc + output)
+> into the run dir as `cache-evidence.txt` — the D13 achieved-evidence — and a failed drop **aborts the
+> sweep** rather than mislabel a cell. Warm cells are warm **by construction**: an unrecorded n=64 warmup
+> pass over the same dataset runs immediately before the cell, so the label never depends on what happened
+> to run earlier. Each cell declares its arm via `RECORD_CACHE_STATE`, and the aggregator parses the arm
+> from the run name as a first-class grid dimension keyed `(dataset, arm, concurrency)`. Every cell is
+> attempted; the driver exits non-zero if any failed, so a chain sees the hole.
 
 ### 2.1 — DSA / MongoDB integration
 

@@ -57,6 +57,7 @@ mkdir -p "$LOG_DIR" "$TISSUE_OUT" "$CHUNK_ROOT" "$MANIFEST_DIR"
 SWEEP_LOG="$LOG_DIR/$(date -u +%F-%H%M)-stage3-tissue.log"
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
+FAILED_CELLS=0
 
 # Sanity checks
 if [[ ! -f "$EXTRACTOR_SCRIPT" ]]; then
@@ -203,6 +204,8 @@ for ds_entry in "${DATASETS[@]}"; do
         echo \"dataset:             $dataset\"
         # Note: total wallclock comes from record-run.sh's .run_start/.run_end
       " 2>&1 | tee -a "$SWEEP_LOG"
+      cell_rc=${PIPESTATUS[0]}
+      if (( cell_rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: cell rc=$cell_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 
     log ""
   done
@@ -213,3 +216,9 @@ log "review:  cat runs/INDEX.md | tail -$(( TOTAL + 5 ))"
 log "next:    scripts/aggregate-stage3-tissue-detection.py 'runs/2026-*-s3.0-tissue-*'"
 log "cleanup: rm -rf $TISSUE_OUT (HDF5 sidecars + masks; ~few hundred MB total, removable post-presentation)"
 log "         rm -rf $CHUNK_ROOT (per-cell symlink dirs in /tmp, ~MB total)"
+
+if (( FAILED_CELLS > 0 )); then
+  log "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation),"
+  log "        and this exit tells the chain a hole exists rather than letting the step be marked done."
+  exit 1
+fi

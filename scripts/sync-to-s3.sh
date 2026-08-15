@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # sync-to-s3.sh — push everything that must survive an instance teardown to S3.
 #
-# ┌──────────────────────────────────────────────────────────────────────────────┐
-# │ ⚠ UNVERIFIED AGAINST A REAL BUCKET.                                          │
-# │ Written before the cloud environment existed. The LOGIC and the two sync      │
-# │ semantics are deliberate and reviewed; the behaviour against real S3 has not  │
-# │ been exercised. Run the FIRST-RUN PROCEDURE at the bottom of this header      │
-# │ before trusting it, and remove this banner once it passes.                    │
-# └──────────────────────────────────────────────────────────────────────────────┘
+# Verified against the real bucket 2026-08-15: multiple real --mode full runs
+# with object counts confirmed, and --self-test PASSED (mirror probe deleted on
+# local delete; archive probe survived). Re-run --self-test before every
+# teardown — it is cheap, and the archive assertion is the one that protects
+# pruned telemetry's only remaining copy.
 #
 # WHY THIS EXISTS
 #   Instance-local NVMe and BOTH filesystem mounts are ephemeral: they die with the
@@ -56,19 +54,16 @@
 #   sync-to-s3.sh --mode run --run-dir <path>      # one run's raw telemetry
 #   sync-to-s3.sh --mode datasets --src <path>     # dataset staging
 #   sync-to-s3.sh --mode full --dry-run            # show what WOULD happen
+#   sync-to-s3.sh --self-test                      # prove BOTH sync semantics against
+#                                                  # the real bucket under _selftest/
+#                                                  # (the mechanised first-run check;
+#                                                  # run before every teardown)
 #
-# FIRST-RUN PROCEDURE (do this once, in the cloud, before trusting it)
-#   1. export S3_BUCKET=<bucket>; export LEG=weka
-#   2. ./sync-to-s3.sh --mode full --dry-run       # read the plan; confirm the
-#                                                  # semantics column looks right
-#   3. ./sync-to-s3.sh --mode full                 # real run
-#   4. Verify object counts non-zero and match expectations (the script prints them)
-#   5. Create a throwaway file locally under a MIRROR path, sync, delete it locally,
-#      sync again -> confirm it disappears from S3 (mirror semantics work).
-#   6. Do the same under an ARCHIVE path -> confirm it does NOT disappear
-#      (archive semantics work). THIS STEP IS THE ONE THAT MATTERS.
-#   7. Remove the UNVERIFIED banner above and note the verification in
-#      runs/INDEX.md or a Stage-0 run note.
+# The self-test proves the one property everything else rests on: a file deleted
+# locally DISAPPEARS from a MIRROR path and SURVIVES under an ARCHIVE path. It
+# works entirely under s3://$S3_BUCKET/_selftest/ and PRINTS (never runs) the
+# cleanup command for its leftovers — removing anything from S3 is a deliberate
+# manual act, per the archive semantics it exists to prove.
 
 set -euo pipefail
 
@@ -100,6 +95,7 @@ while [ $# -gt 0 ]; do
     --run-dir) RUN_DIR="${2:-}"; shift 2 ;;
     --src)     SRC="${2:-}"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
+    --self-test) MODE="self-test"; shift ;;
     -h|--help) sed -n '1,70p' "${BASH_SOURCE[0]}"; exit 0 ;;
     *)         die "unknown argument: $1" ;;
   esac
@@ -197,7 +193,57 @@ case "$MODE" in
     do_sync archive "$SRC" "s3://$S3_BUCKET/datasets/$(basename "${SRC%/}")/"
     ;;
 
-  *) die "unknown --mode '$MODE' (expected: full | run | datasets)" ;;
+  self-test)
+    # Prove both semantics against the REAL bucket, entirely under _selftest/.
+    # Named non-zero exits per failed assertion; leftovers cleaned only by the
+    # printed (never executed) command.
+    [ "$DRY_RUN" -eq 0 ] || die "--self-test is meaningless with --dry-run"
+    ST_LOCAL=$(mktemp -d)
+    ST_S3="s3://$S3_BUCKET/_selftest"
+    STAMP=$(date -u +%Y%m%d-%H%M%S)
+    mkdir -p "$ST_LOCAL/mirror" "$ST_LOCAL/archive"
+    echo "selftest $STAMP" > "$ST_LOCAL/mirror/probe-$STAMP.txt"
+    echo "selftest $STAMP" > "$ST_LOCAL/archive/probe-$STAMP.txt"
+
+    log "SELFTEST phase 1: sync both probes up"
+    do_sync mirror  "$ST_LOCAL/mirror/"  "$ST_S3/mirror/"
+    do_sync archive "$ST_LOCAL/archive/" "$ST_S3/archive/"
+    [ "$FAILED" -eq 0 ] || { rm -rf "$ST_LOCAL"; die "SELFTEST: initial sync failed (exit 20)"; }
+    aws s3 ls "$ST_S3/mirror/probe-$STAMP.txt"  "${AWS_ARGS[@]}" >/dev/null \
+      || { rm -rf "$ST_LOCAL"; echo "SELFTEST FAILED (exit 21): mirror probe never landed in S3" >&2; exit 21; }
+    aws s3 ls "$ST_S3/archive/probe-$STAMP.txt" "${AWS_ARGS[@]}" >/dev/null \
+      || { rm -rf "$ST_LOCAL"; echo "SELFTEST FAILED (exit 22): archive probe never landed in S3" >&2; exit 22; }
+    log "SELFTEST phase 1 OK: both probes present in S3"
+
+    log "SELFTEST phase 2: delete both probes locally, sync again"
+    rm -f "$ST_LOCAL/mirror/probe-$STAMP.txt" "$ST_LOCAL/archive/probe-$STAMP.txt"
+    do_sync mirror  "$ST_LOCAL/mirror/"  "$ST_S3/mirror/"
+    do_sync archive "$ST_LOCAL/archive/" "$ST_S3/archive/"
+    [ "$FAILED" -eq 0 ] || { rm -rf "$ST_LOCAL"; die "SELFTEST: second sync failed (exit 23)"; }
+
+    if aws s3 ls "$ST_S3/mirror/probe-$STAMP.txt" "${AWS_ARGS[@]}" >/dev/null 2>&1; then
+      rm -rf "$ST_LOCAL"
+      echo "SELFTEST FAILED (exit 24): MIRROR probe still in S3 after local delete — --delete semantics broken" >&2
+      exit 24
+    fi
+    log "SELFTEST assertion OK: mirror probe disappeared with the local delete"
+    if ! aws s3 ls "$ST_S3/archive/probe-$STAMP.txt" "${AWS_ARGS[@]}" >/dev/null 2>&1; then
+      rm -rf "$ST_LOCAL"
+      echo "SELFTEST FAILED (exit 25): ARCHIVE probe VANISHED from S3 after a local delete —" >&2
+      echo "  the archive path can destroy the only remaining copy of pruned telemetry. DO NOT" >&2
+      echo "  prune anything locally, and do not tear down, until this is fixed." >&2
+      exit 25
+    fi
+    log "SELFTEST assertion OK: archive probe SURVIVED the local delete — THE assertion that matters"
+
+    rm -rf "$ST_LOCAL"
+    log "SELFTEST PASSED — both sync semantics proven against s3://$S3_BUCKET"
+    log "leftover to clean MANUALLY when convenient (never automated, by the very semantics just proven):"
+    log "    aws s3 rm --recursive $ST_S3/"
+    exit 0
+    ;;
+
+  *) die "unknown --mode '$MODE' (expected: full | run | datasets | self-test)" ;;
 esac
 
 # ---- Verify, do not assume (Rule 11: "backed up" is wrong if 3 files errored) ----

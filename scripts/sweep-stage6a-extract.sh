@@ -64,7 +64,20 @@ CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 # Sanity
 [ -f "$CUFILE_JSON" ]   || { echo "missing corrected cufile.json at $CUFILE_JSON" >&2; exit 1; }
 [ -f "$EXTRACTOR" ]     || { echo "missing extractor at $EXTRACTOR" >&2; exit 1; }
+
+# cuFile mode for the kvikIO cells — same contract as sweep-stage5-training.sh:
+# 'off' (GDS) is the grid's default; the mode-controlled paired cell
+# (docs/STAGES.md, Stage-6 roadmap 6.A Tier 1) is requested by exporting this
+# for that one invocation. Passed to the extractor as --compat-mode and set
+# through kvikio.defaults — one channel, so the mode a cell ran in is never
+# ambiguous. Validated here because the note is built before the extractor runs.
+CUFILE_COMPAT_MODE="${CUFILE_COMPAT_MODE:-off}"
+case "$CUFILE_COMPAT_MODE" in
+  off|on|auto) ;;
+  *) echo "CUFILE_COMPAT_MODE must be off|on|auto, got '$CUFILE_COMPAT_MODE'" >&2; exit 2 ;;
+esac
 [ -x "$RECORD" ]        || { echo "missing or non-exec record-run.sh at $RECORD" >&2; exit 1; }
+FAILED_CELLS=0
 
 # Dataset paths (matches FILESYSTEM-MAP)
 BRCA_RAWTIFF_50=${FS_MOUNT}/data/tcga-brca-rawtiff
@@ -189,14 +202,23 @@ run_cell() {
   cfg=$(dataset_config "$dataset_tag") || return 2
   IFS='|' read -r rawtiff svs coords manifest <<< "$cfg"
 
-  # Backend-specific LD_PRELOAD
+  # Backend-specific LD_PRELOAD + cuFile mode. The mode is recorded as REQUESTED
+  # (the per-cell cuFile path accounting settles which path actually ran, D8);
+  # on a cuCIM cell it is <n/a>, never a value the cell did not use.
   local preload=""
+  local compat_mode=""
   if [ "$backend" = "kvikio" ]; then
     preload="$LIBCUFILE_SYSTEM"
+    compat_mode="$CUFILE_COMPAT_MODE"
   fi
 
-  # Cell + run-dir naming
+  # Cell + run-dir naming. A non-default cuFile mode joins the NAME, not only
+  # the note — the aggregators group configs by name, and the mode-controlled
+  # paired cell must never collapse into its best-mode twin.
   local cell_name="extract-${model}-${backend//_batched_cpu/}-${dataset_tag}-N${n_gpus}"
+  if [ "$backend" = "kvikio" ] && [ "$compat_mode" != "off" ]; then
+    cell_name="${cell_name}-compat${compat_mode}"
+  fi
   local now_utc
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.A-${cell_name}"
@@ -225,7 +247,7 @@ run_cell() {
   if [ "$model" = "uni2-h" ]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   fi
-  local note="${approval_tag}Stage 6.A cell: model=${model} backend=${backend} N_gpus=${n_gpus} dataset=${dataset_tag} gpus=${gpu_csv} batch=256. WHY: docs/Stage-6-Feature-Extraction.md 6.A Tier 1 + that stage's decision register. Foundation-model frozen-eval extraction via mp.spawn DDP; per-rank modulo slide partitioning. AMP autocast FP16 + channels_last + cudnn.benchmark. CLS-token pooling (storage-benchmark universal choice). Per-cell LD_PRELOAD scoping: kvikio cells preload the system libcufile, cuCIM cells leave it unset — cuCIM links its own bundled libcufile and segfaults on its first read under the ABI clash."
+  local note="${approval_tag}Stage 6.A cell: model=${model} backend=${backend} N_gpus=${n_gpus} dataset=${dataset_tag} gpus=${gpu_csv} batch=256 cufile_compat_mode=${compat_mode:-<n/a>} (REQUESTED, not proven — the per-cell cuFile path accounting settles which path ran). WHY: docs/Stage-6-Feature-Extraction.md 6.A Tier 1 + that stage's decision register. Foundation-model frozen-eval extraction via mp.spawn DDP; per-rank modulo slide partitioning. AMP autocast FP16 + channels_last + cudnn.benchmark. CLS-token pooling (storage-benchmark universal choice). Per-cell LD_PRELOAD scoping: kvikio cells preload the system libcufile, cuCIM cells leave it unset — cuCIM links its own bundled libcufile and segfaults on its first read under the ABI clash."
 
   local extractor_args=(
     --backend "$backend"
@@ -240,7 +262,7 @@ run_cell() {
     --summary-json "$run_dir/extraction-summary.json"
   )
   if [ "$backend" = "kvikio" ]; then
-    extractor_args+=( --rawtiff-dir "$rawtiff" --n-buffer 256 --num-threads 16 )
+    extractor_args+=( --rawtiff-dir "$rawtiff" --n-buffer 256 --num-threads 16 --compat-mode "$compat_mode" )
   else
     extractor_args+=( --svs-dir "$svs" )
   fi
@@ -265,6 +287,7 @@ run_cell() {
 
   local rc=$?
   echo "[$cell_name] record-run.sh exited rc=$rc"
+  (( rc != 0 )) && FAILED_CELLS=$(( FAILED_CELLS + 1 ))
   return "$rc"
 }
 
@@ -394,6 +417,7 @@ run_tier2_kvikio_chunked() {
        --summary-json "$run_dir/extraction-summary.json" \
        --per-chunk-summary "$run_dir/per-chunk-summary.csv" \
        --chunk-size "$chunk_size"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 run_tier2_kvikio_chunked_multimodel() {
@@ -459,6 +483,7 @@ run_tier2_kvikio_chunked_multimodel() {
        --output-dir-base "${FS_MOUNT}/features/6.A" \
        --run-dir "$run_dir" \
        --chunk-size "$chunk_size"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 tier2_production() {
@@ -507,6 +532,7 @@ tier2_kvikio_multimodel_smoke() {
        --output-dir-base "${FS_MOUNT}/features/6.A-smoke" \
        --run-dir "$run_dir" \
        --chunk-size 5 --max-slides 10
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 smoke() {
@@ -535,6 +561,7 @@ smoke() {
        --per-slide-csv "$run_dir/per-slide.csv" \
        --summary-json "$run_dir/extraction-summary.json" \
        --max-slides 3
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 all() {
@@ -565,3 +592,9 @@ case "${1:-}" in
     exit 2
     ;;
 esac
+
+if (( FAILED_CELLS > 0 )); then
+  echo "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation)," >&2
+  echo "        and this exit tells the chain a hole exists rather than letting the step be marked done." >&2
+  exit 1
+fi

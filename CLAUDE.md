@@ -144,9 +144,11 @@ failed run dir, never delete it (this covers data, not prose: superseded documen
 git holds it); (7) verify the new state is actually clean. Not a licence to scope-creep — but never leave a
 half-clean state.
 
-**Git: one commit and push per stage, at closeout — and I do it.** Don't commit autonomously, don't suggest
-committing mid-stage, and don't read a large `git status` as a signal to commit. Flag "ready for stage commit"
-at closeout. The push is also a teardown prerequisite.
+**Git: Claude commits and pushes autonomously** (`git add -A && git commit && git push`), at its own
+cadence — the working policy is a commit per coherent work block, always preceded by `./backup.sh`, with a
+message that summarizes the block. Keep commits reviewable: batch at checkpoints, not mid-edit. The push is
+also a teardown prerequisite, and an unpushed repo dies with the instance — so push promptly, never let
+work sit local-only overnight. `git reset --hard` / `git clean -f` remain ask-first (destructive).
 
 **tmux:** all work runs inside `tmux new -A -s wsi` — assume you're already in it. Still tee long output (it
 survives even if tmux dies). Don't propose `nohup`/`disown`.

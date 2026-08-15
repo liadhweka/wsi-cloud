@@ -42,6 +42,7 @@ CONCURRENCIES=(1 4 16 64)
 TOTAL=${#CONCURRENCIES[@]}
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
+FAILED_CELLS=0
 
 # Sanity: source must exist and contain real data
 if [[ ! -d "$SRC" ]]; then
@@ -91,6 +92,8 @@ for n in "${CONCURRENCIES[@]}"; do
         "$SRC" \
         "$TARGET/" \
     2>&1 | tee -a "$SWEEP_LOG"
+    cell_rc=${PIPESTATUS[0]}
+    if (( cell_rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: cell rc=$cell_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 
   CELL_END=$(date -u +%FT%TZ)
   POST_TARGET_BYTES=$(du -sb "$TARGET" | awk '{print $1}')
@@ -149,3 +152,9 @@ log ""
 log "=== sweep done ==="
 log "review: cat runs/INDEX.md | tail -$(( TOTAL + 5 ))"
 log "next:   scripts/aggregate-stage1-fpsync.py 'runs/2026-*-s1.5-fpsync-n*'"
+
+if (( FAILED_CELLS > 0 )); then
+  log "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation),"
+  log "        and this exit tells the chain a hole exists rather than letting the step be marked done."
+  exit 1
+fi

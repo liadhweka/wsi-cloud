@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-15T18:38:56.633Z
+  modified: 2026-08-15T20:14:59.113Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -31,12 +31,13 @@ These change what the numbers mean, so resolving them after cells have run means
 2. **Does WEKA-on-AWS do true GDS?** Decides whether the GPU-direct matrix is 2×2+1 or a full 2×3. Resolve
    **empirically** — `gdscheck -p` plus a recorded canary cell — not from documentation, which disagrees with
    the transport analysis. Detail: `docs/STAGES.md` **D8**.
-3. **Derive each filesystem's consistency relation.** The canary cannot run without it and it must never be
-   ported between legs: WEKA from the actual EC scheme, Lustre from the actual stripe layout. Detail:
-   `docs/STAGES.md` **D12**. *Empirical anchors from the 2026-08-15 Stage-0 probes (5+2 cluster):* write
-   wire/app ≈ **1.455** (≈ 7/5 EC + ~4% protocol, measured at `L6 Sent_client_sum` vs app 5.2 GB/s), read
-   wire/app ≈ **1.034**. Re-derive + re-calibrate on the post-switch cluster before the canary bands are set
-   (same 5+2 scheme expected → ratios should reproduce; a shift is itself a finding).
+3. **Consistency relation — WEKA derivation + evaluator BUILT (2026-08-15: `wsi_agg_helper.py check`,
+   relation (D+P)/D writes / 1.0 reads from `WEKA_EC_SCHEME`; probe anchors 1.455 write / 1.034 read).
+   Remaining: (a) POST-SWITCH BAND CALIBRATION — repeat the two probe-shaped cells ≥3× on the new cluster,
+   write `runs/.leg-state/weka/canary-bands.json` (the evaluator exits non-zero as UNCALIBRATED until then,
+   by design); (b) wire the check into the chain (D-7 canary-abort + prove-recording's pending assertion);
+   (c) the Lustre relation from the actual stripe layout on Leg B (the helper refuses until built).**
+   Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md` (the evaluator + calibration procedure).
 4. **Determine the Lustre LND actually in use** (kernel TCP vs the EFA provider). This decides which client
    counters are primary versus diagnostic — get it wrong and every Lustre number cites a bypassed source.
 5. **Cache-clearing mechanism per filesystem.** How you reach a cold state differs per side and includes a
@@ -45,37 +46,23 @@ These change what the numbers mean, so resolving them after cells have run means
    `vm.drop_caches=3`, not `1` — dentries and inodes are the caches that matter for a metadata workload, and a
    warm dentry cache serves `open()` client-side on both legs alike.** What is still open is the *server-side*
    half, per filesystem. Detail: `docs/STAGES.md` **D13**, `docs/RUNBOOK.md` (what each step clears).
-6. ⚠ **Four read sweeps need driver changes before they are run — the decisions are made, the drivers lag.**
-   Docs are now the correct spec; `scripts/` was out of scope for the docs pass, so every one of these is
-   still unimplemented. **The 1.0b/1.0d item is the most urgent thing on this list**, because those cells are
-   the denominator for every "% of ceiling" in the project.
-   - **1.0b / 1.0d** (`sweep-stage1-{seqr,randr}.sh`): today `--size=4G --numjobs=N --unlink=1` with a layout
-     phase, so the working set is 4 GiB×N and **every cell reads bytes written seconds earlier** — plausibly
-     the write cache. Size the working set past the larger server-side cache, stage data ahead of the timed
-     window, stop unlinking between cells, reverse or randomise cell order, and add one cold reference cell.
-   - **1.6** (`sweep-stage1-mixed.sh`): exemption granted on stated grounds (`--direct=1` plus deliberate
-     steady state), but it needs **one cold reference cell** to evidence it, and cell order de-ordered.
-   - **2.0** (`sweep-stage2-properties.sh`): gains an explicit cold/warm axis, **8 cells → 16 per leg**, with
-     `vm.drop_caches=3` and randomised order. No cache handling exists in the driver today.
-   - **4.B** (`sweep-stage4b-tilesread.sh`): `TIER3_DROP_CACHES=0` hardwires the only cold mechanism off, and
-     the header justifies it with a *previous host's* RAM. 4.B is where the working-set-vs-cache crossover has
-     to be characterised per filesystem. Re-derive and re-enable.
-   **Do the cell de-ordering as part of the staging rework, not separately** — it is one line per driver, but
-   the same loops are restructured for staging, and touching them twice invites a mistake.
-   **Sizes are parameters, never literals:** the corpus size is a function of the provisioned server-side
-   cache, so it is read from configuration set at provisioning, not written into the driver.
-   Detail: `docs/Stage-1-Ingest.md`, `docs/Stage-2-Cataloging.md`, `docs/Stage-4-Patching.md`, **D13**.
 6b. **nvidia-fs I/O counters — enablement DONE (Leg-A instance, 2026-08-15: enabled live, persisted in
     `/etc/modprobe.d/nvidia-fs-stats.conf`, and the bootstrap now enables them at build). What remains is the
     D-6 canary half:** the pre-cell canary must require them **enabled and non-zero on a known-good read**
     before any cuFile cell counts — a present-but-all-zero split reads as "no GPU-direct traffic" rather than
     "accounting was off" and would corrupt the **D8** determination. `Active Shadow-Buffer (MiB)` is the
     compat-mode bounce signal. Stats format on this stack: `NVFS statistics(ver: 4.0)`, driver 2.29.4.
-6c. **GDS stack version skew — verify before any kvikIO cell counts (D-10 / Tier-2 row 7).** This instance
-    runs libcufile **1.14.1** (CUDA 12.9 toolkit) against nvidia-fs **2.29.4** (driver 595.71.05; the module
-    self-reports GDS 1.18.0.62). `gdscheck -p` runs clean and reports compat mode, but "matched" must be
-    verified (docs + the D-6 known-good-read showing the counters move), not assumed from a clean probe.
-    Matters more on Leg B, where GDS is expected to engage for real.
+6c. **GDS stack version skew — functional half VERIFIED (2026-08-15): a kvikIO 26.04 GPU read off the mount
+    through the preloaded system libcufile 1.14.1 against nvidia-fs 2.29.4 completed cleanly (64 MiB into
+    GPU memory, no ABI issue).** Remaining half is D-6's accounting verification, with a nuance the sanity
+    check exposed: **path accounting has THREE layers.** kvikio's own `compat_mode` (defaulted to AUTO=2
+    here) can serve reads via kvikio's POSIX path **without ever entering cuFile** — nvidia-fs counters and
+    Active Shadow-Buffer stayed 0 through a successful read. So per-cell path proof must record which layer
+    served the I/O: kvikio-compat cells are "posix-by-construction" (no cuFile evidence exists or is
+    needed); only kvikio-compat=off cells engage cuFile, where CUFILE_STATS + shadow-buffer + nvidia-fs
+    decide GDS-vs-bounced. Enabled stats format captured for the D-6 parser: `Reads: n=.. ok=.. err=..
+    readMiB=..` + `Bandwidth(MiB/s)=..` lines (NVFS ver 4.0). The recorded D8 Phase-0 cell still runs
+    post-switch in Phase 0, with modes forced explicitly, never AUTO.
 7. **Size the 6.B synthetic corpus using BOTH filesystems' cache sizes — inputs fetched; freeze after the
    backend switch is real.** The corpus must exceed the client page cache (768 GiB) **plus** the larger
    server-side cache. Fetched 2026-08-15: FSx PERSISTENT-1000 carries **27.3 GiB RAM cache/TiB**
@@ -97,49 +84,32 @@ These change what the numbers mean, so resolving them after cells have run means
 11. **Record both sides' provisioned configuration into the environment contract** — WEKA: backend type and
     count, capacity, EC scheme, client networking mode. FSx: tier, capacity, provisioned metadata IOPS, EFA
     state. Without these the fairness basis is unverifiable after the fact. Detail: `docs/STAGES.md` **D6/D7**.
-12. **Capacity headroom — recomputed 2026-08-15 for the ratified 6xlarge switch; fits everywhere.** Worst
-    case: datasets 1.75 TiB + full-cohort raw-TIFF ~6.4 TiB (if D-28 retains it) + Stage-1.0 corpus 2.0 TiB
-    + 6.B corpus 3.0 TiB + features/heatmaps/scratch ≲ 1 TiB ≈ **14.2 TiB** — fits FSx at 26.4 TiB and fits
-    the new WEKA cluster trivially (8 × i8ge.6xlarge carries ~109 TiB raw). Corpus sizes stay parameters
-    read from env, never literals (variables defined during the read-driver rework). Delete once both sizes
-    are frozen (item 7) and recorded in the stage roadmaps.
-13. **Two remainders from the worker measurement-correctness pass.** The seven bugs themselves are **fixed**
-    (see `docs/SCRIPT-TRACKER.md` for what each script now does); these two were deliberately left because
-    each needs something that does not exist yet:
-    - **`aggregate-stage4c-kvikio.py`'s `gds_engaged` is `"unknown"`.** The fabricated column — derived from
-      the run-dir name, i.e. from the *requested* config — is gone, and `cufile_mode_requested` now carries
-      that honestly. Populating the *achieved* path needs cuFile's own byte accounting (**D-6**). Until then
-      no cell can evidence which path it took, so **the GPU-direct matrix cannot be interpreted** and the
-      **D8** WEKA-GDS question stays unanswered.
+12. **Capacity headroom — recomputed 2026-08-15; fits everywhere (full-cohort raw-TIFF now DECIDED, was
+    D-28).** Worst case: datasets 1.75 TiB + full-cohort raw-TIFF ~6.4 TiB (retained at rest per the
+    Stage-4 register) + Stage-1.0 read corpora **9.5 TiB** (seq 3 TiB + 26 × 256 GiB one-touch regions, per
+    the `STAGE1_*` env parameters) + 6.B corpus 3.0 TiB + features/heatmaps/scratch ≲ 1 TiB ≈ **21.7 TiB**
+    — fits FSx at 26.4 TiB (~18% headroom) and the new WEKA cluster trivially. The `STAGE1_*` values in
+    env.sh assume the post-switch 1536 GiB backend RAM — **freeze them (with item 7's 6.B size) once the
+    new cluster's RAM is confirmed at spin-up.** If FSx headroom feels tight at Leg-B spin-up, raising FSx
+    capacity is a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full 1073
+    slides — measured work, not dead time, but plan the leg's schedule with it.
+13. **Worker measurement-correctness remainders — the 4.C half is DONE (2026-08-15):** `gds_engaged` now
+    carries the recorded three-layer path-accounting verdict via the new `wsi_cufile_accounting.py` +
+    `read-tiles-kvikio.py` wiring (see tracker **D-6** for what remains: Stage-5/6 worker wiring before
+    Stage 5 runs; the recorded Phase-0 cell post-switch; the INCOMPLETE wiring with D-30). Still open here:
     - **`read-after-write-stage7.py`'s 10 ms poll.** The interval is now reported as the visibility-latency
       resolution floor, so quantisation is visible rather than silent. Whether to *tighten* it is a tuning
       judgment against CPU cost and is unmade. Verified on the build machine: measured latencies fell
       **below** the floor, so at 10 ms this cell is sampling poll phase, not visibility — decide the interval
       before 7.4.b runs, or its headline number means nothing.
-13b. **6.C's MIL workload can vanish from the cell without failing it.**
-    `orchestrate-concurrent-stage6c.sh` resolves features from `MIL_FEATURES_TAG`; if that dir has under 10
-    `.pt` files it falls back to the `brca50` subset, and if *that* is also thin it touches `.mil-skipped` and
-    `return 0`. So a 6.C cell can complete having run **three of its four workloads**, or having run MIL
-    against a *different corpus than configured* — and 6.C exists precisely to measure four workloads
-    contending. Both outcomes are recorded only in a log file. **Decide the failure semantics**: the
-    substituted-corpus path and the skipped path both need to fail the cell, or at minimum surface into
-    `results.json` so the aggregator can exclude it. Left unfixed because it needs the orchestrator's error
-    contract settled — the same question as B.9 (drivers swallow failures), so decide them together.
-    `EXTRACT_GPUS` had the same shape and **is now guarded** (fails loud on a GPU index this instance does not
-    have); this one is the remaining instance.
-13c. ⚠ **A pre-cloud sweep found 51 unambiguous defects across `scripts/`; most are fixed, and what remains
-    is registered as `D-25`…`D-32` in `docs/SCRIPT-TRACKER.md`.** Four of the eight gate a first cell and are
-    the ones to look at first:
-    - **`D-27`** — `train-resnet50-stage5.py` and `extract-features-foundation-stage6.py` hardcode
-      `compat_mode="off"` from a *previous environment's* result and expose no CLI knob, so **the
-      mode-controlled paired cell `docs/STAGES.md` specifies for 5.A and 6.A cannot be run**, and a leg where
-      GDS is unachievable cannot request compat. Adding the flag needs no target value.
-    - **`D-29`** — **D13** cache state and **D15** core accounting have *no field to be recorded into*, so
-      both requirements are unmeetable by any cell as things stand.
-    - **`D-30`** — `record-run.sh` stamps a cell `OK` while it is missing cost inputs, cache state, core
-      accounting and cuFile path proof. Decide with **D-21** phase 2.
-    - **`D-28`** — Stage 7.2 is configured to read full-cohort raw-TIFF that **no step in the leg plan
-      produces**. Either 4.D retains the full cohort (order ~7 TB, a capacity input) or 7.2 runs the subset.
+13c. **[USER] The one remaining first-cell-gating defect from the pre-cloud sweep: `D-30`/`D-21` phase 2 —
+    what blocks vs warns.** `record-run.sh` stamps a cell `OK` while missing cost inputs, cache state, core
+    accounting or cuFile path proof, and `run-leg.sh` only warns when the contract-verified marker is
+    absent. Both need one ratification: which absences REFUSE rather than warn. *Recommendation:* kvikIO
+    cell without a path-accounting split → INCOMPLETE; read cell without a `cache_state` declaration →
+    INCOMPLETE; missing cost inputs → warn only (repairable arithmetic, per RUNBOOK); contract-verified
+    marker absent at leg start → refuse (D-21 phase 2). Decide before the leg starts. (D-27, D-28 and D-29
+    from the pre-cloud sweep's gating list are all DONE — tracker + the Stage-4 register hold the records.)
 14. **Decide the cuCIM tile-cache policy.** Every cuCIM path sets a 512 MiB per-process cache that is not
     swept, not recorded, and absent from the cold/warm discussion — yet sits in front of the filesystem on
     every cuCIM cell. Record it per cell or make it swept, and apply the same choice to both legs.
@@ -198,9 +168,12 @@ These change what the numbers mean, so resolving them after cells have run means
     credits; writes ran 5.2 GB/s app × **1.455 measured wire amplification** (≈ 5+2 EC's 7/5 + ~4% protocol;
     read relation measured 1.034) = wire already grazing baseline. So the ceiling cells WOULD measure the
     backend fabric and its credit state; the switch is confirmed necessary, execution pending, timing =
-    after this build session, before hydration/baseline. The human runs the destroy/switch/reapply; treat it as a standard
-    TEARDOWN-AND-REBUILD cycle (handoff edit → backup → commit+push → preflight → destroy → apply), since
-    env.sh and the mount die with it and Tier 0 must be re-evidenced against the NEW cluster. On the rebuilt
+    after this build session, before hydration/baseline. Treat it as a standard TEARDOWN-AND-REBUILD cycle under the
+    2026-08-15 split (Claude does EVERYTHING in order — stop-check → handoff edit → self-test+backup →
+    contract write → teardown-prep.sh with commit+push+preflight, per the autonomous-git convention — then
+    hands the human the GO; human: destroy → flip instance_type → apply), since env.sh and the mount die
+    with it and Tier 0 must be re-evidenced against the NEW cluster. Timing: AFTER the full prefetch
+    completes and verifies clean. On the rebuilt
     environment: (a) re-verify transport (DPDK) from the client's own report; (b) re-derive
     `WEKA_BACKEND_TYPE/RAM_TOTAL`, capacity, EC scheme, `FS_CLIENT_RESERVED_CORES`, `FS_USD_PER_HR`,
     `SOFTWARE_USD_PER_HR` (item 18); (c) **sweep every stale `i8ge.2xlarge` reference out of docs, env.sh
@@ -210,7 +183,13 @@ These change what the numbers mean, so resolving them after cells have run means
     drive per host — 60 TB → 6.85/hr — before locking); backend RAM 1536 GiB → corpus sizes per item 7.
     Frontend stays one g6e.24xlarge with 4 FE cores unless the human ratifies otherwise (thesis §9:
     single-client is the unit of analysis; the FE-core count is part of WEKA's "realistic production config"
-    and its cost accounting).
+    and its cost accounting). **One-drive-per-host: the human wants it if it saves money without hurting
+    results (2026-08-15) but needs it explained + the terraform specifics — bring both to the pre-teardown
+    discussion.** What it means: i8ge.6xlarge has 2 × 7.5 TB NVMe; if the terraform-aws-weka module can give
+    WEKA only one per host, licensed raw capacity halves (120 → 60 TB → software 13.70 → 6.85/hr) while
+    ~34 TiB usable still doubles the ~14 TiB need. Benchmark impact to verify before adopting: half the
+    drives = half the aggregate NVMe bandwidth/IOPS — confirm 8 × 1 drive still clears the client's
+    measured ≥11.6 GB/s with margin, or drop the idea.
 23. **Full dataset prefetch to S3 is RUNNING (relaunched 2026-08-15 at PREFETCH_PARALLEL=32 after PAR=8
     measured WAN-bound at ~13 MB/s aggregate; now ~80 MB/s; log
     `runs/sweep-logs/2026-08-15-*-prefetch-full-par32.log`).** Expected: 1133 TCGA files / 1079 GiB + 1365
@@ -248,16 +227,19 @@ These change what the numbers mean, so resolving them after cells have run means
    by accident.
 8. **Any per-model adjustment must be applied identically on both legs** and noted in the run README. An
    adjustment made on one leg only becomes a filesystem difference in the results.
-9. **`run-leg.sh`'s abort-on-failure guard only sees the driver's exit status.** The drivers run under
-   `set -uo pipefail` without `-e` and pipe each `record-run.sh` call into `tee`, so a failed cell leaves the
-   driver at exit 0 and the step is marked done. Stage 5 was fixed; **the other sweeps still swallow
-   failures.** *Recommendation:* attempt every cell, then exit non-zero if any failed — which also satisfies
-   `docs/RUNBOOK.md`'s design that a bad cell goes `INCOMPLETE` without taking down the sweep.
+9. **`run-leg.sh`'s abort-on-failure guard only sees the driver's exit status — the
+   attempt-all-then-exit-nonzero pattern is implemented in stage 5, 2.0, 1.6, 4.B, 6.C, and the new
+   1.0b/1.0d drivers (2026-08-15). Still swallowing failures:** `sweep-stage1-{seqw,randw,fpsync}.sh`,
+   `sweep-stage3-tissue-detection.sh`, `sweep-stage4a-patches.sh`, `sweep-stage4c-kvikio.sh`,
+   `sweep-stage6a-extract.sh`, `sweep-stage6b-{mil,stress}.sh`, `sweep-stage7-clinical.sh`. Apply the same
+   pattern when each is next touched, or in one sweep before the leg starts.
 10. **UNI2-h results stay internal-only** — don't strip the tags in refactors; filter those rows before
    anything leaves the building. More important here than in an internal study, since a competitive comparison
    is likelier to be externalised. Detail: `[[uni2h-conditional-use-status]]`.
-11. **Next-teardown verification.** First real teardown must run `sync-to-s3.sh`'s FIRST-RUN PROCEDURE
-   (its header, steps 1-7 — the archive-vs-mirror semantics test is the one that matters), then remove its
-   UNVERIFIED banner. (The SSM deploy-key silent-install check passed on the 2026-08-15 boot: "fixed deploy
-   key installed from SSM".) Tracked cosmetic, no action: a mamba "error opening log file: Permission denied"
-   warn at the env-build log tail — envs build and smoke-pass regardless; investigate only if impact appears.
+11. **sync-to-s3 first-run verification DONE (2026-08-15, ahead of the first teardown):** `--self-test`
+   built (was D-23), PASSED against the real bucket (mirror probe deleted on local delete; archive probe
+   survived), UNVERIFIED banner removed, and `teardown-prep.sh` now runs the self-test mechanically before
+   every teardown. Leftover to clean manually when convenient: `aws s3 rm --recursive
+   s3://liad-wsi-cloud/_selftest/`. (SSM deploy-key silent-install check passed on the 2026-08-15 boot.)
+   Tracked cosmetic, no action: a mamba "error opening log file: Permission denied" warn at the env-build
+   log tail — envs build and smoke-pass regardless; investigate only if impact appears.

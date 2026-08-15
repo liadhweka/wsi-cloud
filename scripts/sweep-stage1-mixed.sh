@@ -13,10 +13,11 @@
 #   - READ side:  fio --rw=randread --iodepth=8 against pre-existing fio scratch
 #     on $FS_MOUNT, sweeping bs × jobs to characterise the read side under load
 #
-# Grid: bs ∈ {4K, 64K} × jobs ∈ {1, 4, 16, 64} = 8 cells.
+# Grid: bs ∈ {4K, 64K} × jobs ∈ {1, 4, 16, 64} = 8 steady-state cells under the
+# grid's RECORDED cold/warm exemption (D13 route 4), PLUS one cold reference
+# cell (route 2) as the exemption's evidence = 9 cells. Cell order is fixed and
+# de-ordered in jobs — warmth must never track the swept variable.
 # Per cell: ~600s steady + 60s ramp = 11 min fio, plus fpsync running concurrent.
-# fpsync n=4 takes ~10m 51s for 1.05 TiB, so it covers ~100% of fio's timed window.
-# Total estimated: ~8 × 12 min = ~1.5 hr.
 #
 # Per-cell isolation via record-run.sh: any single cell failure leaves rest intact.
 #
@@ -58,9 +59,37 @@ mkdir -p "$LOG_DIR" "$WRITE_TARGET" "$SHDIR_ROOT"
 SWEEP_LOG="$LOG_DIR/$(date -u +%F-%H%M)-stage1-mixed.log"
 
 INGEST_N=4
-BS_LIST=(4k 64k)
+# Fixed de-ordered (bs, jobs) sequence — never ascending in jobs, so warmth
+# cannot track the swept variable (D13; the Stage-1 roadmap's ordering rule).
+# Identical on both legs by being committed here. The FIRST entry is the COLD
+# REFERENCE CELL (D13 route 2): the evidence for the recorded steady-state
+# exemption the rest of the grid runs under. Its grid point (4k, jobs=1) is the
+# one most likely cache-resident — smallest working set, lowest concurrency —
+# so it is where cache-service would show first. Cold = vm.drop_caches=3 with
+# the acknowledgment recorded; --direct=1 already bypasses the client page
+# cache, and the server-side cache is not clearable from here — the residual
+# is stated, not hidden. If this cell matches its warm twin, the exemption is
+# confirmed cheaply; if not, server-side cache is material and the grid grows.
+CELLS=("coldref:4k:1" "64k:16" "4k:1" "64k:64" "4k:4" "64k:1" "4k:64" "64k:4" "4k:16")
+# jobs list still needed for the prep-completeness gate below.
 JOBS_LIST=(1 4 16 64)
-TOTAL=$(( ${#BS_LIST[@]} * ${#JOBS_LIST[@]} ))
+TOTAL=${#CELLS[@]}
+
+drop_caches_evidenced() { # drop_caches_evidenced <evidence-file>
+  local ev="$1" rc
+  sync
+  sudo -n sysctl vm.drop_caches=3 > "$ev.tmp" 2>&1
+  rc=$?
+  {
+    echo "action=vm.drop_caches=3 (client page cache + dentries + inodes)"
+    echo "timestamp=$(date -u +%FT%TZ)"
+    echo "rc=$rc"
+    cat "$ev.tmp"
+    echo "server_side=not clearable from the client; residual uncertainty stated, not hidden (D13)"
+  } > "$ev"
+  rm -f "$ev.tmp"
+  return $rc
+}
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 
@@ -100,23 +129,47 @@ log "  ingest source:  $SRC ($SRC_FILES files, $SRC_BYTES bytes)"
 log "  ingest target:  $WRITE_TARGET (cleaned per-cell)"
 log "  ingest tool:    fpsync -n $INGEST_N (FIXED across all cells)"
 log "  read scratch:   $READ_SCRATCH ($SCRATCH_FILES complete ${READ_SIZE} files, $SCRATCH_BYTES bytes total)"
-log "  read grid:      bs ∈ {${BS_LIST[*]}} × jobs ∈ {${JOBS_LIST[*]}}"
+log "  read grid:      fixed de-ordered sequence: ${CELLS[*]} (first = cold reference cell)"
 log "  total cells:    $TOTAL"
 log "  consolidated log: $SWEEP_LOG"
 
 i=0
-for bs in "${BS_LIST[@]}"; do
-  for jobs in "${JOBS_LIST[@]}"; do
+FAILED_CELLS=0
+for cell in "${CELLS[@]}"; do
+    if [[ "$cell" == coldref:* ]]; then
+      arm="cold"; rest="${cell#coldref:}"
+      bs="${rest%%:*}"; jobs="${rest##*:}"
+      name="mixed-bs${bs}-jobs${jobs}-coldref"
+    else
+      arm="warm"
+      bs="${cell%%:*}"; jobs="${cell##*:}"
+      name="mixed-bs${bs}-jobs${jobs}"
+    fi
     i=$(( i + 1 ))
-    name="mixed-bs${bs}-jobs${jobs}"
-    SHDIR="$SHDIR_ROOT/bs${bs}-jobs${jobs}"
-    note="Stage 1.6 mixed sweep cell $i/$TOTAL: concurrent ingest+read. Ingest = fpsync -n $INGEST_N (fixed, and set as a FRACTION OF THIS LEG'S OWN 1.5 write curve — an absolute rate carried across legs would make the two cells different workloads). Read = fio --rw=randread --bs=$bs --numjobs=$jobs --iodepth=8 --runtime=600 --ramp_time=60 libaio --direct=1 --filename_format=$READ_FILE_FMT against pre-staged fio scratch ($SCRATCH_FILES complete files at $READ_SCRATCH; the format matches the prep's, so this cell reads the pre-staged corpus and not files it laid out itself inside the timed window). Wrapper: fpsync kicked off in background, fio runs in foreground for the timed window, fpsync killed when fio exits. Per-cell isolation via record-run.sh; any cell failure leaves rest of sweep intact."
+    SHDIR="$SHDIR_ROOT/bs${bs}-jobs${jobs}-${arm}"
+    if [[ "$arm" == "cold" ]]; then
+      armnote="COLD REFERENCE CELL (D13 route 2): vm.drop_caches=3 with recorded acknowledgment; server-side cache not clearable from the client — residual stated. The evidence cell for the grid's recorded steady-state exemption: compare against its warm twin (same bs/jobs)."
+    else
+      armnote="Steady-state cell under the grid's RECORDED EXEMPTION from the cold/warm dimension (D13 route 4): production is warm, --direct=1 removes the client page cache from the question, and the server side is uncontrolled — evidenced by the sweep's cold reference cell."
+    fi
+    note="Stage 1.6 mixed sweep cell $i/$TOTAL: concurrent ingest+read. $armnote Ingest = fpsync -n $INGEST_N (fixed, and set as a FRACTION OF THIS LEG'S OWN 1.5 write curve — an absolute rate carried across legs would make the two cells different workloads). Read = fio --rw=randread --bs=$bs --numjobs=$jobs --iodepth=8 --runtime=600 --ramp_time=60 libaio --direct=1 --filename_format=$READ_FILE_FMT against pre-staged fio scratch ($SCRATCH_FILES complete files at $READ_SCRATCH; the format matches the prep's, so this cell reads the pre-staged corpus and not files it laid out itself inside the timed window). Cell order is fixed and de-ordered in jobs so warmth never tracks the swept variable. Wrapper: fpsync kicked off in background, fio runs in foreground for the timed window, fpsync killed when fio exits. Per-cell isolation via record-run.sh; any cell failure leaves rest of sweep intact."
 
     log ""
-    log "=== [cell $i/$TOTAL] $name ==="
+    log "=== [cell $i/$TOTAL] $name (arm=$arm) ==="
     log "  cleaning prior write target + fpsync shdir ..."
     rm -rf "$WRITE_TARGET" "$SHDIR"
     mkdir -p "$WRITE_TARGET" "$SHDIR"
+
+    # Pre-compute the run dir (pattern #4) so the cache-arm evidence lands in it.
+    export RECORD_RUN_DIR="$REPO/runs/$(date -u +%Y-%m-%d-%H%M%S)-${LEG:?LEG is unset}-s1.6-${name}"
+    mkdir -p "$RECORD_RUN_DIR"
+    if [[ "$arm" == "cold" ]]; then
+      if ! drop_caches_evidenced "$RECORD_RUN_DIR/cache-evidence.txt"; then
+        log "FATAL: vm.drop_caches=3 failed — the cold reference cell would be mislabelled. Aborting."
+        exit 1
+      fi
+      log "  cold ref: caches dropped (acknowledgment in the run dir)"
+    fi
 
     CELL_START=$(date -u +%FT%TZ)
     log "  starting cell at $CELL_START"
@@ -137,7 +190,7 @@ for bs in "${BS_LIST[@]}"; do
     # then `kill -- -$FPSYNC_PID` (negative PID = process group) to kill the
     # whole fpsync subtree without any pattern matching that could match the
     # parent.
-    "$REPO/scripts/record-run.sh" \
+    RECORD_CACHE_STATE="$arm" "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
       --stage 1.6 \
       --note "$note" \
@@ -175,6 +228,11 @@ for bs in "${BS_LIST[@]}"; do
         echo '[wrapper] fpsync tree cleaned up'
         exit \$FIO_RC
       " 2>&1 | tee -a "$SWEEP_LOG"
+    cell_rc=${PIPESTATUS[0]}
+    if (( cell_rc != 0 )); then
+      FAILED_CELLS=$(( FAILED_CELLS + 1 ))
+      log "  WARN: cell exited rc=$cell_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"
+    fi
 
     CELL_END=$(date -u +%FT%TZ)
     POST_TARGET_BYTES=$(du -sb "$WRITE_TARGET" 2>/dev/null | awk '{print $1}')
@@ -182,7 +240,8 @@ for bs in "${BS_LIST[@]}"; do
     log "  cell ended at $CELL_END"
     log "  post-cell write target: $POST_TARGET_FILES files, $POST_TARGET_BYTES bytes (ingest stream)"
 
-    RUN_DIR=$(ls -td "$REPO/runs/"*-s1.6-${name} 2>/dev/null | head -1)
+    RUN_DIR="$RECORD_RUN_DIR"
+    unset RECORD_RUN_DIR
     if [[ -n "$RUN_DIR" && -d "$RUN_DIR" ]]; then
       cat > "$RUN_DIR/notes.md" <<EOF
 # Stage 1.6 cell $i/$TOTAL — mixed (fpsync n=$INGEST_N + fio randread bs=$bs jobs=$jobs)
@@ -235,7 +294,6 @@ EOF
     else
       log "  WARN: could not locate run dir to attach notes.md (sidecar lost)"
     fi
-  done
 done
 
 log ""
@@ -244,6 +302,11 @@ log "review: cat runs/INDEX.md | tail -$(( TOTAL + 5 ))"
 log "next:   scripts/aggregate-stage1-mixed.py 'runs/2026-*-s1.6-mixed-*'"
 log "cleanup: rm -rf $WRITE_TARGET (ingest stream data, ~1 TiB transient)"
 log "         rm -rf $SHDIR_ROOT/* (fpsync shared dirs, small)"
+if (( FAILED_CELLS > 0 )); then
+  log "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation),"
+  log "        and this exit tells the chain a hole exists rather than letting the step be marked done."
+  exit 1
+fi
 
 # ============================================================================
 # Stage 1.6 PREP step (run BEFORE this sweep, also wrapped in record-run.sh):

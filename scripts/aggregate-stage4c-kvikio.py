@@ -337,6 +337,15 @@ def extract_nvidia_gpu(run_dir, gpu_index=None):
     }
 
 
+def _gds_engaged_from_accounting(reader):
+    pa = reader.get("path_accounting") or {}
+    per_proc = pa.get("per_process_gds_engaged")
+    if per_proc:
+        uniq = sorted(set(per_proc))
+        return uniq[0] if len(uniq) == 1 else "mixed(" + ",".join(uniq) + ")"
+    return pa.get("gds_engaged", "unknown")
+
+
 def extract_cell_summary(run_dir):
     """Build one CSV row for this Stage 4.C cell.
 
@@ -376,6 +385,14 @@ def extract_cell_summary(run_dir):
                 "per_process_tps": [s.get("tiles_per_sec_steady", 0) for s in per_proc],
                 "per_process_gbps": [s.get("gbps_steady", 0) for s in per_proc],
                 "latency_stats_per_tile_batch": per_proc[0].get("latency_stats_per_tile_batch", {}),
+                # Per-process verdicts; the nvidia-fs delta is device-global, so
+                # under concurrency each per-process split is an upper bound —
+                # a uniform verdict across processes is still decisive.
+                "path_accounting": {
+                    "per_process_gds_engaged":
+                        [(_s.get("path_accounting") or {}).get("gds_engaged", "unknown")
+                         for _s in per_proc],
+                },
             }
     else:
         reader_summary_path = run_dir / "reader-summary.json"
@@ -406,20 +423,17 @@ def extract_cell_summary(run_dir):
         # REQUESTED cuFile mode, read off the run-dir name. This says what the
         # cell was ASKED to do -- never what it did.
         "cufile_mode_requested": parsed["compat_mode"],
-        # ACHIEVED path. Deliberately left unknown here: this column used to be
-        # derived from `compat_mode` above, i.e. from the run-dir name, i.e.
-        # from the requested configuration -- which is precisely the "a
-        # configuration flag is not proof of behaviour" failure D8 forbids. A
-        # cell that silently fell back to compat, or silently did not, produced
-        # a "gds_engaged" answer that simply restated what was asked for, and it
-        # would have looked identical in the CSV either way.
-        #
-        # The real answer comes from cuFile's own GPU-direct-vs-bounced byte
-        # accounting, recorded per cell. Until that source is wired in
-        # (SCRIPT-TRACKER.md, deferred item D-6), this stays "unknown" rather
-        # than being fabricated: an absent column is visible, a fabricated one
-        # is not.
-        "gds_engaged": "unknown",
+        # ACHIEVED path, from the reader's recorded GPU-direct-vs-bounced byte
+        # split (path_accounting; D-6) — NEVER from the requested mode, which is
+        # precisely the "a configuration flag is not proof of behaviour" failure
+        # D8 forbids. Values: gds | partial | none | no-reads |
+        # unknown-accounting-off (the nvidia-fs counters were disabled — the
+        # standing constraint that an all-zero split must never read as "no
+        # GPU-direct traffic") | unknown (no recorded split at all: pre-D-6
+        # cells, or a summary that failed to land). For multi-process cells the
+        # verdict is the per-process consensus, or "mixed(...)" when processes
+        # disagree — a disagreement is a finding, not an aggregation choice.
+        "gds_engaged": _gds_engaged_from_accounting(reader),
         "n_buffer": parsed["n_buffer"],
         "num_threads": parsed["num_threads"],
         "n_processes": parsed.get("n_processes", 1),

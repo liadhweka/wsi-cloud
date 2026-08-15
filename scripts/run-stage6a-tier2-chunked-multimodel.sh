@@ -100,6 +100,16 @@ done
 [ -x "$PY" ] || { echo "missing python $PY" >&2; exit 1; }
 [ -f "$CONVERTER" ] || { echo "missing 20x converter $CONVERTER" >&2; exit 1; }
 [ -f "$EXTRACTOR" ] || { echo "missing extractor $EXTRACTOR" >&2; exit 1; }
+
+# cuFile mode — Tier 2 runs each leg's BEST AVAILABLE mode (docs/STAGES.md):
+# the per-leg value follows that leg's D8 answer and is exported before the
+# run; 'off' (GDS) stays the default so nothing changes where GDS is real.
+# Same single-channel contract as the sweep drivers.
+CUFILE_COMPAT_MODE="${CUFILE_COMPAT_MODE:-off}"
+case "$CUFILE_COMPAT_MODE" in
+  off|on|auto) ;;
+  *) echo "CUFILE_COMPAT_MODE must be off|on|auto, got '$CUFILE_COMPAT_MODE'" >&2; exit 2 ;;
+esac
 [ -f "$BRCA_FULL_MANIFEST" ] || { echo "missing manifest $BRCA_FULL_MANIFEST" >&2; exit 1; }
 [ -d "$RUN_DIR" ] || { echo "missing --run-dir $RUN_DIR (record-run.sh should create it)" >&2; exit 1; }
 
@@ -277,7 +287,7 @@ for ((CHUNK_IDX=0; CHUNK_IDX<N_CHUNKS; CHUNK_IDX++)); do
       --extraction-steps-csv "$EX_STEPS_CHUNK" \
       --per-slide-csv "$PER_SLIDE_CHUNK" \
       --summary-json "$SUMMARY_CHUNK" \
-      --n-buffer 256 --num-threads 16 || EXTRACT_STATUS="FAIL"
+      --n-buffer 256 --num-threads 16 --compat-mode "$CUFILE_COMPAT_MODE" || EXTRACT_STATUS="FAIL"
 
     T_MODEL_END=$(date +%s.%N)
     EXTRACT_WALL=$(awk "BEGIN{print $T_MODEL_END - $T_MODEL_START}")

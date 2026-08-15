@@ -25,12 +25,13 @@ be the worst possible tool. **Run the pre-flight, then do the destruction yourse
 ## Teardown
 
 > ### How the work splits
-> **Claude does steps 1–2** (they are judgement calls, and **step 2 is one only Claude can do at all** — its
-> context is what's being destroyed, so the account of what this session did can only be written now, by it).
-> **You run `scripts/teardown-prep.sh`**, which mechanises steps 3–6 in order — backup, contract, boot-log
-> archive, commit + push (the commit is yours because the run is), then the pre-flight gate — and **you do
-> step 8 (destroy)**. The steps below are the reference for what the script does and why, and how to run it
-> by hand if there is no working script.
+> **Claude does steps 1–6, in order** — the stop-check, the handoff (which only it can write — its context
+> is what's being destroyed), the backup + sync proof, the contract, the commit + push (the autonomous-git
+> convention), and the pre-flight — then **hands the human an explicit GO with the rebuild inputs named.
+> The human does exactly one thing: step 7, the destruction** — irreversible, therefore never automated.
+> Steps 3–5 are mechanised as one command (`teardown-prep.sh`); every piece is idempotent, so re-running
+> costs seconds. The pre-flight must follow the push, because "git clean and pushed" is one of the things
+> it verifies — an unpushed repo dying with the instance is precisely what it exists to catch.
 
 ### 1. Stop cleanly *(Claude)*
 Confirm nothing is mid-flight — a sweep interrupted mid-cell leaves a half-recorded run dir that looks real.
@@ -56,16 +57,17 @@ and the corpus-size decision if it was made (the open-items memory, the 6.B corp
 > current `$LEG`, so name it. *Why gated:* with no defined file, a handoff can be "written" into a chat
 > message that dies with the context it exists to carry.
 
-### 3. Back up the memories *(inside `teardown-prep.sh`)*
+### 3. Back up the memories, and prove the sync semantics *(Claude)*
 ```bash
 cd $REPO_DIR
-./backup.sh                    # live memories → mirror, then S3 sync
+scripts/sync-to-s3.sh --self-test   # mirror probe must vanish, archive probe must survive
+./backup.sh                         # live memories → mirror, then S3 sync
 ```
 > ⚠ **Exception, first bootstrap only:** if the memories were authored straight into the mirror and no
-> session has run yet, there is no live directory to copy from — the script refuses (exit 1) rather than
-> emptying the mirror. That's correct; skip this step then.
+> session has run yet, there is no live directory to copy from — `backup.sh` refuses (exit 1) rather than
+> emptying the mirror. That's correct; skip that half then.
 
-### 4. Write the environment contract *(inside `teardown-prep.sh`)*
+### 4. Write the environment contract *(Claude)*
 This is what makes the *next* leg provably comparable to this one. Without it, "were these two legs even
 comparable?" becomes unanswerable exactly when it matters.
 ```bash
@@ -75,19 +77,18 @@ scripts/sync-to-s3.sh --mode full
 It exits non-zero if any held-constant field is unrecorded. **Fix those rather than proceeding** — an
 unrecorded fact can never be shown to have matched later.
 
-### 5. Commit and push *(inside `teardown-prep.sh` — human-initiated, because you run it)*
-The script commits and pushes, fail-loud: an unpushed repo dies with this instance, and the push is what
-carries `runs/.leg-state/` — the resume markers — to the next build.
-
-### 6. Run the pre-flight — GO / NO-GO *(`teardown-prep.sh` hands off to it)*
+### 5. Commit, push, and gate — one command *(Claude)*
 ```bash
 source env.sh
-scripts/teardown-preflight.sh
+scripts/teardown-prep.sh            # add --write-contract at a leg end / mid-leg rebuild
 ```
-It checks: nothing in flight · memories mirrored · **the living handoff dated today** · git clean
-**and pushed** · contract complete **and in S3** · **`env.sh` agreeing with the instance's own metadata** ·
-**every local run dir's raw telemetry present in S3** · nothing else stranded on ephemeral storage · rebuild
-inputs recorded.
+It **re-verifies steps 3–4** (self-test, backup, contract — all idempotent, so a prior run costs seconds),
+then **commits and pushes** (the autonomous-git convention; `../CLAUDE.md`), fail-loud: an unpushed repo
+dies with this instance, and the push is what carries `runs/.leg-state/` — the resume markers — to the next
+build. It finishes by running `teardown-preflight.sh`, which prints **GO / NO-GO** after checking: nothing
+in flight · memories mirrored · **the living handoff dated today** · git clean **and pushed** · contract
+complete **and in S3** · **`env.sh` agreeing with the instance's own metadata** · **every local run dir's
+raw telemetry present in S3** · nothing else stranded on ephemeral storage · rebuild inputs recorded.
 
 **The telemetry check is the one that matters.** `raw/` is gitignored, so S3 is its only home, and a
 silently-failed sync is invisible until you go looking for data that no longer exists. Do not use `--quick`
@@ -95,13 +96,15 @@ before a real teardown — that skips precisely this check.
 
 **On NO-GO: stop.** Each blocking line names something that would be lost permanently.
 
-### 7. Record the rebuild inputs *(read the pre-flight's output)*
-Step 6 already checked `AMI_ID` / `INSTANCE_TYPE` / `AWS_REGION` / `AWS_AZ` in both `env.sh` and the contract —
-read its output rather than re-confirming by eye; the prose here is not a second opinion. **What the script
-cannot check: the AMI must be *pinned*, not "latest"** — a newer base image silently changes the kernel and the
-driver, both held-constant fields, so Leg B would fail its own contract verify for a reason nobody chose.
+### 6. Hand over the GO *(Claude)*
+Claude reports the pre-flight verdict to the human with the rebuild inputs named: `AMI_ID` /
+`INSTANCE_TYPE` / `AWS_REGION` / `AWS_AZ`, already cross-checked between `env.sh` and the contract — plus
+anything the destruction should know (e.g. a terraform variable changing on the rebuild). **What no script
+can check: the AMI must be *pinned*, not "latest"** — a newer base image silently changes the kernel and
+the driver, both held-constant fields, so Leg B would fail its own contract verify for a reason nobody
+chose. **On NO-GO, nothing is handed over** — Claude fixes what the blocking line names and re-runs step 5.
 
-### 8. Now destroy — in this order *(human — never automated)*
+### 7. Now destroy — in this order *(human — never automated)*
 1. **Instance** — terminate (or stop, if you're pausing rather than switching legs).
 2. **The filesystem you're finished with** — WEKA cluster, or the FSx file system.
 3. **Leave the S3 bucket and the IAM role alone.** They are the durable store; deleting the bucket is what
@@ -154,13 +157,14 @@ markers in `runs/.leg-state/$LEG/`.
 
 ## Quick reference
 
-**Teardown:** stop cleanly → edit the living handoff (`prompts/handoff-cloud.md`, dated, leg named) →
-`scripts/teardown-prep.sh` (backup → contract → commit+push → **pre-flight GO**) → destroy (instance, then
-filesystem; **never the bucket**).
+**Teardown:** *Claude, in order:* stop cleanly → edit the living handoff (`prompts/handoff-cloud.md`,
+dated, leg named) → sync self-test + backup → write the contract → `scripts/teardown-prep.sh`
+(**commit+push** → **pre-flight**) → hand the human the GO with the rebuild inputs. *Human:* destroy
+(instance, then filesystem; **never the bucket**).
 
 **Rebuild:** `terraform apply` → `claude /login` (Leg B: the Lustre prompt first) → paste the living
 handoff → contract **verify** → re-hydrate + byte-verify → Stage-0 proof → `run-leg.sh` resumes.
 
 **The three that are easiest to skip and most expensive to skip:** the living-handoff edit (step 2), the
 environment contract (step 4 — and `env.sh` recovery depends on it), and the pre-flight telemetry check
-(step 6).
+(inside step 5 — never `--quick` it before a real teardown).

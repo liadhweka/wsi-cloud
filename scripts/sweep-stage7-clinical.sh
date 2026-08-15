@@ -49,6 +49,7 @@ STREAMING="$REPO/scripts/streaming-loop-stage7.sh"
 RAW_HELPER="$REPO/scripts/read-after-write-stage7.py"
 
 [ -x "$RECORD" ] || { echo "missing $RECORD" >&2; exit 1; }
+FAILED_CELLS=0
 [ -f "$INFER_WORKER" ] || { echo "missing $INFER_WORKER" >&2; exit 1; }
 [ -x "$ORCH" ] || { echo "missing $ORCH" >&2; exit 1; }
 [ -x "$STREAMING" ] || { echo "missing $STREAMING" >&2; exit 1; }
@@ -140,6 +141,7 @@ run_single_inference_cell() {
        --per-slide-csv "$run_dir/per-slide-inference-latencies.csv" \
        --per-slide-heatmap-csv "$run_dir/per-slide-heatmap-writes.csv" \
        --summary-json "$run_dir/inference-summary.json"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 # ---------- Per-cell orchestrator invocation (tier2_concurrent, tier5_mixed) -
@@ -178,6 +180,7 @@ run_orchestrator_cell() {
     -- "$ORCH" --workloads "$workloads" --n-concurrent "$n_concurrent" \
        --inference-batch-size "$bs" --ramp "$ramp" --runtime "$runtime" \
        --run-dir "$run_dir"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 # ---------- Tier definitions ------------------------------------------------
@@ -255,6 +258,7 @@ tier4_streaming() {
     --note "Stage 7.4.a streaming clinical loop — 10 slides emitted @ 60s cadence (~1500 slides/day rate). Captures end-to-end 'scanner-to-pathologist-visibility' wallclock per slide + cross-slide queueing if inference falls behind scanner. WHY: the end-to-end workflow bookend — it also captures cross-slide queueing if inference falls behind the emitter, which a per-slide latency number alone hides." \
     -- "$STREAMING" --run-dir "$run_dir" --n-slides 10 --cadence-s 60 \
        --model virchow2 --backend kvikio --manifest "$BRCA_SUBSET_MANIFEST"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   run_dir="$REPO/runs/${now_utc}-${LEG}-s7-7.4.b-read-after-write"
@@ -269,6 +273,7 @@ tier4_streaming() {
        --poll-interval-s 0.01 \
        --per-slide-csv "$run_dir/read-after-write-latencies.csv" \
        --summary-json "$run_dir/raw-summary.json"
+  _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
 }
 
 tier5_mixed() {
@@ -324,3 +329,9 @@ case "${1:-}" in
   all)              all ;;
   *) echo "usage: $0 {smoke|tier1_baselines|tier2_concurrent|tier3_heatmaps|tier4_streaming|tier5_mixed|tier5_endurance|tier6_cam16|all}" >&2; exit 2 ;;
 esac
+
+if (( FAILED_CELLS > 0 )); then
+  echo "FAILED: $FAILED_CELLS cell(s) exited non-zero — every cell was attempted (per-cell isolation)," >&2
+  echo "        and this exit tells the chain a hole exists rather than letting the step be marked done." >&2
+  exit 1
+fi

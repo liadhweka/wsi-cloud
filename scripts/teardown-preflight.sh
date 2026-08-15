@@ -15,7 +15,7 @@
 # WHAT IT CHECKS
 #   1. Nothing is mid-flight (a running sweep would be interrupted mid-cell)
 #   2. Live memories are mirrored into the repo
-#   3. Git working tree is clean AND pushed  (the human commits; this only verifies)
+#   3. Git working tree is clean AND pushed  (Claude commits and pushes; this only verifies)
 #   4. The environment contract exists for this leg and is complete
 #   5. Every local run dir's raw telemetry is present in S3  <-- the one that matters
 #   6. Nothing else lives only on ephemeral storage

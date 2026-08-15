@@ -32,7 +32,10 @@ from datetime import datetime
 from pathlib import Path
 
 
-RUN_NAME_RE = re.compile(r"-s2\.0-properties-([a-zA-Z0-9_-]+?)-n(\d+)$")
+# The cache arm is a parsed field and a grid dimension, never a name fragment
+# to strip: without it a 16-cell sweep would either drop the suffixed cells or
+# collapse each cold cell against its warm twin — both silent (Stage-2 roadmap).
+RUN_NAME_RE = re.compile(r"-s2\.0-properties-([a-zA-Z0-9_-]+?)-n(\d+)-(cold|warm)$")
 _BPS_RE = re.compile(r"^\s*([\d.eE+-]+)\s*B/s\s*$")
 
 
@@ -61,8 +64,8 @@ def parse_run_dir_name(p: Path):
     m = RUN_NAME_RE.search(p.name)
     if not m:
         return None
-    dataset, n = m.groups()
-    return {"dataset": dataset, "concurrency": int(n)}
+    dataset, n, arm = m.groups()
+    return {"dataset": dataset, "concurrency": int(n), "cache_arm": arm}
 
 
 def parse_iso_utc(s):
@@ -313,8 +316,8 @@ def main():
     rows = [extract_cell_summary(d) for d in dirs]
     rows = [r for r in rows if r is not None]
 
-    # Sort: dataset alphabetical, concurrency ascending
-    rows.sort(key=lambda r: (r["dataset"], r["concurrency"]))
+    # Sort: dataset alphabetical, arm (cold first), concurrency ascending
+    rows.sort(key=lambda r: (r["dataset"], r["cache_arm"], r["concurrency"]))
 
     # Write CSV
     out_csv = dirs[0].parent / "s2.0-properties-summary.csv"
@@ -325,10 +328,12 @@ def main():
             w.writerow(r)
     print(f"wrote {out_csv}", file=sys.stderr)
 
-    # Build the 2D grid
+    # Build the grid: one row per (dataset, arm), one column per concurrency —
+    # the arm is a first-class dimension so cold and warm never collapse together.
     datasets = sorted(set(r["dataset"] for r in rows))
+    arms = sorted(set(r["cache_arm"] for r in rows))
     concurrencies = sorted(set(r["concurrency"] for r in rows))
-    grid = {(r["dataset"], r["concurrency"]): r for r in rows}
+    grid = {(r["dataset"], r["cache_arm"], r["concurrency"]): r for r in rows}
 
     print()
     print("# Stage 2.0 OpenSlide property extraction sweep — POSIX, filesystem under test")
@@ -340,16 +345,17 @@ def main():
     def grid_table(title, key, fmt):
         print(f"## {title}")
         print()
-        hdr = "| dataset \\ n | " + " | ".join(str(j) for j in concurrencies) + " |"
+        hdr = "| dataset · arm \\ n | " + " | ".join(str(j) for j in concurrencies) + " |"
         sep = "|" + "---|" * (len(concurrencies) + 1)
         print(hdr); print(sep)
         for ds in datasets:
-            cells = []
-            for n in concurrencies:
-                r = grid.get((ds, n))
-                v = r.get(key) if r else None
-                cells.append(fmt(v) if v is not None else "—")
-            print(f"| **{ds}** | " + " | ".join(cells) + " |")
+            for arm in arms:
+                cells = []
+                for n in concurrencies:
+                    r = grid.get((ds, arm, n))
+                    v = r.get(key) if r else None
+                    cells.append(fmt(v) if v is not None else "—")
+                print(f"| **{ds} · {arm}** | " + " | ".join(cells) + " |")
         print()
 
     grid_table("Headline: total seconds to catalog the dataset",
@@ -379,7 +385,7 @@ def main():
     if valid:
         peak = max(valid, key=lambda r: r["app_slides_per_sec"])
         print(f"**Peak slides/sec across the sweep:** {peak['app_slides_per_sec']:.0f} "
-              f"({peak['dataset']}, n={peak['concurrency']}, "
+              f"({peak['dataset']}, n={peak['concurrency']}, {peak['cache_arm']}, "
               f"{peak.get('app_total_seconds', '?')}s for {peak.get('app_slides_total', '?')} slides)")
 
     print()
@@ -389,15 +395,15 @@ def main():
     print("Ops/s should be much higher than slides/sec because each `OpenSlide.OpenSlide(path)` triggers")
     print("many internal metadata ops (open, multiple read syscalls into header + tile-offset tables).")
     print()
-    print("| dataset | n | RDMA_rcv/weka_R (expect ~1.0-1.4) | Ops_per_sec/slides_per_sec (expect >>1) |")
-    print("|---|---|---|---|")
+    print("| dataset | n | arm | RDMA_rcv/weka_R (expect ~1.0-1.4) | Ops_per_sec/slides_per_sec (expect >>1) |")
+    print("|---|---|---|---|---|")
     issues = []
     for r in rows:
         rb = r.get("ratio_rdma_rcv_over_weka_read")
         rb_s = f"{rb:.2f}" if rb is not None else "—"
         opr = r.get("ratio_weka_ops_over_app_slides_per_sec")
         opr_s = f"{opr:.1f}" if opr is not None else "—"
-        print(f"| {r['dataset']} | {r['concurrency']} | {rb_s} | {opr_s} |")
+        print(f"| {r['dataset']} | {r['concurrency']} | {r['cache_arm']} | {rb_s} | {opr_s} |")
         if rb is not None and not (0.7 <= rb <= 1.6):
             issues.append(f"  - {r['dataset']} n={r['concurrency']}: RDMA_rcv/weka_R={rb:.2f} (outside 0.7-1.6)")
     print()
