@@ -141,8 +141,13 @@ else
     DEV=""
   fi
   if [ -n "${DEV:-}" ]; then
-    mkdir -p "$SCRATCH" && mount "$DEV" "$SCRATCH" \
-      && grep -q "$SCRATCH" /etc/fstab || echo "$DEV $SCRATCH xfs defaults,noatime,nofail 0 0" >> /etc/fstab
+    if mkdir -p "$SCRATCH" && mount "$DEV" "$SCRATCH"; then
+      # only a MOUNTED scratch earns an fstab entry — the old && … || chain
+      # appended one even when the mount itself failed
+      grep -q "$SCRATCH" /etc/fstab || echo "$DEV $SCRATCH xfs defaults,noatime,nofail 0 0" >> /etc/fstab
+    else
+      warn "scratch mount of $DEV at $SCRATCH FAILED — fstab not touched; env builds will land on the root disk"
+    fi
   else
     fatal "no scratch device prepared — CONDA_ROOT/CONDA_ENVS_DIR live on $SCRATCH; env builds skipped"
   fi

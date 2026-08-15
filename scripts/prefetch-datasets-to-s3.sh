@@ -39,7 +39,6 @@ if [ "${FORCE:-0}" != "1" ] && aws s3api head-object --bucket "$S3_BUCKET" --key
   echo "prefetch: $MODE datasets already complete (marker in S3) — skipping dataset sections (FORCE=1 to re-scan)"
   SKIP_DATASETS=1
 fi
-mkdir -p "$STAGE" || { echo "prefetch: cannot create staging dir $STAGE (scratch not mounted?)" >&2; exit 1; }
 
 s3_has() { # s3_has KEY SIZE -> 0 if object exists with the same size
   local sz
@@ -48,6 +47,9 @@ s3_has() { # s3_has KEY SIZE -> 0 if object exists with the same size
 }
 
 if [ "$SKIP_DATASETS" -eq 0 ]; then   # ---- dataset sections (skipped when marker present)
+# Staging dir is only needed by the dataset sections; the model half syncs
+# straight between S3 and $HOME and must work on a scratch-less box.
+mkdir -p "$STAGE" || { echo "prefetch: cannot create staging dir $STAGE (scratch not mounted?) — dataset sections cannot run" >&2; exit 1; }
 # ---- TCGA via the GDC data API (open-access diagnostic slides; no token) --------
 fetch_tcga_one() { # id filename md5 size
   local id="$1" fn="$2" md5="$3" size="$4" key local_f

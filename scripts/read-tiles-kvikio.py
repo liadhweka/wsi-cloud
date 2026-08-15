@@ -165,8 +165,8 @@ def find_rawtiff(rawtiff_dir, slide_id):
 # Mode 1: faithful — sequential full-pyramid-level-0 read per slide.
 # Reads the entire chosen pyramid level into GPU memory by iterating through
 # page.dataoffsets in order, async-pread'ing n_buffer at a time.
-# WHY this matches NVIDIA's benchmark: their read_tiled() iterates the same way;
-# the customer story is "WEKA absorbs the same blueprint at X sec/slide."
+# WHY this matches NVIDIA's benchmark: their read_tiled() iterates the same way,
+# so each filesystem is measured absorbing the same published blueprint.
 # -----------------------------------------------------------------------------
 def faithful_read_slide(fh, page, n_buffer, buffers):
     """Read all tiles in `page` via async pread+pipelining. Returns bytes_read."""
@@ -241,7 +241,7 @@ def mode_faithful(args):
             print(f"[faithful] SKIP-MISSING: {slide_id} not found at {args.rawtiff_dir}", file=sys.stderr)
             continue
 
-        # Cold cache between slides — critical for the "cold WEKA Read" customer story.
+        # Cold cache between slides — critical for any cell quoted as a COLD read.
         # The result is RECORDED, not assumed: cuCIM reports a failed discard by
         # RETURNING False rather than raising (docs.rapids.ai/api/cucim/stable/api/
         # — "Returns: True if succeed, False otherwise"), so discarding the return

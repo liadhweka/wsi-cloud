@@ -23,7 +23,7 @@ WHY this aggregator is separate from Stage 5's:
 Reuses the four debugged parser idioms from aggregate-stage4c-kvikio.py /
 aggregate-stage5-training.py:
   - lowercase `timestamp` in weka-stats.csv (Stage 1.5 finding)
-  - `;` delimiter + non-DPDK filter in sar-cpu.csv (cores 24-31 excluded)
+  - `;` delimiter + application-core filter in sar-cpu.csv (recorded reserved cores excluded)
   - leading-space + unit-suffix in nvidia-smi.csv
   - cumulative-counter (not rate) in rdma-counters.csv
 
@@ -160,18 +160,44 @@ def weka_client_per_sec(run_dir, col, parser=parse_bps):
     return list(sums_by_ts.values())
 
 
+
+def _reserved_cores(run_dir):
+    """The storage client's reserved-core set for THIS run, from its recorded metadata.
+
+    The reserved set is a per-filesystem, per-instance measured parameter (STAGES.md
+    D15) -- WEKA's client busy-polls its cores at 100% regardless of workload; the
+    Lustre client reserves none -- so it is read from what record-run.sh recorded
+    for the run (`cores_reserved`), never hardcoded. Refusing on absence is
+    deliberate: an application-CPU mean silently computed over an unknown exclusion
+    set is exactly the polluted number this field exists to prevent.
+    """
+    meta = run_dir / "metadata.json"
+    try:
+        cores = json.loads(meta.read_text()).get("cores_reserved")
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"FATAL: {meta}: unreadable ({e}); cannot determine the reserved-core set")
+    if cores is None:
+        raise SystemExit(
+            f"FATAL: {run_dir.name}: metadata.json carries no cores_reserved -- the cell was "
+            "recorded without FS_CLIENT_RESERVED_CORES set (docs/NAMING-AND-VARIABLES.md), so its "
+            "application-CPU mean cannot exclude the storage client's cores. Set it in env.sh "
+            "('none' on a leg that reserves none) and re-record."
+        )
+    return {str(c) for c in cores}
+
 def parse_cpu_aggregate_excluding_dpdk(run_dir):
+    """Aggregate application-core CPU %busy (recorded reserved cores excluded)."""
     p = run_dir / "raw" / "sar-cpu.csv"
     if not p.exists():
         return None
-    dpdk = {str(i) for i in range(24, 32)}
+    reserved = _reserved_cores(run_dir)
     by_ts_total = {}
     by_ts_count = {}
     with p.open() as f:
         reader = csv.DictReader(f, delimiter=";")
         for row in reader:
             cpu = row.get("CPU", "")
-            if cpu in ("-1", "all", "") or cpu in dpdk:
+            if cpu in ("-1", "all", "") or cpu in reserved:
                 continue
             ts = row.get("timestamp", "")
             if not ts:

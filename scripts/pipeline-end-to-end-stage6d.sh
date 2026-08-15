@@ -125,12 +125,13 @@ if [ "$N_EXIST" -ge 1131 ]; then
   log "Phase 1: skipping — Stage 3 output already present ($N_EXIST .h5 files)"
   PHASE_STATUS="SKIP-EXISTS"
 else
-  log "Phase 1: re-running CLAM tissue detection on full BRCA n=64"
-  # Invoke Stage 3's existing driver (idempotent — only re-runs missing slides)
-  bash "$REPO/scripts/sweep-stage3-tissue-detection.sh" tcga-brca 64 \
-       >> "$RUN_DIR/phase1-tissue-detection.log" 2>&1 || true
-  N_EXIST=$(ls "$TISSUE_DIR"/*.h5 2>/dev/null | wc -l)
-  PHASE_STATUS="OK"
+  log "FATAL: Phase 1 input missing — only ${N_EXIST}/1131 coord files at $TISSUE_DIR."
+  log "       This pipeline does NOT re-run Stage 3 implicitly: the Stage 3 driver has no"
+  log "       single-cell entry point (it runs its full dataset×concurrency grid and ignores"
+  log "       positional args), which would bury ~5 unrelated cells inside this phase's"
+  log "       wallclock and corrupt the phase timing. Produce the BRCA n=64 cell via"
+  log "       scripts/sweep-stage3-tissue-detection.sh first, then re-run this pipeline."
+  exit 2
 fi
 PHASE_T1=$(date +%s.%N)
 PHASE_WALL=$(awk "BEGIN{print $PHASE_T1 - $PHASE_T0}")

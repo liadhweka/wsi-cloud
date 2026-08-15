@@ -126,6 +126,12 @@ export WEKA_EC_SCHEME=""                         # REQUIRED to derive the WEKA c
 export WEKA_BACKEND_RAM_TOTAL=""                 # drives Stage 6.B corpus sizing (tracker item 5b)
 export WEKA_CLIENT_CORES=""
 export WEKA_CLIENT_NICS=""
+# The client's reserved-core ID LIST for this leg, from the client's own report
+# (e.g. "24-31"). record-run.sh records it into every run's cores_reserved;
+# CPU aggregators refuse runs recorded without it (D15). Set "none" on a leg
+# whose client reserves no cores. (RECORD_CACHE_STATE is per-CELL, set by the
+# sweep drivers — deliberately not an env.sh field.)
+export FS_CLIENT_RESERVED_CORES=""
 export FSX_TIER=""                               # Leg B
 export FSX_CAPACITY_TIB=""
 export FSX_METADATA_IOPS=""

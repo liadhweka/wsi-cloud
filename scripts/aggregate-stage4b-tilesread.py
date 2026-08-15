@@ -10,7 +10,7 @@ Per cell:
   - reads .run_start/.run_end for the recorded window
   - re-reads weka-stats.csv (per-timestamp sum across the client frontends) — Read, Ops/s
   - extracts RDMA rcv (read direction) + xmit (sanity, should be near 0)
-  - aggregate %busy from sar-cpu (excluding wekafs DPDK cores 24-31)
+  - aggregate %busy from sar-cpu (application cores; the storage client's recorded reserved cores excluded)
 
 Outputs:
   - runs/s4.B-tilesread-summary.csv (1 row per cell)
@@ -146,14 +146,40 @@ def weka_client_per_sec(run_dir, col, parser=parse_bps):
     }
 
 
-def parse_cpu_aggregate_excluding_dpdk(run_dir):
-    """Aggregate %busy across all cores EXCEPT wekafs DPDK cores 24-31.
 
-    sar-cpu.csv has per-core rows (CPU=0..255) and aggregate row (CPU=-1) after Stage 3 fix.
-    For Stage 4.B we want the non-DPDK aggregate.
+def _reserved_cores(run_dir):
+    """The storage client's reserved-core set for THIS run, from its recorded metadata.
+
+    The reserved set is a per-filesystem, per-instance measured parameter (STAGES.md
+    D15) -- WEKA's client busy-polls its cores at 100% regardless of workload; the
+    Lustre client reserves none -- so it is read from what record-run.sh recorded
+    for the run (`cores_reserved`), never hardcoded. Refusing on absence is
+    deliberate: an application-CPU mean silently computed over an unknown exclusion
+    set is exactly the polluted number this field exists to prevent.
+    """
+    meta = run_dir / "metadata.json"
+    try:
+        cores = json.loads(meta.read_text()).get("cores_reserved")
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"FATAL: {meta}: unreadable ({e}); cannot determine the reserved-core set")
+    if cores is None:
+        raise SystemExit(
+            f"FATAL: {run_dir.name}: metadata.json carries no cores_reserved -- the cell was "
+            "recorded without FS_CLIENT_RESERVED_CORES set (docs/NAMING-AND-VARIABLES.md), so its "
+            "application-CPU mean cannot exclude the storage client's cores. Set it in env.sh "
+            "('none' on a leg that reserves none) and re-record."
+        )
+    return {str(c) for c in cores}
+
+def parse_cpu_aggregate_excluding_dpdk(run_dir):
+    """Aggregate %busy across the APPLICATION cores.
+
+    Per-core rows required; the CPU=-1 aggregate row is skipped, and the storage
+    client's reserved cores -- recorded per run, see _reserved_cores -- are excluded.
     """
     csv_path = run_dir / "raw" / "sar-cpu.csv"
     if not csv_path.exists(): return None
+    reserved = _reserved_cores(run_dir)
     # Per-timestamp dict of cpu_id -> %idle. Then aggregate non-DPDK cores per timestamp.
     per_ts = {}  # ts -> {cpu: idle}
     with csv_path.open() as f:
@@ -173,7 +199,7 @@ def parse_cpu_aggregate_excluding_dpdk(run_dir):
             except (KeyError, ValueError):
                 continue
             if cpu == -1: continue  # skip the pre-aggregated row
-            if 24 <= cpu <= 31: continue  # skip wekafs DPDK cores (always at 100% busy-polling)
+            if str(cpu) in reserved: continue  # the storage client's cores busy-poll regardless of workload
             ts = row.get("timestamp") or row.get("# hostname") or ""
             per_ts.setdefault(ts, {})[cpu] = 100 - idle
     if not per_ts: return None
@@ -313,7 +339,7 @@ def main():
     grid_table("WEKA client Read sustained (MiB/s)", "weka_read_sustained_bps", lambda v: f"{v/(1024**2):.1f}")
     grid_table("WEKA Ops/s sustained", "weka_ops_sustained", lambda v: f"{v:.0f}")
     grid_table("RDMA rcv sustained (MiB/s) — wire-level read direction", "rdma_rcv_sustained_bps", lambda v: f"{v/(1024**2):.1f}")
-    grid_table("Aggregate CPU %busy sustained (excluding DPDK cores 24-31)", "agg_cpu_busy_ex_dpdk_sustained_pct", lambda v: f"{v:.1f}%")
+    grid_table("Aggregate CPU %busy sustained (application cores; storage-client reserved cores excluded)", "agg_cpu_busy_ex_dpdk_sustained_pct", lambda v: f"{v:.1f}%")
     grid_table("Cache hit rate (LRU(8))", "cache_hit_rate", lambda v: f"{v*100:.1f}%")
 
     valid = [r for r in rows if r.get("tiles_per_sec_steady")]

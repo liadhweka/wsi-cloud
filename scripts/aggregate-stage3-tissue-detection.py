@@ -13,7 +13,7 @@ For each matching run dir:
   - re-reads weka-stats.csv with per-timestamp summing across the client's
     the storage client's own processes (cross-cutting pattern #1)
   - **NEW for Stage 3:** parses sar-cpu.csv and computes %busy on the
-    NON-WEKA cores (everything except the wekafs DPDK cores 24-31 on NUMA-0).
+    APPLICATION cores (the storage client's recorded reserved cores excluded).
     Shows the compute-saturation curve that IS the Stage 3 customer story.
   - extracts RDMA rcv (read direction) per device
 
@@ -58,14 +58,6 @@ def _active_window_mean(seq):
     if not idx:
         return statistics.fmean(seq)
     return statistics.fmean(seq[idx[0]:idx[-1] + 1])
-
-# Cores reserved by the storage client, excluded from the saturation reading.
-# ⏳ D-9: per-filesystem parameter (STAGES.md D15), indices measurable only on the
-# real client. Placeholder.
-# All other cores (0-23, 32-255) are application cores. For Stage 3 we report
-# the compute saturation on non-WEKA cores specifically.
-WEKA_CORES = set(range(24, 32))
-
 
 def parse_run_dir_name(p):
     m = RUN_NAME_RE.search(p.name)
@@ -141,28 +133,43 @@ def weka_client_per_sec(run_dir, col, parser=parse_bps):
     }
 
 
+
+def _reserved_cores(run_dir):
+    """The storage client's reserved-core set for THIS run, from its recorded metadata.
+
+    The reserved set is a per-filesystem, per-instance measured parameter (STAGES.md
+    D15) -- WEKA's client busy-polls its cores at 100% regardless of workload; the
+    Lustre client reserves none -- so it is read from what record-run.sh recorded
+    for the run (`cores_reserved`), never hardcoded. Refusing on absence is
+    deliberate: an application-CPU mean silently computed over an unknown exclusion
+    set is exactly the polluted number this field exists to prevent.
+    """
+    meta = run_dir / "metadata.json"
+    try:
+        cores = json.loads(meta.read_text()).get("cores_reserved")
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"FATAL: {meta}: unreadable ({e}); cannot determine the reserved-core set")
+    if cores is None:
+        raise SystemExit(
+            f"FATAL: {run_dir.name}: metadata.json carries no cores_reserved -- the cell was "
+            "recorded without FS_CLIENT_RESERVED_CORES set (docs/NAMING-AND-VARIABLES.md), so its "
+            "application-CPU mean cannot exclude the storage client's cores. Set it in env.sh "
+            "('none' on a leg that reserves none) and re-record."
+        )
+    return {str(c) for c in cores}
+
 def parse_non_dpdk_cpu(run_dir):
-    """Parse sar-cpu.csv for non-DPDK-core %busy (excludes wekafs cores 24-31).
+    """Mean %busy across the APPLICATION cores, per timestamp, from sar-cpu.csv.
 
-    Stage 3 originally reported aggregate (CPU=-1) %busy because the recorder
-    used `sar -u` without `-P ALL`. The 2026-05-08 post-Stage-3 fix to record-run.sh
-    (line 306) added `-P ALL` AND retroactively re-ran `sadf -P ALL` against
-    every prior run's existing sar.bin → per-core data is available for all 146
-    runs going back to Stage 0, including the 6 Stage 3 cells.
-
-    Updated 2026-05-21 to use the per-core data. For each timestamp we compute
-    the mean %busy across the 248 non-DPDK cores (everything except cores 24-31
-    on NUMA-0, which busy-poll for the wekafs DPDK frontend regardless of
-    workload). Headline customer story is sharper: instead of "n=64 hits 37%
-    sustained aggregate CPU (which includes ~3% DPDK baseline)" we can say
-    "n=64 hits ~34% sustained non-DPDK CPU" with no caveat needed.
-
-    Old behavior (aggregate, with DPDK baseline) is preserved in the 2026-05-21
-    pre-revision summary CSV at `runs/s3.0-tissue-summary-PRIOR-TO-NON-DPDK-FILTER.csv`
-    for forensic comparison.
+    Requires per-core rows (sadf -P ALL output). The CPU=-1 aggregate row is
+    skipped, and the storage client's reserved cores -- recorded per run, see
+    _reserved_cores -- are excluded: they busy-poll at 100% under the client's
+    own data path regardless of workload and would pollute the
+    compute-saturation reading.
     """
     csv_path = run_dir / "raw" / "sar-cpu.csv"
     if not csv_path.exists(): return None
+    reserved = _reserved_cores(run_dir)
     # per-timestamp: collect %busy values across non-DPDK cores, then compute mean
     per_ts = {}  # ts → list of per-core %busy at that ts
     with csv_path.open() as f:
@@ -176,13 +183,13 @@ def parse_non_dpdk_cpu(run_dir):
             if len(parts) != len(header): continue
             row = dict(zip(header, parts))
             cpu_str = row.get("CPU", "").strip()
-            # Skip aggregate (CPU=-1) and DPDK frontend cores (24-31)
+            # Skip the aggregate row (CPU=-1) and the storage client's reserved cores
             if cpu_str == "-1": continue
             try:
                 cpu_id = int(cpu_str)
             except ValueError:
                 continue
-            if cpu_id in WEKA_CORES: continue
+            if cpu_str in reserved: continue
             try:
                 idle = float(row["%idle"])
                 busy = 100 - idle
@@ -287,9 +294,8 @@ def extract_cell_summary(run_dir):
     out["weka_ops_sustained"]       = wk_ops["sustained_mean"]   if wk_ops  else None
     out["weka_ops_max"]             = wk_ops["max"]              if wk_ops  else None
 
-    # Stage 3 headline: non-DPDK CPU saturation (248 application cores, excludes
-    # the 8 wekafs DPDK frontend cores 24-31 which busy-poll regardless of workload).
-    # See parse_non_dpdk_cpu docstring for the 2026-05-21 revision history.
+    # Stage 3 headline: application-core CPU saturation (the storage client's
+    # recorded reserved cores excluded -- they busy-poll regardless of workload).
     cpu = parse_non_dpdk_cpu(run_dir)
     if cpu:
         out["non_dpdk_cpu_busy_sustained_pct"] = cpu["sustained_mean_pct_busy"]
@@ -343,7 +349,7 @@ def main():
     print("# Stage 3.0 CLAM tissue detection sweep — POSIX, filesystem under test")
     print()
     print("Tool: CLAM create_patches_fp.py + bash-level concurrency (N parallel python3 instances per cell)")
-    print("Headline customer story: 'WEKA's distributed metadata path serves CLAM's thumbnail reads while non-WEKA CPU cores saturate at concurrency C.'")
+    print("Headline: 'the storage layer serves CLAM's thumbnail reads while the application cores saturate at concurrency C.'")
     print()
 
     def grid_table(title, key, fmt):
@@ -367,7 +373,7 @@ def main():
                "slides_per_sec", lambda v: f"{v:.0f}" if v >= 100 else f"{v:.2f}")
     grid_table("Slides with HDF5 output (= success count)",
                "slides_with_h5", lambda v: f"{v}")
-    grid_table("**Stage 3 headline:** Non-DPDK CPU %busy sustained — compute saturation curve (248 application cores, excludes DPDK frontend cores 24-31)",
+    grid_table("**Stage 3 headline:** Application-core CPU %busy sustained — compute saturation curve (the storage client's recorded reserved cores excluded)",
                "non_dpdk_cpu_busy_sustained_pct", lambda v: f"{v:.1f}%")
     grid_table("Non-DPDK CPU %busy p95 — peak utilization moments",
                "non_dpdk_cpu_busy_p95_pct", lambda v: f"{v:.1f}%")

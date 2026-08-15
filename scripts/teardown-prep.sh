@@ -37,10 +37,10 @@ echo "== teardown-prep: leg=${LEG:-unset} bucket=${S3_BUCKET:-unset} $(date -u) 
 # ---- 0. Nothing measured may be mid-flight ------------------------------------
 # A running cell interrupted by teardown is unrecorded work — hard stop. The
 # resumable background jobs (prefetch, env build, rehydrate) only get a warning.
-if pgrep -f 'record-run\.sh|sweep-stage|fio --client|fio --server' >/dev/null 2>&1; then
+if pgrep -f 'record-run\.sh|sweep-stage|run-leg\.sh|run-stage6a|pipeline-end-to-end|fio --client|fio --server' >/dev/null 2>&1; then
   if [ "${FORCE:-0}" != "1" ]; then
     echo "NO-GO: a measured run appears to be in flight:"
-    pgrep -af 'record-run\.sh|sweep-stage|fio --client|fio --server' | head -5
+    pgrep -af 'record-run\.sh|sweep-stage|run-leg\.sh|run-stage6a|pipeline-end-to-end|fio --client|fio --server' | head -5
     echo "Let it finish (or FORCE=1 if you accept losing it)."
     exit 1
   fi

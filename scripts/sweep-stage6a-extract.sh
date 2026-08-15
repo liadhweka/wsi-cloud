@@ -296,15 +296,6 @@ tier1_uni2h() {
   run_cell uni2-h cucim_batched_cpu 4 "$(gpu_csv_for_n 4)" brca50 || echo "  (cell failed; continuing)"
 }
 
-tier1_cucim_n4_rerun() {
-  # Focused re-run for the 2 cuCIM-N=4 cells that failed pre-2026-05-20 cuCIM
-  # concat-ndim fix (Virchow2 + GigaPath; UNI2-h cuCIM cell already ran clean
-  # post-fix in the tier1_n24 sweep).
-  echo "=== Stage 6.A Tier 1: cuCIM N=4 re-run (Virchow2 + GigaPath) ==="
-  for model in virchow2 gigapath; do
-    run_cell "$model" cucim_batched_cpu 4 "$(gpu_csv_for_n 4)" brca50 || echo "  (cell failed; continuing)"
-  done
-}
 
 tier1_cucim_scaling_fill() {
   # Added 2026-05-24 — Stage 6.A Tier 1 cuCIM scaling fill-in (task #15).
@@ -490,21 +481,6 @@ tier2_kvikio_only() {
 }
 
 
-tier2_resume_post_virchow2_cucim() {
-  # Resume target for Stage 6.A Tier 2 after Virchow2 cuCIM has completed
-  # (1131 .pt files in ${FS_MOUNT}/features/6.A/virchow2/brca_full/ retained).
-  # Skips Virchow2 cuCIM; runs GigaPath + UNI2-h cuCIM then kvikIO multi-model.
-  # Used 2026-05-21 after the first Tier 2 sweep hit a record-run.sh timestamp
-  # race condition that broke GigaPath cuCIM; killed sweep to apply
-  # RECORD_RUN_DIR fix; resumed via this target.
-  echo "=== Stage 6.A Tier 2 RESUME: gigapath + uni2-h cuCIM, then kvikIO multi-model ==="
-  for model in gigapath uni2-h; do
-    run_cell "$model" cucim_batched_cpu 4 "$(gpu_csv_for_n 4)" brca_full \
-      || echo "  (cell $model cucim failed; continuing)"
-  done
-  run_tier2_kvikio_chunked_multimodel "virchow2,gigapath,uni2-h" 4 "$(gpu_csv_for_n 4)" 200 \
-    || echo "  (Tier 2 multi-model kvikio cell failed; continuing)"
-}
 
 tier2_kvikio_multimodel_smoke() {
   # Smoke the multi-model orchestrator with --max-slides 10, chunk-size 5,
@@ -579,16 +555,14 @@ case "${1:-}" in
   tier1)                          tier1_scaling ;;
   tier1_uni2h)                    tier1_uni2h ;;
   tier1_n24)                      tier1_scaling_n24 ;;
-  tier1_cucim_n4_rerun)           tier1_cucim_n4_rerun ;;
   tier1_cucim_scaling_fill)       tier1_cucim_scaling_fill ;;
   tier2)                          tier2_production ;;
   tier2_kvikio_only)              tier2_kvikio_only ;;
-  tier2_resume_post_virchow2_cucim) tier2_resume_post_virchow2_cucim ;;
   tier2_kvikio_multimodel_smoke)  tier2_kvikio_multimodel_smoke ;;
   tier3)                          tier3_cross_dataset ;;
   all)                            all ;;
   *)
-    echo "usage: $0 {smoke|tier1|tier1_uni2h|tier1_n24|tier1_cucim_n4_rerun|tier1_cucim_scaling_fill|tier2|tier2_kvikio_only|tier2_resume_post_virchow2_cucim|tier2_kvikio_multimodel_smoke|tier3|all}" >&2
+    echo "usage: $0 {smoke|tier1|tier1_uni2h|tier1_n24|tier1_cucim_scaling_fill|tier2|tier2_kvikio_only|tier2_kvikio_multimodel_smoke|tier3|all}" >&2
     exit 2
     ;;
 esac

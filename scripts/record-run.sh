@@ -191,6 +191,47 @@ NOTE_JSON=$(printf '%s' "$NOTE" | jq -R -s -c '.')
 META_TS=$(date -u +%FT%TZ)
 HN=$(hostname)
 KR=$(uname -r)
+
+# ---------- core accounting + declared cache regime (D15 / D13 destinations) ----------
+# Same contract as the cost inputs at cleanup: read from documented variables
+# (docs/NAMING-AND-VARIABLES.md), recorded as null and warned about when unset --
+# never guessed. The storage client's reserved-core set is a per-filesystem,
+# per-instance MEASURED input (WEKA reserves cores for its DPDK data path; the
+# Lustre client reserves none -- set 'none' there, which records []). Aggregators
+# REFUSE a run whose cores_reserved is null, because an application-CPU mean over
+# an unknown exclusion set is a polluted number that looks correct.
+CORES_TOTAL=$(nproc)
+if [[ -n "${FS_CLIENT_RESERVED_CORES:-}" ]]; then
+  if [[ "$FS_CLIENT_RESERVED_CORES" == "none" ]]; then
+    RESERVED_JSON="[]"
+    CORES_AVAIL=$CORES_TOTAL
+  else
+    # Expand "a-b,c,d" into a JSON int list.
+    RESERVED_JSON=$(awk -v s="$FS_CLIENT_RESERVED_CORES" 'BEGIN{
+      n = split(s, parts, ","); out = "";
+      for (i = 1; i <= n; i++) { p = parts[i];
+        if (split(p, ab, "-") == 2) { for (j = ab[1]+0; j <= ab[2]+0; j++) out = out (out=="" ? "" : ",") j }
+        else out = out (out=="" ? "" : ",") p+0 }
+      print "[" out "]" }')
+    RESERVED_N=$(jq 'length' <<<"$RESERVED_JSON")
+    CORES_AVAIL=$(( CORES_TOTAL - RESERVED_N ))
+  fi
+else
+  log "WARN: FS_CLIENT_RESERVED_CORES unset -- cores_reserved recorded as null, and CPU"
+  log "      aggregation will REFUSE this run. The set is a per-filesystem measured input"
+  log "      (D15): set it in env.sh from the client's own report ('none' on a leg that"
+  log "      reserves none)."
+  RESERVED_JSON=null
+  CORES_AVAIL=null
+fi
+if [[ -n "${RECORD_CACHE_STATE:-}" ]]; then
+  CACHE_JSON=$(jq -n --arg c "$RECORD_CACHE_STATE" '$c')
+else
+  log "WARN: RECORD_CACHE_STATE unset -- cache_state recorded as null. Read cells must"
+  log "      declare their cache regime (D13); drivers set it per cell."
+  CACHE_JSON=null
+fi
+
 cat > "$RUN_DIR/metadata.json" <<EOF
 {
   "run_name": "$RUN_NAME",
@@ -201,6 +242,10 @@ cat > "$RUN_DIR/metadata.json" <<EOF
   "hostname": "$HN",
   "user": "${USER:-unknown}",
   "kernel": "$KR",
+  "cores_total": $CORES_TOTAL,
+  "cores_reserved": $RESERVED_JSON,
+  "cores_available": $CORES_AVAIL,
+  "cache_state": $CACHE_JSON,
   "command": $CMD_JSON,
   "note": $NOTE_JSON
 }

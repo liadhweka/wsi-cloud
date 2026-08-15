@@ -11,9 +11,9 @@ For each matching run dir:
   - re-reads weka-stats.csv with per-timestamp summing across the client's
     wekafs client frontends (Read AND Write — Stage 4.A is write-heavy)
   - extracts RDMA xmit (writes) + rcv (reads) sustained
-  - aggregate %busy from sar-cpu (now per-core available, but we still report
-    aggregate for headline; per-core breakdown can be analyzed separately
-    from the now-fixed sar-cpu.csv per Stage-3 closeout fix)
+  - application-core %busy from per-core sar-cpu rows (the storage client's
+    recorded reserved cores excluded -- the CPU=-1 aggregate row averages them
+    in and inflates the reading)
 
 Outputs:
   - runs/s4.A-patches-summary.csv
@@ -119,10 +119,42 @@ def weka_client_per_sec(run_dir, col, parser=parse_bps):
     }
 
 
+
+def _reserved_cores(run_dir):
+    """The storage client's reserved-core set for THIS run, from its recorded metadata.
+
+    The reserved set is a per-filesystem, per-instance measured parameter (STAGES.md
+    D15) -- WEKA's client busy-polls its cores at 100% regardless of workload; the
+    Lustre client reserves none -- so it is read from what record-run.sh recorded
+    for the run (`cores_reserved`), never hardcoded. Refusing on absence is
+    deliberate: an application-CPU mean silently computed over an unknown exclusion
+    set is exactly the polluted number this field exists to prevent.
+    """
+    meta = run_dir / "metadata.json"
+    try:
+        cores = json.loads(meta.read_text()).get("cores_reserved")
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"FATAL: {meta}: unreadable ({e}); cannot determine the reserved-core set")
+    if cores is None:
+        raise SystemExit(
+            f"FATAL: {run_dir.name}: metadata.json carries no cores_reserved -- the cell was "
+            "recorded without FS_CLIENT_RESERVED_CORES set (docs/NAMING-AND-VARIABLES.md), so its "
+            "application-CPU mean cannot exclude the storage client's cores. Set it in env.sh "
+            "('none' on a leg that reserves none) and re-record."
+        )
+    return {str(c) for c in cores}
+
 def parse_aggregate_cpu(run_dir):
+    """Application-core CPU %busy from per-core sar rows.
+
+    The CPU=-1 aggregate row is NOT used: it averages in the storage client's
+    reserved cores, which busy-poll at 100% regardless of workload and inflate
+    the reading. Reserved cores are recorded per run -- see _reserved_cores.
+    """
     csv_path = run_dir / "raw" / "sar-cpu.csv"
     if not csv_path.exists(): return None
-    busy = []
+    reserved = _reserved_cores(run_dir)
+    per_ts = {}
     with csv_path.open() as f:
         first = f.readline()
         delim = ";" if ";" in first else ","
@@ -133,9 +165,14 @@ def parse_aggregate_cpu(run_dir):
             parts = next(csv.reader([line], delimiter=delim))
             if len(parts) != len(header): continue
             row = dict(zip(header, parts))
-            if row.get("CPU", "").strip() != "-1": continue
-            try: busy.append(100 - float(row["%idle"]))
+            cpu_s = row.get("CPU", "").strip()
+            if cpu_s in ("-1", "all", "") or cpu_s in reserved: continue
+            try: b = 100 - float(row["%idle"])
             except (KeyError, ValueError): continue
+            ts = row.get("timestamp") or ""
+            per_ts.setdefault(ts, []).append(b)
+    if not per_ts: return None
+    busy = [statistics.fmean(v) for v in per_ts.values() if v]
     if not busy: return None
     n = len(busy)
     sorted_b = sorted(busy)

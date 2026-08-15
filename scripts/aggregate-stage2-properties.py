@@ -333,7 +333,7 @@ def main():
     print("# Stage 2.0 OpenSlide property extraction sweep — POSIX, filesystem under test")
     print()
     print("Tool: openslide-python + multiprocessing.Pool")
-    print("Headline customer story: 'WEKA cataloged N slides in X seconds at concurrency C.'")
+    print("Headline: 'the filesystem cataloged N slides in X seconds at concurrency C.'")
     print()
 
     def grid_table(title, key, fmt):

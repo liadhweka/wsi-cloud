@@ -55,7 +55,7 @@ fi
 
 # ── 1. Nothing mid-flight ────────────────────────────────────────────────────────
 hdr "Nothing in flight"
-running=$(pgrep -fa 'record-run.sh|sweep-stage|run-leg.sh|run-stage6a' 2>/dev/null | grep -v teardown-preflight || true)
+running=$(pgrep -fa 'record-run\.sh|sweep-stage|run-leg\.sh|run-stage6a|pipeline-end-to-end|fio --client|fio --server' 2>/dev/null | grep -v teardown-preflight || true)
 if [ -n "$running" ]; then
   bad "benchmark processes still running — tearing down now corrupts the in-flight cell:"
   echo "$running" | sed 's/^/             /'

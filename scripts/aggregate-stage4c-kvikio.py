@@ -15,7 +15,7 @@ Per cell, this aggregator reads:
     (Read column; for faithful mode reads are large-sequential, for random mode
     they're random small)
   - raw/rdma-counters.csv — rcv on the wekafs DPDK device (typically mlx5_0)
-  - raw/sar-cpu.csv — aggregate non-DPDK %busy (excludes cores 24-31)
+  - raw/sar-cpu.csv — aggregate application-core %busy (recorded reserved cores excluded)
   - raw/nvidia-smi.csv — GPU memory used & util (PRIMARY for Stage 4.C since
     kvikIO writes directly into GPU memory)
 
@@ -174,8 +174,34 @@ def weka_client_per_sec(run_dir, col, parser=parse_bps):
     return list(sums_by_ts.values())
 
 
+
+def _reserved_cores(run_dir):
+    """The storage client's reserved-core set for THIS run, from its recorded metadata.
+
+    The reserved set is a per-filesystem, per-instance measured parameter (STAGES.md
+    D15) -- WEKA's client busy-polls its cores at 100% regardless of workload; the
+    Lustre client reserves none -- so it is read from what record-run.sh recorded
+    for the run (`cores_reserved`), never hardcoded. Refusing on absence is
+    deliberate: an application-CPU mean silently computed over an unknown exclusion
+    set is exactly the polluted number this field exists to prevent.
+    """
+    meta = run_dir / "metadata.json"
+    try:
+        cores = json.loads(meta.read_text()).get("cores_reserved")
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"FATAL: {meta}: unreadable ({e}); cannot determine the reserved-core set")
+    if cores is None:
+        raise SystemExit(
+            f"FATAL: {run_dir.name}: metadata.json carries no cores_reserved -- the cell was "
+            "recorded without FS_CLIENT_RESERVED_CORES set (docs/NAMING-AND-VARIABLES.md), so its "
+            "application-CPU mean cannot exclude the storage client's cores. Set it in env.sh "
+            "('none' on a leg that reserves none) and re-record."
+        )
+    return {str(c) for c in cores}
+
 def parse_cpu_aggregate_excluding_dpdk(run_dir):
-    """Aggregate non-DPDK CPU %busy. DPDK cores = NUMA-0 24-31 per project memory.
+    """Aggregate application-core CPU %busy (the storage client's recorded
+    reserved cores excluded -- see _reserved_cores).
 
     NOTE sar-cpu.csv uses SEMICOLON delimiter and the first column header is
     `# hostname` (with leading #). DictReader needs delimiter=';' and we strip
@@ -184,7 +210,7 @@ def parse_cpu_aggregate_excluding_dpdk(run_dir):
     p = run_dir / "raw" / "sar-cpu.csv"
     if not p.exists():
         return None
-    dpdk = {str(i) for i in range(24, 32)}
+    reserved = _reserved_cores(run_dir)
     by_ts_total = {}
     by_ts_count = {}
     with p.open() as f:
@@ -193,7 +219,7 @@ def parse_cpu_aggregate_excluding_dpdk(run_dir):
             cpu = row.get("CPU", "")
             if cpu in ("-1", "all", ""):
                 continue
-            if cpu in dpdk:
+            if cpu in reserved:
                 continue
             ts = row.get("timestamp", "")
             if not ts:

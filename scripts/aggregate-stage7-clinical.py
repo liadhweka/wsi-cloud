@@ -12,7 +12,7 @@ sar-cpu non-DPDK %busy), and computes cross-source canary ratios.
 
 This script DELIBERATELY makes the four debugged parser idioms explicit:
   1. lowercase `timestamp` in weka-stats.csv (per Stage 1.5 finding)
-  2. `;` delimiter + leading `#` strip + non-DPDK CPU filter (cores 24-31) in sar-cpu.csv
+  2. `;` delimiter + leading `#` strip + application-core CPU filter (recorded reserved cores) in sar-cpu.csv
   3. leading-space + unit-suffix parsing in nvidia-smi.csv
   4. cumulative-counter diff (NOT rate) in rdma-counters.csv
 
@@ -38,13 +38,6 @@ RUN_NAME_RE = re.compile(r"-s7(?:\.[0-9A-Za-z.]+)?-(?P<name>.+)$")
 TS_RE = re.compile(r"^(?P<ts>\d{4}-\d{2}-\d{2}-\d{6})-")
 FS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-\d{6}-(?P<fs>[a-z0-9]+)-s7")
 SMOKE_PAT = re.compile(r"-s7(?:\.[0-9A-Za-z.]+)?-smoke-")
-
-# Cores the storage client reserves for its own data path, excluded from the CPU
-# saturation reading. ⏳ D-9: this set is a PER-FILESYSTEM parameter (STAGES.md D15),
-# not a constant — WEKA reserves DPDK cores, the Lustre client reserves none — and the
-# actual indices are only measurable on the real client. The range below is a placeholder.
-DPDK_CORES = set(range(24, 32))
-
 
 # ---------------------------------------------------------------------------
 # Parsing primitives
@@ -204,14 +197,40 @@ def rdma_per_sec_diff(run_dir: Path, device: str, counter: str):
     return rates
 
 
+
+def _reserved_cores(run_dir):
+    """The storage client's reserved-core set for THIS run, from its recorded metadata.
+
+    The reserved set is a per-filesystem, per-instance measured parameter (STAGES.md
+    D15) -- WEKA's client busy-polls its cores at 100% regardless of workload; the
+    Lustre client reserves none -- so it is read from what record-run.sh recorded
+    for the run (`cores_reserved`), never hardcoded. Refusing on absence is
+    deliberate: an application-CPU mean silently computed over an unknown exclusion
+    set is exactly the polluted number this field exists to prevent.
+    """
+    meta = run_dir / "metadata.json"
+    try:
+        cores = json.loads(meta.read_text()).get("cores_reserved")
+    except (OSError, ValueError) as e:
+        raise SystemExit(f"FATAL: {meta}: unreadable ({e}); cannot determine the reserved-core set")
+    if cores is None:
+        raise SystemExit(
+            f"FATAL: {run_dir.name}: metadata.json carries no cores_reserved -- the cell was "
+            "recorded without FS_CLIENT_RESERVED_CORES set (docs/NAMING-AND-VARIABLES.md), so its "
+            "application-CPU mean cannot exclude the storage client's cores. Set it in env.sh "
+            "('none' on a leg that reserves none) and re-record."
+        )
+    return {str(c) for c in cores}
+
 def sar_cpu_non_dpdk_busy(run_dir: Path):
     """sar-cpu.csv has `;` delimiter + leading `#` lines. Returns mean %busy
-    across non-DPDK cores (cores 0-23, 32+; cores 24-31 are the wekafs
-    DPDK frontends and busy-poll under WEKA I/O load — non-DPDK gives the
-    application-CPU saturation curve)."""
+    across the APPLICATION cores -- the storage client's recorded reserved
+    cores are excluded (see _reserved_cores): they busy-poll under the
+    client's own data path and would pollute the saturation curve."""
     p = run_dir / 'raw' / 'sar-cpu.csv'
     if not p.exists():
         return None
+    reserved = _reserved_cores(run_dir)
     per_ts = {}
     with p.open() as f:
         # Skip the leading sar comment header line(s)
@@ -236,7 +255,7 @@ def sar_cpu_non_dpdk_busy(run_dir: Path):
                 cpu = int(row.get('CPU', '-1'))
             except ValueError:
                 continue
-            if cpu == -1 or cpu in DPDK_CORES:
+            if cpu == -1 or str(cpu) in reserved:
                 continue
             ts = row.get('timestamp', '')
             try:

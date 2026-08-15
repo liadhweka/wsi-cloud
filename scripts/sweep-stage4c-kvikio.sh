@@ -175,13 +175,15 @@ tier1() {
 
 tier2() {
   echo "=== Stage 4.C Tier 2 — bottleneck characterization ==="
-  # Designed from Tier 1 results: peak random GDS-on nb=256 = 24,376 tiles/sec / 4.89 GB/s.
-  # Tier 2 fixes the peak config and sweeps secondary knobs.
+  # Tier 2 pins the peak (n_buffer, n_threads) at THIS leg's Tier-1 knee. The
+  # peak is a per-leg measured result, not a constant: read PEAK_NB / PEAK_NT
+  # from the environment, refuse when unset.
+  if [ -z "${PEAK_NB:-}" ] || [ -z "${PEAK_NT:-}" ]; then
+    echo "FATAL: PEAK_NB/PEAK_NT unset — set them from this leg's Tier-1 knee before tier2 runs." >&2
+    exit 2
+  fi
   # Multi-process scaling (subblock e) handled separately in tier2_mp() below — it
   # needs a wrapper script that launches N python processes in parallel.
-
-  local PEAK_NB=256
-  local PEAK_NT=16
 
   # ---- (a) Cross-dataset validation at peak n_buffer ----
   # WHY: Tier 1 was BRCA only; need to verify CAM16 doesn't diverge unexpectedly.
@@ -251,8 +253,13 @@ tier2() {
 tier2_mp() {
   echo "=== Stage 4.C Tier 2 (e) — multi-process scaling for 4.C.2 random mode ==="
 
-  local PEAK_NB=256
-  local PEAK_NT=16
+  # Tier 2 pins the peak (n_buffer, n_threads) at THIS leg's Tier-1 knee. The
+  # peak is a per-leg measured result, not a constant: read PEAK_NB / PEAK_NT
+  # from the environment, refuse when unset.
+  if [ -z "${PEAK_NB:-}" ] || [ -z "${PEAK_NT:-}" ]; then
+    echo "FATAL: PEAK_NB/PEAK_NT unset — set them from this leg's Tier-1 knee before tier2 runs." >&2
+    exit 2
+  fi
   local WRAPPER="$REPO/scripts/run-multiproc-kvikio.sh"
   if [ ! -x "$WRAPPER" ]; then
     echo "missing multi-process wrapper $WRAPPER — write it first" >&2
@@ -292,8 +299,6 @@ tier3() {
   # ⏳ D-8: the process→GPU mapping below is round-robin over 0-3; substitute the
   # NUMA/NIC-aware order once the topology map is derived on this instance.
 
-  local PEAK_NB=256
-  local PEAK_NT=16
   local WRAPPER="$REPO/scripts/run-multiproc-kvikio.sh"
 
   # ---- N=8 BRCA full NUMA spread (definitive ceiling stress) ----

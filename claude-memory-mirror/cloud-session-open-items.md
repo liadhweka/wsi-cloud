@@ -83,9 +83,11 @@ These change what the numbers mean, so resolving them after cells have run means
 9. **Counter-semantics check for cross-leg `ops/s`.** Until counter semantics are verified equivalent and that
    verification recorded, app-level metrics are the cross-leg-comparable ones and filesystem-reported ops/s
    is within-leg only. Detail: `docs/Stage-2-Cataloging.md`.
-10. **Core accounting.** Measure the WEKA client's reserved core count on the real instance (and confirm
-    Lustre's is zero), so saturation headlines divide by application-available cores and the reservation is
-    reported as part of WEKA's cost. Detail: `docs/STAGES.md` **D15**.
+10. **Core accounting — values only; the mechanism is built.** `record-run.sh` records
+    `cores_total/reserved/available` from `FS_CLIENT_RESERVED_CORES`, and every CPU aggregator excludes the
+    recorded set per run, refusing null. Remaining: measure the WEKA client's reserved core **list** on the
+    real instance (the client's own report), set it in `env.sh`, confirm the Lustre leg sets `none`, and
+    report the reservation as part of WEKA's cost. Detail: `docs/STAGES.md` **D15**.
 11. **Record both sides' provisioned configuration into the environment contract** — WEKA: backend type and
     count, capacity, EC scheme, client networking mode. FSx: tier, capacity, provisioned metadata IOPS, EFA
     state. Without these the fairness basis is unverifiable after the fact. Detail: `docs/STAGES.md` **D6/D7**.
