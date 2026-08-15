@@ -86,7 +86,11 @@ fetch_cam_one() { # key size
   dest="datasets/camelyon16/${key#CAMELYON16/}"
   if s3_has "$dest" "$size"; then echo "skip  $key"; return 0; fi
   echo "copy  $key"
-  aws s3 cp --only-show-errors "s3://camelyon-dataset/$key" "s3://$S3_BUCKET/$dest" || { echo "FAIL  $key"; echo "cam $key" >> "$FAIL_LOG"; }
+  # --copy-props none: the open-data bucket denies cross-account GetObjectTagging,
+  # which the CLI's default copy-props performs for multipart-sized objects —
+  # every large .tif fails AccessDenied without this. Tags/metadata are not data;
+  # integrity is the per-object size check against the manifest.
+  aws s3 cp --only-show-errors --copy-props none "s3://camelyon-dataset/$key" "s3://$S3_BUCKET/$dest" || { echo "FAIL  $key"; echo "cam $key" >> "$FAIL_LOG"; }
 }
 export -f fetch_cam_one
 

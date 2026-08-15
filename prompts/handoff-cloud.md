@@ -1,7 +1,10 @@
 # Project handoff — WEKA vs Lustre on AWS · THE LIVING HANDOFF
 
-Written: 2026-08-14
-Leg: **weka** (Leg A) — **nothing has been measured yet.** This handoff says: *start the Leg-A benchmarking.*
+Written: 2026-08-15
+Leg: **weka** (Leg A) — **nothing has been measured yet; the build phase is COMPLETE.** This teardown is a
+**mid-leg instance + cluster rebuild** (backend switch to 8 × i8ge.6xlarge, ratified 2026-08-15), **not**
+the Leg-A→Leg-B switch. This handoff says: *verify the rebuilt environment, close the remaining Tier-1/2
+rows on the new cluster, hydrate, take the baseline, stop for the greenlight.*
 
 > **This file describes the current state and is edited to match it at every teardown** (teardown step 2 in
 > `docs/cloud-setup/TEARDOWN-AND-REBUILD.md`; the pre-flight gates on the `Written:` date above and warns if
@@ -18,248 +21,171 @@ followed by the head-to-head synthesis. `$LEG` says which one you are on.
 
 ---
 
-## Current state
+## Current state (as of the 2026-08-15 teardown for the backend switch)
 
-- **The instance was built end-to-end by `scripts/bootstrap-instance.sh`** (Terraform
-  `clients_custom_data_post_mount`): packages, the pinned NVIDIA/CUDA/GDS stack, local-NVMe scratch RAID,
-  the WEKA mount, `env.sh` generated from instance evidence — including `FS_TRANSPORT` from the client's own
-  report — `LIBCUFILE_PRELOAD` located and exported, the compat-mode cuFile config, both conda environments
-  built from `scripts/env-specs/` with import-level smoke tests, the HF token and model prefetch from SSM,
-  and the memory restore. Boot log: `/var/log/wsi-bootstrap.log`; triage with `grep WSI-`.
-- **The datasets are staged in S3** (`prefetch-datasets-to-s3.sh`, md5-verified per file). **They are not on
-  the filesystem yet** — hydration is measured cell 1.7, and its driver does not exist (`D-13`);
-  `run-leg.sh` reports that step MISSING and aborts rather than skipping it. Building it is part of your job.
-- **`runs/` has no cells.** The deferred-work table in `docs/SCRIPT-TRACKER.md` plus section A of the
-  open-items memory is the build job between you and the first kept number.
-- **You re-verify all of it yourself, read-only, before touching anything. Trust nothing; confirm it** —
-  the bootstrap's smoke tests are import-level and warn-only, not proof.
+- **Why this rebuild happened:** Stage-0 client-capability probes measured the 4-FE-core client sustaining
+  **11.6 GB/s reads** (FE CPU ~68%) — above the old 8 × i8ge.2xlarge backends' 67.2 Gbps sustained
+  aggregate, which was serving on burst credits. That is the **D7** "filesystem below what the client can
+  drive" case, so the backends were switched to **8 × i8ge.6xlarge** (37.5 Gbps sustained each → 300 Gbps).
+  The probes also measured the 5+2 EC wire ratios: **write 1.455, read 1.034** (open-items memory, the
+  consistency-relation item).
+- **The datasets are FULLY staged in S3 and byte-verified** (2026-08-15): TCGA-BRCA 1133 objects /
+  1,158,795,315,120 B and CAMELYON16 1365 objects / 762,471,984,787 B — every object present at the exact
+  manifest size, TCGA md5-verified per file at fetch time, `datasets/.prefetch-complete-full` marker
+  present. **They are not on the filesystem** — hydration is measured cell 1.7; its driver
+  (`sweep-stage1-hydrate.sh`) **exists and is wired into `run-leg.sh`**.
+- **`runs/` holds only Stage-0 infra cells** (recording proofs + the two diagnostic client-capability
+  probes, all marked never-quote). **`runs/.leg-state/weka/` is EMPTY and that is CORRECT** — no leg step
+  has run, so the rebuild's "empty marker dir on a mid-leg rebuild → stop" warning does **not** apply;
+  `run-leg.sh` starts from the top.
+- **The 2026-08-15 build session closed most of the deferred table.** Done and verified on the old cluster:
+  the WEKA-leg recording adapters (per-`$FS` recorder set + required-stream list in `record-run.sh`;
+  client-summed series in `parse-results.py`); the cold-regime rework of **every** read sweep (2.0
+  cold/warm arms, 1.6 + 4.B cold references, 1.0b/1.0d rebuilt on the ratified scan-corpus + one-touch
+  design with `prep-stage1-read-corpora.sh`); fail-loud exits in **all** sweep drivers; `sweep-stage1-hydrate.sh`
+  (D-13); `prove-recording.sh` (D-20); `verify-conda-env.sh` (D-22); `wsi_agg_helper.py` (the D-5 canary
+  evaluator + D18 rep grouping + D13 cache reconciliation); `wsi_cufile_accounting.py` + 4.C path-accounting
+  wiring (D-6's 4.C half — `gds_engaged` is now evidence-derived); `CUFILE_COMPAT_MODE` plumbing (D-27);
+  4.D converts + retains the **full BRCA cohort** (D-28, Stage-4 register); fingerprint definitions ratified
+  (**D19**); `sync-to-s3.sh --self-test` built and **PASSED against the real bucket** (banner removed);
+  prices/ceilings fetched, dated, and pre-written for the 6xlarge target. `docs/SCRIPT-TRACKER.md`'s
+  deferred table is the authoritative list of what remains.
+- **Conventions that changed this session (already reflected in `CLAUDE.md`):** Claude commits and pushes
+  autonomously (never while a measured cell is in flight); the teardown is Claude-steps-1–6 → human
+  destroys.
+- **env.sh is regenerated by the bootstrap on this rebuilt instance**, then recovered/extended from the
+  environment contract's `env` emit. It must carry the pre-written 6xlarge-target values (the contract
+  holds them): prices dated 2026-08-15, `WEKA_BACKEND_TYPE/RAM_TOTAL`, `FS_CLIENT_RESERVED_CORES`,
+  `STAGE1_*` corpus parameters. **Every pre-written value is a TARGET — verify it against the live cluster
+  before the first kept cell** (the open-items memory, items 18 and 22, hold the verification list).
+- **You re-verify all of it yourself, read-only, before touching anything. Trust nothing; confirm it.**
+  `verify-conda-env.sh` and `prove-recording.sh` are the scripted halves of that verification.
 
 > ### ⛔ GATE TIER 0 — the transport, evidenced, before ANY cell including the throwaway
 >
-> **The transport this leg is actually on** — WEKA on **DPDK** (not UDP), Lustre on **EFA** (not TCP), per
-> **D16**. **Not the mount options that were passed; the client's own report.** The bootstrap wrote
-> `FS_TRANSPORT` from that evidence at boot on this leg (the Lustre cluster prompt records it on Leg B) —
-> **verify it yourself before anything runs.**
+> **The transport this leg is actually on** — WEKA on **DPDK** (not UDP) — per **D16**, **re-evidenced
+> against the NEW cluster**: the client's own report (`weka cluster process` showing this host's FRONTEND
+> processes with `NETWORK=DPDK`; igb_uio-bound NICs; the bootstrap's `FS_TRANSPORT` evidence line in
+> `/var/log/wsi-bootstrap.log`), never the mount options that were passed.
 >
-> **If it shows the fallback transport — UDP where DPDK was required, TCP where EFA was required — or you
-> cannot evidence which it is, STOP AND REPORT IMMEDIATELY. Do not run any cell, including a throwaway
-> one.** The fallback mounts cleanly and produces a complete, plausible set of numbers for a configuration
-> this project decided not to measure, so "measure now, flag later" spends the wallclock and the money
-> before anyone can act. Only a written human waiver, with the reason recorded, changes that.
->
-> **Closed when:** `FS_TRANSPORT` carries the client's own evidence of the intended transport, and
-> `run-leg.sh` refuses the leg otherwise. This is **Tier 0 of the three-tier blocker gate**: Tier 1 gates
-> kept cells, Tier 2 gates the main sweep, and each tier sits where its precondition first binds.
+> **If it shows UDP, or you cannot evidence which it is, STOP AND REPORT IMMEDIATELY. Do not run any cell,
+> including a throwaway one.** Only a written human waiver changes that. `run-leg.sh` refuses the leg
+> otherwise (verified in code).
 
-**The environment contract is what makes two legs run at different times provably comparable** (**D6**):
-Leg A writes it at teardown, Leg B verifies it before its first cell, and an unrecorded field counts as
-unverifiable, therefore failed. A held-constant fact this leg fails to record does not degrade gracefully —
-it blocks or invalidates the cross-leg comparison, which is the only deliverable.
+**The environment contract** (**D6**): this rebuild carries `runs/env-contract-leg-weka.json` written at
+the 2026-08-15 teardown — a **mid-leg snapshot** whose held-constant fields (AMI, kernel, driver stack,
+datasets, commit) the rebuilt instance must match; run `scripts/env-contract.py verify` against it during
+discovery, and treat a held-constant mismatch as a stop. Its `MAY_DIFFER` backend fields describe the OLD
+2xlarge cluster — the new cluster's facts replace them at spin-up. The real leg-end contract is written at
+Leg A's close.
 
 ---
 
 ## THE CENTRAL DIRECTIVE
 
-**Your job is to make the comparison valid, not just to make it run.** Everything below serves one goal:
-when Leg B finishes, the difference between the two legs must be attributable to **the filesystem** and
-nothing else. That means the held-constant contract is real, the recording is path-appropriate on each leg,
-and every deviation is recorded rather than absorbed.
+**Your job is to make the comparison valid, not just to make it run.** When Leg B finishes, the difference
+between the legs must be attributable to **the filesystem** and nothing else: the held-constant contract is
+real, the recording is path-appropriate per leg, and every deviation is recorded rather than absorbed.
 
-Three rules that follow, and that you will be tempted to bend:
+1. **Results precede story** (`PROJECT-THESIS.md` §10). Record the why of every method; record nothing about
+   what the numbers will show. Report losses.
+2. **Nothing is portable. Re-derive, never copy** — and a pre-written target value is not a measured fact
+   until verified against the live system.
+3. **Every cell records the full measurement set; no metric is designated primary** (§4), including
+   wallclock and the dated price inputs. `docs/RUNBOOK.md` defines the set.
 
-1. **Results precede story.** No document may gain a predicted outcome, an expected magnitude, or a
-   pre-assigned headline stage or metric (`PROJECT-THESIS.md` § 10). Record the **why** of every method —
-   that is what makes a number evaluable, and in a competitive comparison every choice is a place a
-   skeptical reader looks for bias. Record **nothing** about what the numbers will show. **An
-   interpretation section does not exist until there is something to interpret** — a placeholder rots, and
-   a section that does not exist cannot go stale. **Report losses.**
-2. **Nothing is portable.** Every path, address, version, core count, GPU map, batch-size schedule, and
-   tuning value in this repo's scripts came from a different environment. **Re-derive, never copy.**
-3. **Every cell records the full measurement set, and no metric is designated primary**
-   (`PROJECT-THESIS.md` § 4) — which axis turns out to be decisive is a *result*, so a cell that captured
-   only the axis someone expected to matter cannot be repaired later. The set includes **measured wallclock
-   and the price inputs — instance, filesystem, and storage-software, each stamped with the date checked** —
-   so cost-to-complete is computable per cell and per leg in both bases (infra-only and all-in, **D7**). `docs/RUNBOOK.md` defines the set and the cost inputs — work from it.
+## STEP 1 — Read the governing instructions
 
----
-
-## STEP 1 — Read the governing instructions first
-
-- **`CLAUDE.md`** — the project constitution. Especially: the **eleven rules**; **recording is
-  non-negotiable** (every cell wraps in `scripts/record-run.sh`; time series not point estimates; both
-  canaries every sweep); **per-filesystem sources** (the client's network counters are *diagnostic* on the
-  WEKA leg and *primary* on the Lustre leg); **durability**; **reference official docs, not training data**
-  (doc-fetch is standing-approved); **the docs-cadence table**; **memory hygiene**; and **plan-first / the
-  four pause triggers / safety** (ask before any sudo, mount, install, or destructive operation; surface
-  decisions as a plain-text numbered list with a recommendation each).
-- **Both memories, end to end.** `MEMORY.md` first, then the two files it indexes. **There are exactly two.**
-  - **`cloud-session-open-items`** — **your work list.** Section A must be resolved before the first
-    measured cell; section B is what you watch while benchmarking. **Add in the same edit that surfaces
-    something; DELETE an item the moment it is done. Cite items by topic, never by number** — the list
-    renumbers as items close.
-  - **`uni2h-conditional-use-status`** — UNI2-h results are internal-only pending approval; every UNI2-h
-    cell carries its tag, and those rows are filtered out of anything that leaves the building.
-  - **If `MEMORY.md` is missing:** run `./scripts/restore-memories.sh` yourself, report its output, and
-    **ask the human to restart the session** so the memories actually load. If the script *refuses* (empty
-    or broken mirror), **STOP and report. Do not proceed without the memories** either way.
+**`CLAUDE.md`** (the eleven rules; recording; durability; docs cadence; the autonomous-git convention),
+then **both memories end to end** — `cloud-session-open-items` (**your work list**: section A before the
+first measured cell, section B during benchmarking; the [USER]-tagged items are pending human
+ratifications) and `uni2h-conditional-use-status` (UNI2-h stays internal-only). **If `MEMORY.md` is
+missing:** run `./scripts/restore-memories.sh`, report, and ask the human to restart the session; if the
+script refuses, STOP.
 
 ## STEP 2 — Read the project docs
 
-**`PROJECT-THESIS.md`** (the source of truth — where anything disagrees with it, it wins) →
-**`docs/STAGES.md`** (stage map, per-leg plan, the whole cross-stage decision register) → every
-**`docs/Stage-<N>-*.md`** roadmap → **`docs/RUNBOOK.md`** (what every cell records, cost inputs, the
-per-leg source table, both canaries, silent-skip hazards, cross-leg gates) → **`docs/SCRIPT-TRACKER.md`**
-(per-script reference, cross-cutting patterns, **the deferred-work table that is most of your build job**,
-and the env-specs route table) → **`docs/NAMING-AND-VARIABLES.md`** (before touching any script) →
-**`docs/FILESYSTEM-MAP.md`** and **`docs/RESULTS.md`**.
+**`PROJECT-THESIS.md`** → **`docs/STAGES.md`** (stage map + decision register, now through **D19**) → the
+**`docs/Stage-<N>-*.md`** roadmaps → **`docs/RUNBOOK.md`** (the per-cell set, the canary evaluator
+`wsi_agg_helper.py check`, both canaries) → **`docs/SCRIPT-TRACKER.md`** (what every script does + the
+remaining deferred table) → **`docs/NAMING-AND-VARIABLES.md`** → **`docs/FILESYSTEM-MAP.md`** →
+**`docs/RESULTS.md`**.
 
 ---
 
-## What to do, in order
+## What to do, in order (the post-rebuild sequence)
 
-### 1 — Deep read-only discovery (FIRST; mutate nothing)
+### 1 — Read-only discovery + verification of the rebuilt environment
 
-Produce a written discovery report covering at least: **continuity** (user+sudo, repo integrity vs origin,
-memories restored, `ssh -T git@github.com`, HF auth — the bootstrap installs the token from SSM; verify the
-gated model actually resolves); **hardware** (GPU model/count/memory, **GPU↔NUMA↔NIC affinity**, NUMA and
-core counts, NICs and link rates, EFA presence — record how this differs from anything the docs assume);
-**the mount and the storage client** (mounted, options, **how many cores and which NICs the client is bound
-to** — the reserved-core count is a per-filesystem parameter and part of that filesystem's reported cost,
-**D15**; filesystem health; **capture the provisioned configuration**: backend type/count, capacity, EC
-scheme, client networking mode — capacity is a sizing input to the raw-TIFF and 6.B corpora, not
-bookkeeping; a tiny **recorded** read/write smoke); **GDS stack** (`nvidia-fs` and `libcufile` versions
-**and whether they match**, `gdscheck` output — but never conclude the achievable path from a config flag,
-that is settled empirically per **D8**); **local scratch + OS hygiene** (`/data/local-nvme` mounted, free
-space, `/dev/shm` mode 1777); **S3 access** via the instance profile.
-→ **Deliverable:** the report plus a plain-text numbered list of anything broken or suboptimal, each with a
-recommendation. **Surface it before mutating state.**
+The bootstrap built everything; verify it: `./scripts/verify-conda-env.sh` (both envs, GPU count);
+`env-contract.py verify` against the mid-leg contract (held-constant fields must match); **Tier 0** per the
+gate above; nvidia-fs counters enabled (`/sys/module/nvidia_fs/parameters/*_stats_enabled` = 1 — the
+bootstrap now sets them); `./env.sh --check`; S3 reachable; boot log triage (`grep WSI- /var/log/wsi-bootstrap.log`).
+Then **verify the pre-written 6xlarge values against the live cluster** (memory items 18/22): backend
+type/count via `describe-instances`, usable capacity + EC scheme from `weka status` (fill
+`WEKA_CAPACITY_TB`), backend RAM vs spec, reserved-core pinning from the client's own report. **Freeze the
+corpus sizes** (`STAGE1_*`, the 6.B definition — memory items 7/12) against the confirmed backend RAM.
+Deliverable: a discovery report with anything broken or suboptimal as a numbered list.
 
-### 2 — Verify the environments; never rebuild what matches
+### 2 — Prove the recording loop on this build
 
-The bootstrap already built `$CONDA_ENV_MAIN` and `$CONDA_ENV_ALT` into `$CONDA_ENVS_DIR`. Verify imports
-(torch+CUDA, cupy, cucim, kvikio, openslide, tifffile, h5py, timm, transformers) and that the visible GPU
-count matches the hardware — the bootstrap's smoke is import-level and warn-only, so this is the first real
-check (`D-22` is the script for it). **Use conda, never pip, for cuCIM** (pip wheels crash on a libstdc++
-ABI mismatch inside `read_region()`). **Then regenerate the `scripts/env-specs/` files from what was
-actually built** — the route table lives in `docs/SCRIPT-TRACKER.md` § Environment specs; the explicit file
-is only a valid Leg-B target once it describes *this* environment.
+`./scripts/prove-recording.sh` — one real Stage-0 cell, named assertions, S3 sync verified. Cheap, before
+any wallclock is spent.
 
-**Then close the provisioning-time values** (the open-items memory, the cost-and-ceiling item; **D15**;
-`./env.sh --check` shows exactly what is pending). Two kinds, handled differently: values that are **instance
-evidence** — `FS_CLIENT_RESERVED_CORES` from the client's own report, already in the discovery — you record
-directly. Values that are **external facts** — the four price inputs and the per-client-ceiling trio — you
-**fetch yourself from the vendor pages, with source URLs and the date checked, and propose to the human;
-they go into `env.sh` only after explicit confirmation.** Fetched, never recalled; proposed, never assumed —
-a wrong price silently rewrites the conclusion of the whole benchmark.
+### 3 — Close the remaining pre-baseline rows on the NEW cluster
 
-### 3 — GATE TIER 1: close these before any cell whose number is kept
+- **Calibrate the canary bands** (D-5's remainder): re-run the two probe-shaped Stage-0 cells (seq write +
+  seq read, as in the 2026-08-15 probes) ≥3× each; set lo/hi from the observed wire/app ratio spread plus
+  margin; write `runs/.leg-state/weka/canary-bands.json`. `wsi_agg_helper.py check` exits UNCALIBRATED
+  until this exists, by design. Expect ratios near 1.455 (write) / 1.034 (read) — the same 5+2 scheme; a
+  shift is itself a finding.
+- **The recorded D8 Phase-0 cell**: kvikIO known-good read with modes forced explicitly (never AUTO — path
+  accounting has three layers; see the open-items memory, the GDS-skew item), path accounting recorded,
+  settling the WEKA-GDS question empirically.
+- **Stage-1.0 corpora staging**: `run-leg.sh` runs `prep-stage1-read-corpora.sh` as step `1.0r-prep`.
+- Remaining [USER] ratifications live in the open-items memory (D-30/D-21 blocking semantics is the one
+  that should be decided before the leg starts).
 
-The next steps produce cells whose numbers are *kept*: the 1.7 hydration is a measured cell, and the
-Stage-1.0 sweeps are the denominator for every "% of ceiling" in the leg. **Do not run either until every
-row below is closed, or explicitly waived by the human in writing with the reason recorded.** A row is
-closed by being **executed with its evidence named**, never by being read for — every row describes a
-failure invisible in the output it produces.
+### 4 — Hydrate (measured cell 1.7), then the baseline — STOP for greenlight
 
-| # | Blocker | Where | Closed when |
-|---|---|---|---|
-| 1 | **Per-filesystem recording adapters** — the recorder set and required-stream list arrived from an InfiniBand environment, so on AWS those streams are empty and **every run marks `INCOMPLETE`** | `D-4` | a cell records this leg's real Primary sources and `runs/INDEX.md` says `OK` |
-| 2 | **Per-filesystem consistency relation** — the canary cannot evaluate without it, and it must be derived, never ported | `D-5` | the post-cell canary passes on a real cell, with the derivation written down |
-| 3 | **The measurement-correctness remainders in the Python workers** — each produces a plausible number that is wrong, which is worse than a crash | the open-items memory, the worker measurement-correctness item | each fixed and re-verified against a real cell |
-| 4 | **1.7 hydration driver built** — the step has no driver, and the leg orchestrator aborts rather than skipping it. On completion it writes `runs/.leg-state/$LEG/hydration-complete` (the bootstrap's re-hydration guard keys on it) | `D-13` | step 1.7 runs and the datasets byte-verify |
-| 5 | **The Stage-1.0 read cells' cache regime, settled before the baseline** — working set sized past the larger of the two server-side caches, staged ahead of the timed window, never unlinked between cells, cell order de-ordered (**D13**; `docs/Stage-1-Ingest.md`). The one row that cannot be fixed after the fact without re-running the whole baseline | **D13**; the open-items memory, the read-sweep driver item | the 1.0b/1.0d drivers implement the regime, and each baseline read cell records the cache state it achieved |
+`run-leg.sh --leg weka` drives it: C0 canary → 1.0a → corpora prep → 1.0b/c/d → 1.7 (byte-verifies, writes
+the hydration marker). **Stop after the Stage-1.0 baselines and report Tier 0 and every Tier-1 row, row by
+row, with the evidence named, for the human's greenlight before anything else runs.** Check the **D10
+instance revisit trigger** at the baseline: ceiling pinned at line rate across block sizes + concurrency
+saturating on CPU ⇒ the instance is measuring itself — surface before continuing.
 
-> **Standing constraint — the read drivers do not implement row 5; do not run them as they stand.**
-> `sweep-stage1-{seqr,randr}.sh` create a `--size=4G` × jobs working set in fio's layout phase immediately
-> before each timed window, `--unlink=1` recreates it per cell, and the grid ascends in concurrency — each
-> the opposite of what **D13** requires, on the cells that are the leg's denominator. **Fix the drivers
-> first**; `docs/Stage-1-Ingest.md` and **D13** are the specification.
+### 5 — Run the leg per `run-leg.sh`, then close out per the teardown checklist
 
-### 4 — The deferred script work (the core build task)
-
-Work the deferred table in `docs/SCRIPT-TRACKER.md` — the single register for it. **This is where the
-comparison's validity is won or lost**, and it is where Tier 1's rows close. **Keeping the tracker true is
-part of the task:** a `D-n` you close leaves the tracker wrong until you reconcile it — the work is done
-when the tracker matches the script, and every completed entry moves out of the deferred table into the
-per-script reference. No change log; git is the audit trail.
-
-### 5 — Hydrate (measured cell 1.7), resolve open-items section A, then the baseline — STOP for greenlight
-
-Hydration byte-verifies against the manifests and fails loud on any mismatch. Then run the pre-cell canary
-and capture the synthetic baseline **per block size** — the Stage-1.0 sweeps, the denominator for
-everything. **Stop for the human's greenlight on the baseline before the main sweep, reporting Tier 0 and
-every Tier-1 row, row by row, with the evidence named.** Do not anchor on any number from any prior
-environment. Also check the **pre-committed instance revisit trigger** (**D10**): a ceiling pinned at line
-rate across block sizes plus concurrency sweeps saturating on CPU means the instance is measuring itself —
-surface it before Leg B, not after.
-
-### 6 — GATE TIER 2: close these before the main sweep
-
-**Do not start the leg until every row below — and Tiers 0 and 1 with it — is closed or explicitly waived
-in writing.**
-
-| # | Blocker | Where | Closed when |
-|---|---|---|---|
-| 6 | **cuFile path accounting** — a kvikIO cell without recorded GPU-direct-vs-bounced bytes is **incomplete** (**D8**); a config flag is not proof | `D-6` | a kvikIO cell's run dir contains the byte split **and the counters behind it were enabled and moved** on a known-good read — a present-but-all-zero split does **not** close this row (constraint below) |
-| 7 | **`LIBCUFILE_PRELOAD` verified** — the bootstrap exported it; a wrong path is a silent no-op running the cell on the wrong libcufile | `D-10` | `./env.sh --check` shows it and the file exists, matched to the loaded `nvidia-fs` |
-| 8 | **GPU/NUMA/NIC map and core accounting re-derived** — driver index lists are placeholders; the reserved-core set is a per-filesystem parameter (**D15**) | `D-8`, `D-9` | measured on this instance and substituted |
-| 9 | **Step 4.D actually recorded** — the 20× conversion is treated as a measured workload but produces no run dir | `D-15` | 4.D produces a run dir with telemetry |
-| 10 | **Open-items section A resolved** — every item there changes what the numbers *mean*; the ones that govern earlier cells already closed under Tier 1 | the open-items memory, section A | each closed or waived |
-| — | **Leg-B additions, on Leg B only:** the FSx-Lustre EFA client configuration (`D-16`), the kernel-vs-contract policy (`D-17`), and Lustre tuning as part of "Lustre at maximum" (`D-11`) | the deferred table | per row |
-
-> **Standing constraint — the nvidia-fs I/O counters are OFF by default, so a *present* byte split does not
-> close row 6.** `/proc/driver/nvidia-fs/stats` reports `IO stats: Disabled` until
-> `/sys/module/nvidia_fs/parameters/rw_stats_enabled` and `peer_stats_enabled` are set, and a kvikIO cell
-> run that way records a split that is present and **entirely zero** — which reads as "no GPU-direct
-> traffic" rather than "the accounting was off", landing on the wrong answer to the single question the
-> GPU-direct matrix is designed around (**D8**). **Close the row by enabling the counters, reading a
-> known-good file, and showing the split move** — `Active Shadow-Buffer (MiB)` is the compat-mode bounce
-> signal. The stats block is version-stamped; re-verify field names on this stack.
-
-**Report the gate twice:** Tier 0 + Tier 1 at the baseline greenlight; the full set before the leg starts.
-Each row **closed / waived / open** with the evidence named — "done" without evidence is what Rule 11
-forbids. Any open row means the leg does not start.
-
-### 7 — Run the leg, then close it out
-
-`scripts/run-leg.sh --leg $LEG` drives the dependency-ordered plan; every cell through `record-run.sh`,
-both canaries every sweep, numbers into the roadmaps as they land — **numbers and caveats only, no
-narrative.** Close-out is `docs/cloud-setup/TEARDOWN-AND-REBUILD.md` § Teardown: **edit THIS FILE to the
-new current state** (step 2 — dated, leg named, what completed, what is mid-stage, what this leg taught
-that changes the next one's plan), then the human runs `scripts/teardown-prep.sh`. Single-leg claims stay
-scoped as half an unfinished comparison.
+Numbers into the roadmaps as they land — numbers and caveats only. The leg-end close-out writes the real
+environment contract and re-edits THIS FILE.
 
 ---
 
 ## Standing facts to carry
 
-- **`--fs` is a dimension, not a fork.** One `runs/` tree; the filesystem is a run-dir segment and a
-  `metadata.json` field; the `-<leg>-` segment is what the S3 sync and the teardown gate glob on — a run
-  dir without it is never backed up **and the gate does not notice.**
-- **No metric is designated primary**; every cell records the full set plus wallclock and the date-stamped
-  price inputs (instance, filesystem, storage-software), fetched never recalled — cost in both bases (**D7**).
-- **Per-filesystem primaries invert:** the client's kernel network counters are diagnostic on WEKA and ARE
-  the data path on Lustre. Never quote a bypassed source.
+- **`--fs` is a dimension, not a fork.** One `runs/` tree; the `-<leg>-` segment is what the S3 sync and
+  the teardown gate glob on.
+- **No metric is designated primary**; every cell records the full set + wallclock + dated price inputs
+  (both cost bases, **D7**).
+- **Per-filesystem primaries invert** (thesis §7): client kernel network counters are diagnostic on WEKA,
+  primary on Lustre. Never quote a bypassed source.
 - **Every "% of ceiling" divides by the block-size-matched Stage-1.0 cell.**
-- **Cold vs warm is an enforced axis, recorded as achieved** — satisfied in **D13**'s order of preference;
-  any corpus that must exceed cache is sized against **both** filesystems' caches.
-- **kvikIO cells run in both cuFile modes on both filesystems**; a cell without path accounting is
-  incomplete. **`LD_PRELOAD` scoped per cell** — nearly every sweep mixes kvikIO and cuCIM.
-- **Three silent-skip hazards** (raw-TIFF converter, 6.A extractor, Tier-2 chunked conversion) reuse
-  existing output without failing loud — verify cleanup between runs.
-- **Cross-leg integrity gates** (dataset bytes, coords, raw-TIFF dimensions, feature shapes) are
-  storage-independent and must match across legs; a divergence is fail-loud.
-- **MIL is canonical `batch_size=1` + `collate_MIL`**; concurrency via `num_workers`.
-- **UNI2-h stays internal-only** — don't strip the tags; filter before anything is externalised.
-- **Git: Claude commits and pushes autonomously** — a commit per coherent work block, `./backup.sh` first,
-  push promptly. **Ephemerality:** both mounts, local scratch, and your context die with the instance — only
-  git, the memory mirror, and S3 survive. Persist continuously.
+- **Cold vs warm is enforced and recorded as achieved** (**D13**); the read sweeps implement it by
+  construction (scan corpus / one-touch regions / cold-warm arms / reference cells) — do not "simplify"
+  their staging or ordering.
+- **kvikIO cells record the three-layer path accounting** (`wsi_cufile_accounting.py`); a config flag is
+  not proof (**D8**). `LD_PRELOAD` scoped per cell, kvikIO cells only.
+- **Three silent-skip hazards** (4.D converter, 6.A extractor, Tier-2 chunks) need cleanup-before-cell.
+- **Cross-leg integrity gates** are fingerprinted per **D19**; build the capture/compare CLI right after
+  3.0's first real output (tracker D-24).
+- **MIL is canonical `batch_size=1` + `collate_MIL`**; UNI2-h stays internal-only.
+- **Git: Claude commits and pushes autonomously** — per work block, `./backup.sh` first, never mid-cell.
+  **Ephemerality:** both mounts, local scratch, and your context die with the instance — only git, the
+  memory mirror, and S3 survive. Persist continuously.
 
 ## Your first response
 
-After the reading **and** the read-only discovery: what you understand the project to be, the discovery
-report (what is solid, what is not, how this instance differs from anything the docs assume), and the build
-plan you propose — with the open items as a plain-text numbered list, each with a recommendation: the
-discovery findings, the 6.B corpus-sizing decision, the baseline greenlight, any client-reconfigure
-proposal, and any methodology revisit the real hardware justifies. **Surface problems and questions first;
-mutate nothing before sign-off. Run nothing at all — not even the throwaway — until Tier 0 is closed; run
-no kept cell until Tier 1 is closed; start no sweep until the full gate is reported and cleared.**
+After the reading and the discovery: what you understand the state to be, the discovery report (including
+every pre-written-value verification and anything the new cluster changes), and the plan through the
+baseline greenlight — decisions as a plain-text numbered list with a recommendation each. **Mutate nothing
+before sign-off. Run nothing — not even the throwaway — until Tier 0 is re-evidenced on this cluster.**
