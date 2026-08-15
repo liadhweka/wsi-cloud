@@ -28,7 +28,22 @@ documented Lustre client install can pull a newer kernel, and any OS upgrade can
 procedure can invalidate the very comparison the contract protects. **Step 4 must not run before the kernel
 question is settled with the human.** Tracked as `D-17`.
 
-Neither is a reason to avoid the work. Both are reasons to check, record, and surface.
+**3. "Latest" resolving silently under the AMI and the driver (learned on Leg A, 2026-08-15).** Two places
+pick "latest" unless explicitly stopped, and both feed `MUST_MATCH` fields:
+- **The client AMI.** The terraform module's `client_instance_ami_id` defaults to `null` = *the newest
+  Amazon Linux 2023 at apply time* — Leg A ran unpinned for its first build and the AMI was only discovered
+  from the instance's own metadata afterwards. It is now pinned in the terraform
+  (`client_instance_ami_id = "ami-00f6db7984ad32b20"`, Leg A's image). **Before the Leg-B apply: confirm
+  the pin is still present in the tfvars, and that the AMI still exists in the region** (`aws ec2
+  describe-images --image-ids ...`) — AWS deprecates images over months, and a silently-dropped pin
+  re-resolves to a newer AMI whose kernel fails the contract for a reason nobody chose. (Backend/FSx have
+  no equivalent concern: Leg B has no WEKA backends, and backend fields are `MAY_DIFFER` by design.)
+- **The NVIDIA stack.** The bootstrap installs the driver via unpinned `dnf install nvidia-driver`, so
+  `DRIVER_VERSION` / `NVIDIA_FS_VERSION` can drift between legs even on the identical AMI. Before the
+  Leg-B rebuild: pin the packages to Leg A's contract-recorded versions, or knowingly accept the contract
+  verify as the tripwire (a firing = stop and decide, per `D-17`).
+
+None of these is a reason to avoid the work. All are reasons to check, record, and surface.
 
 ---
 

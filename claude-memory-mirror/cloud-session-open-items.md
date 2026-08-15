@@ -130,7 +130,9 @@ These change what the numbers mean, so resolving them after cells have run means
     ~7.70/hr) is in env.sh's comment; prices are backfillable while methodology/sources/dates stay recorded
     (all are). (b) **Spin-up verification on the new cluster**: backend type/count from describe-instances,
     usable capacity + EC scheme from `weka status` (WEKA_CAPACITY_TB deliberately blank until measured),
-    reserved-core pinning re-verified. Leg B's documented per-client caps (2026-08-15, performance.html):
+    reserved-core pinning re-verified; **record the backend AMI into the leg's provenance (record, don't
+    pin — backends are MAY_DIFFER and absent on Leg B; ratified 2026-08-15) and confirm `weka_version` is
+    explicitly set in the terraform** — the field that actually changes backend behavior across a rebuild. Leg B's documented per-client caps (2026-08-15, performance.html):
     EFA 700 Gbps, EFA+GDS 1200 Gbps — set at Leg-B spin-up.
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
