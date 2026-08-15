@@ -389,6 +389,15 @@ many cells would differ from its warm twin only by an uncontrolled variable, dou
 separate nothing. **What is actually achievable per filesystem is determined before the first measured cell,
 not assumed here.**
 
+**Declared and achieved are reconciled per cell, mechanically.** Every cell records its *declared* regime
+(`cache_state` in `metadata.json`, from `RECORD_CACHE_STATE`); the *achieved* state is what the evidence
+streams show — the readers' recorded cache-discard returns (cuCIM reports a failed discard by returning
+`False`, and the workers record it), the drivers' drop_caches acknowledgments, and the post-cell canary. A
+cell whose declaration lacks its achieved evidence — a "cold" cell with no discard record, a disagreement
+between the two — is **marked, never quoted as its declared regime**: the check lives in the shared
+aggregation helper (**tracker D-4**), and the Lustre leg's evidence source is named during that helper's
+on-instance build.
+
 1. **Cold by construction — preferred wherever a working set can be sized.** Make the read working set exceed
    **the larger of the two server-side caches**, and there is nothing left for cache to serve. **Size it
    against both filesystems' caches:** FSx's follows from its documented file-server cache per TiB at the

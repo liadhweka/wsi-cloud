@@ -236,6 +236,11 @@ Additional rules that apply on both legs:
 the canary **aborts the chain itself** rather than waiting to be noticed — otherwise a 3am failure yields hours
 of contaminated cells that look fine.
 
+**Cache state is reconciled, not trusted (D13):** a cell's declared `cache_state` must be matched by its
+achieved evidence (the readers' recorded discard returns, drop_caches acknowledgments, the canary's own
+check). Declared-without-evidence or declared-versus-evidence disagreement → the cell is **marked and never
+quoted as its declared regime**. The check ships with the shared aggregation helper (tracker **D-4**).
+
 ---
 
 ## Run-to-run variance — the D18 policy
