@@ -368,7 +368,9 @@ if mountpoint -q "$SCRATCH"; then
   cat > /usr/local/bin/wsi-build-envs.sh <<EOS
 #!/usr/bin/env bash
 # Rebuilds the pinned benchmark envs from scripts/env-specs (scratch dies with the
-# instance, so this runs on every build). Explicit files ARE the pin — do not "update".
+# instance, so this runs on every build). The pins are TWO files per env — the conda
+# explicit file (conda layer) plus the PyPI-form lines of the pip freeze (pip layer;
+# conda explicit files cannot carry pip packages). Do not "update" either.
 set -x
 for e in wsi-cucim-2604 wsi-cucim; do
   spec=$REPO/scripts/env-specs/\$e.conda-explicit.txt
@@ -376,8 +378,19 @@ for e in wsi-cucim-2604 wsi-cucim; do
   [ -x "$CONDA_ENVS/\$e/bin/python" ] && { echo "\$e already built"; continue; }
   $CONDA_ROOT/bin/mamba create -y -p "$CONDA_ENVS/\$e" --file "\$spec" \
     || { echo "WSI-WARN: env \$e build FAILED — see scripts/env-specs/env-create-history.txt for the manual recipe"; continue; }
+  # The pip layer: conda explicit files carry only conda packages, so the genuinely
+  # pip-installed pins (PyPI-form `name==ver` lines; conda-provided ones appear as
+  # `@ file://` and are skipped) come from the freeze. --no-deps because the freeze
+  # is a complete closure — letting pip resolve would fight the conda layer.
+  # Stage 3's preflight imports cv2/matplotlib/openslide from this layer and
+  # refuses without them.
+  req=$REPO/scripts/env-specs/\$e.pip-freeze.txt
+  if [ -f "\$req" ] && grep -E '^[A-Za-z0-9_.-]+==[0-9]' "\$req" > "/tmp/wsi-pip-\$e.txt" && [ -s "/tmp/wsi-pip-\$e.txt" ]; then
+    "$CONDA_ENVS/\$e/bin/pip" install --no-deps -q -r "/tmp/wsi-pip-\$e.txt" \
+      || echo "WSI-WARN: pip layer for \$e FAILED — stage preflights that import from it will refuse"
+  fi
   # Smoke test the way the sweep drivers invoke it: CONDA_PREFIX set, bare exec.
-  mods="torch,cucim"; [ "\$e" = "wsi-cucim-2604" ] && mods="torch,cucim,kvikio"
+  mods="torch,cucim,cv2"; [ "\$e" = "wsi-cucim-2604" ] && mods="torch,cucim,kvikio,cv2"
   if CONDA_PREFIX="$CONDA_ENVS/\$e" "$CONDA_ENVS/\$e/bin/python" -c "import \$mods; assert torch.cuda.is_available(); print('\$e smoke OK:', torch.__version__, torch.cuda.device_count(), 'GPUs')" \
        > "$CONDA_ENVS/\$e/.wsi-smoke.log" 2>&1; then
     touch "$CONDA_ENVS/\$e/.wsi-smoke-ok"; cat "$CONDA_ENVS/\$e/.wsi-smoke.log"

@@ -5,3 +5,12 @@
 ### wsi-cucim
 /data/local-nvme/miniforge/bin/mamba create -y -p /data/local-nvme/conda-envs/wsi-cucim -c rapidsai -c conda-forge -c nvidia cucim cuda-version=12.* python=3.10
 /data/local-nvme/miniforge/bin/mamba install -y -p /data/local-nvme/conda-envs/wsi-cucim -c conda-forge -c nvidia pytorch=*=cuda* torchvision monai h5py openslide-python
+
+# ─── The pip layer (applies to BOTH envs; the explicit files cannot carry it) ───
+# After the mamba/conda create, install the genuinely-pip pins — the PyPI-form
+# `name==ver` lines of the env's pip-freeze (conda-provided packages appear as
+# `@ file://` lines and must be skipped):
+#   grep -E '^[A-Za-z0-9_.-]+==[0-9]' <env>.pip-freeze.txt > /tmp/pip-layer.txt
+#   <env>/bin/pip install --no-deps -r /tmp/pip-layer.txt
+# --no-deps: the freeze is a complete closure; resolving would fight the conda layer.
+# Stage 3's preflight (cv2, matplotlib, openslide-python, h5py, pandas) lives here.
