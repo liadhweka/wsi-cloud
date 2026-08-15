@@ -206,6 +206,12 @@ WEKA, and the number looks correct.
 **In scope:** WEKA versus FSx for Lustre, both over POSIX, across the WSI pipeline at the project's
 magnification contract, on one client instance, with cost measured throughout.
 
+**Single-client is the claimed unit of analysis, not a discovered limitation.** The deliverable measures the
+per-client experience — the pathology workstation, the inference node, the unit that scales — and every
+externalized claim is framed as exactly that, with the recorded per-client ceilings beside the results
+(STAGES.md **D7**). Multi-client aggregate behaviour is out of scope *by design*, stated up front, not
+conceded when asked.
+
 **Out of scope:** any third filesystem or object/S3 access path; any comparison against results produced on
 different hardware or different code. **This repository has one deliverable: the head-to-head synthesis.**
 
