@@ -24,20 +24,13 @@ be the worst possible tool. **Run the pre-flight, then do the destruction yourse
 
 ## Teardown
 
-> ### Hand this to Claude — steps 1–4 and 6–7
-> Paste, in a session on the instance:
->
-> > Read the file `prompts/prompt-teardown-cloud.md` and do everything it says, then report back.
->
-> **You do exactly two things: step 5 (commit + push) and step 8 (destroy).** Steps 1–4 and 6–7 are commands
-> and judgement calls, and **step 2 is one only Claude can do at all** — its context is what's being destroyed,
-> so the account of what this session did can only be written now, by it.
->
-> Why the split rather than one handoff: the pre-flight gate in step 6 checks that git is **clean and pushed**,
-> and pushing is yours. So Claude stops after step 5, you commit and push, then it runs the gate.
->
-> The steps below stay here as the reference — read them to know what should have happened, and to run it by
-> hand if there is no working Claude session.
+> ### How the work splits
+> **Claude does steps 1–2** (they are judgement calls, and **step 2 is one only Claude can do at all** — its
+> context is what's being destroyed, so the account of what this session did can only be written now, by it).
+> **You run `scripts/teardown-prep.sh`**, which mechanises steps 3–6 in order — backup, contract, boot-log
+> archive, commit + push (the commit is yours because the run is), then the pre-flight gate — and **you do
+> step 8 (destroy)**. The steps below are the reference for what the script does and why, and how to run it
+> by hand if there is no working script.
 
 ### 1. Stop cleanly *(Claude)*
 Confirm nothing is mid-flight — a sweep interrupted mid-cell leaves a half-recorded run dir that looks real.
@@ -47,22 +40,23 @@ pgrep -fa 'record-run.sh|sweep-stage|run-leg.sh'      # must be empty
 If a sweep is running, let the current cell finish (or note it and forensically rename the partial run dir
 with a `-FAILED-interrupted` suffix — **don't delete it**, per the data-preservation rule).
 
-### 2. Write the handoff prompt for the next session *(Claude — only it can)*
+### 2. Edit the living handoff to current state *(Claude — only it can)*
 **This is the step most easily skipped and most expensive to skip** — Claude's context does not survive, so
-whatever isn't written down is genuinely gone. It goes in **`docs/cloud-setup/HANDOFF-NEXT-SESSION.md`**
-(git-tracked, so it survives and is versioned) and covers: what completed, what's mid-stage, anything learned
-that should change the next leg's plan, and any open question that was mid-flight.
+whatever isn't written down is genuinely gone. **`prompts/handoff-cloud.md` is the living handoff**: edit it
+to the state as of this teardown — update its `Written:` date and the leg it names, what completed, what's
+mid-stage, anything learned that should change the next leg's plan, and any open question mid-flight. It is
+what the next session pastes first.
 
 For the WEKA→Lustre switch specifically, the next session also needs what Leg A taught us that changes Leg B,
 and the corpus-size decision if it was made (the open-items memory, the 6.B corpus-sizing item).
 
-> **This step is gated.** The pre-flight NO-GOes unless that exact path exists, carries a
-> `Written: YYYY-MM-DD` header, and that date is current — the file is git-tracked, so the *previous*
+> **This step is gated.** The pre-flight NO-GOes unless `prompts/handoff-cloud.md` carries a
+> `Written: YYYY-MM-DD` header whose date is current — the file is git-tracked, so the *previous*
 > teardown's copy would otherwise pass a bare existence check. It also warns if the file never names the
 > current `$LEG`, so name it. *Why gated:* with no defined file, a handoff can be "written" into a chat
 > message that dies with the context it exists to carry.
 
-### 3. Back up the memories *(Claude)*
+### 3. Back up the memories *(inside `teardown-prep.sh`)*
 ```bash
 cd $REPO_DIR
 ./backup.sh                    # live memories → mirror, then S3 sync
@@ -71,7 +65,7 @@ cd $REPO_DIR
 > session has run yet, there is no live directory to copy from — the script refuses (exit 1) rather than
 > emptying the mirror. That's correct; skip this step then.
 
-### 4. Write the environment contract *(Claude)*
+### 4. Write the environment contract *(inside `teardown-prep.sh`)*
 This is what makes the *next* leg provably comparable to this one. Without it, "were these two legs even
 comparable?" becomes unanswerable exactly when it matters.
 ```bash
@@ -81,17 +75,16 @@ scripts/sync-to-s3.sh --mode full
 It exits non-zero if any held-constant field is unrecorded. **Fix those rather than proceeding** — an
 unrecorded fact can never be shown to have matched later.
 
-### 5. Commit and push *(human — never automated)*
-```bash
-git add -A && git commit -m "leg $LEG: <what completed>" && git push
-```
+### 5. Commit and push *(inside `teardown-prep.sh` — human-initiated, because you run it)*
+The script commits and pushes, fail-loud: an unpushed repo dies with this instance, and the push is what
+carries `runs/.leg-state/` — the resume markers — to the next build.
 
-### 6. Run the pre-flight — GO / NO-GO *(Claude)*
+### 6. Run the pre-flight — GO / NO-GO *(`teardown-prep.sh` hands off to it)*
 ```bash
 source env.sh
 scripts/teardown-preflight.sh
 ```
-It checks: nothing in flight · memories mirrored · **the handoff prompt written and dated today** · git clean
+It checks: nothing in flight · memories mirrored · **the living handoff dated today** · git clean
 **and pushed** · contract complete **and in S3** · **`env.sh` agreeing with the instance's own metadata** ·
 **every local run dir's raw telemetry present in S3** · nothing else stranded on ephemeral storage · rebuild
 inputs recorded.
@@ -102,7 +95,7 @@ before a real teardown — that skips precisely this check.
 
 **On NO-GO: stop.** Each blocking line names something that would be lost permanently.
 
-### 7. Record the rebuild inputs *(Claude)*
+### 7. Record the rebuild inputs *(read the pre-flight's output)*
 Step 6 already checked `AMI_ID` / `INSTANCE_TYPE` / `AWS_REGION` / `AWS_AZ` in both `env.sh` and the contract —
 read its output rather than re-confirming by eye; the prose here is not a second opinion. **What the script
 cannot check: the AMI must be *pinned*, not "latest"** — a newer base image silently changes the kernel and the
@@ -122,138 +115,51 @@ driver, both held-constant fields, so Leg B would fail its own contract verify f
 
 ## Rebuild
 
-### 1. Launch identically
-Same `INSTANCE_TYPE`, same `AWS_REGION`/`AWS_AZ`, **the pinned `AMI_ID`**, EFA-capable, with the EFA
-security-group rule and the **IAM instance profile** attached at launch.
+**Three human actions; the bootstrap does everything else.**
 
-### 2. Bootstrap
-Follow [`NEW-CLOUD-SETUP.md`](NEW-CLOUD-SETUP.md) **Part 3 and Part 4** — tmux, base tools, AWS CLI,
-SSH↔GitHub, Claude Code, clone, `env.sh`, restore memories. Skip **Part 0 and Part 1** (names and the AWS
-foundations are already decided and provisioned); Part 2 is covered by step 1 above.
+### 1. `terraform apply`
+In this leg's Terraform root (on the WEKA leg: `clients_number` 0 → 1). Terraform pins the AMI, instance
+type, region/AZ, security group and IAM profile — the held-constant fields — so "launch identically" is
+configuration, not care. `scripts/bootstrap-instance.sh` runs at first boot and builds the whole client
+unattended: packages, the pinned NVIDIA/CUDA/GDS stack, local-NVMe scratch, the mount (Leg A), `env.sh`
+generated from instance evidence including `FS_TRANSPORT`, `LIBCUFILE_PRELOAD`, the cuFile config, both
+conda environments with smoke tests, model prefetch, and the memory restore — each verified, warnings
+prefixed `WSI-WARN`. Boot log: `/var/log/wsi-bootstrap.log`; triage with `grep WSI-`.
 
-### 3. Restore the memories — before anything else
-Nothing downstream makes sense without them.
+### 2. Start Claude
 ```bash
-cd $REPO_DIR
-./scripts/restore-memories.sh              # mirror → the live memory directory, verified
+tmux new -A -s wsi && cd ~/wsi-cloud && claude   # then /login
 ```
-> **Restore before you ever run `backup.sh`.** They move memories in opposite directions, and `backup.sh`
-> mirrors *out of* the live directory — which on a fresh instance is empty. It refuses in that case, but the
-> ordering is what makes the refusal unnecessary.
+**Leg B only:** first paste `prompts/prompt-lustre-cluster-cloud.md` — the Lustre mount has no automation
+yet, and its EFA-vs-TCP gate is a hard stop (**D16**), checked *before* anything is spent.
 
-### 4. Re-create the configuration
-```bash
-aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-<previous-leg>.json" /tmp/
-cp env.example.sh env.sh                   # env.sh is gitignored, so it did NOT survive
+### 3. Paste the living handoff
+> Read the file `prompts/handoff-cloud.md` and do everything it says, then report back.
 
-# Emit ready-made export lines from the contract instead of retyping them:
-scripts/env-contract.py env --file /tmp/env-contract-leg-<previous-leg>.json
-$EDITOR env.sh                             # paste them OVER the placeholders in the top half
-source env.sh
-./env.sh --check                           # must pass before anything else
-```
-> **Never retype the values by hand.** Emitting them from the contract removes a transcription step sitting
-> in front of the one artifact whose entire purpose is proving the two legs matched — a typo in `AMI_ID` or
-> `INSTANCE_TYPE` defeats the check it exists to pass. The **previous leg's filesystem values arrive commented
-> out, deliberately**: on a cross-leg rebuild they describe the *other* filesystem, and the cluster-setup
-> prompt in step 6 writes the new ones.
->
-> **Paste, don't `>>` append.** `--check` lives at the bottom of `env.sh` and runs before anything appended
-> after it, so appended values source correctly and are still reported `MISSING`.
-> `env.sh` is deliberately gitignored, so **it is always lost.** The contract in S3 is where you recover the
-> values from — another reason step 4 of teardown is not optional.
->
-> **Two values `--check` will only warn about, and both are needed before a cell runs:** `LIBCUFILE_PRELOAD`
-> (the env-prep session in step 5 reports the new path — the old one is almost certainly wrong on a rebuilt
-> instance) and, for Leg B, `LUSTRE_STRIPE_LAYOUT` (step 6). `AMI_ID`, `INSTANCE_TYPE`, `AWS_REGION` and
-> `AWS_AZ` must match the contract exactly — that is what step 7 verifies.
+It carries the current state (edited at the last teardown) and drives the rest: verifying the bootstrap's
+work read-only, the environment-contract `verify` against the previous leg (**a VIOLATION is a stop** — any
+head-to-head number from two non-matching environments attributes an environment difference to the
+filesystem, the one error this project exists to avoid), the 1.7 re-hydration with byte-verification (the
+driver is `D-13`; `run-leg.sh` aborts rather than skips without it), the throwaway Stage-0 recording proof
+before wallclock is spent (`D-20`), and `run-leg.sh --leg $LEG`, which **resumes** from the git-tracked
+markers in `runs/.leg-state/$LEG/`.
 
-### 5. Re-do the ephemeral setup
-Scratch (`$SCRATCH_DIR`) and the Python environments died with the instance. Paste the env-prep prompt:
-> Read the file `prompts/prompt-env-prep-cloud.md` and do everything it says, then report back.
-
-Then rebuild the conda environments and regenerate the cuFile config for **this** instance (its addresses
-are new).
-
-> **On a rebuild, use the pinned `*.conda-explicit.txt` files, not the loose recipe.** `conda_env_main` and
-> `python_version` are `MUST_MATCH` contract fields, so the environment is a held-constant input: the point is
-> to reproduce the previous leg's environment **bit-identically**, not to re-solve it. The full route table —
-> which of the four `scripts/env-specs/` file types to use when, and why — is in
-> [`handoff-cloud.md`](../../prompts/handoff-cloud.md) § 4.1. If the explicit file will not solve on this
-> instance, that is a **finding to surface**, not something to work around silently: it means the two legs
-> cannot share an environment.
-
-Then do the **Hugging Face login** again (`NEW-CLOUD-SETUP.md` § 7.2) — the token lives in the home directory,
-which did not survive either.
-
-### 6. Mount the filesystem for this leg
-Paste the prompt for the leg you're on — both are written to be re-run on exactly this occasion, and both
-record their provisioning facts into `env.sh` themselves:
-> Read the file `prompts/prompt-weka-cluster-cloud.md` and do everything it says, then report back.
-
-> Read the file `prompts/prompt-lustre-cluster-cloud.md` and do everything it says, then report back.
-
-WEKA lands at `$WEKA_MOUNT`, FSx at `$LUSTRE_MOUNT` **over EFA** (required both for GPUDirect Storage and to
-escape the per-client-per-file-server bandwidth cap). **Each prompt has a hard gate you must not wave
-through** — a DPDK-vs-UDP mount for WEKA, an `efa`-vs-`tcp` LNet for Lustre, each evidenced from the client's
-own report rather than inferred from the mount options passed. **A fallback transport is a stop, not a
-caveat:** it yields a full set of believable numbers for a configuration this project promised not to measure,
-so the leg refuses to start without evidenced `FS_TRANSPORT` (**D16** in [`STAGES.md`](../STAGES.md)).
-
-### 7. Verify comparability — the gate
-```bash
-scripts/env-contract.py verify --against <leg-A-contract.json> --leg $LEG
-```
-It separates **VIOLATION** (a held-constant field differs — the comparison is invalid) from **differs as
-expected** (the filesystem fields, which are the variable under test). It also fails on *unverifiable*
-fields, because a null cannot be shown to have matched.
-
-**A VIOLATION here means stop.** Any head-to-head number produced from two non-matching environments would
-be attributing an environment difference to the filesystem — which is the one error this whole project is
-built to avoid.
-
-### 8. Re-hydrate the datasets
-From S3, not from the original sources — that's what makes them a byte-identical held-constant input across
-legs. This is also measured cell **1.7**, so run it through `record-run.sh`.
-
-⏳ **The hydration driver is deferred work** (`D-13` in [`SCRIPT-TRACKER.md`](../SCRIPT-TRACKER.md)) — until
-it lands the leg cannot proceed past 1.7, which is a hard stop rather than a silent skip. **Hydration runs
-S3 → `$FS_MOUNT`**; the S3 sync runs the other way, so it is **not** the hydration command.
-
-Then **byte-verify against the manifests** and fail loud on any mismatch.
-
-### 9. Prove the recording pipeline before spending wallclock
-Run a throwaway Stage-0 cell and confirm: recording complete, both canaries functional, S3 sync verified,
-`INDEX.md` row correct, aggregator emits a row pivoted on `--fs`. **Do this before a real cell** — otherwise
-a recording bug is discovered after hours of unusable runs.
-
-### 10. Resume
-```bash
-scripts/run-leg.sh --leg $LEG --list           # see what's done vs pending
-scripts/run-leg.sh --leg $LEG                  # resumes; completed steps are skipped
-```
-Completion markers live in `runs/.leg-state/$LEG/`, which is **git-tracked**, so a rebuild mid-leg picks up
-where it stopped — **provided teardown step 5 committed them.** It does (`git add -A`). *Why they must stay
-tracked rather than ignored:* untracked they would die with the instance, and the resume would then silently
-re-run every completed step and create duplicate run dirs instead of erroring.
-
-> **If this is the start of Leg B:** the state directory is per-leg, so Leg B correctly starts from scratch
-> while Leg A's markers remain untouched.
+> ⚠ **If the marker directory is empty on a mid-leg rebuild, stop** — the previous teardown never committed
+> them, and running on would silently redo hours of sweeps into duplicate run dirs.
+> **At the start of Leg B** the state directory is per-leg, so Leg B correctly starts from scratch while
+> Leg A's markers stay untouched.
 
 ---
 
 ## Quick reference
 
-**Teardown:** stop cleanly → handoff prompt → `./backup.sh` → contract → commit+push → **pre-flight GO** →
-record rebuild inputs → destroy (instance, then filesystem; **never the bucket**).
-*All of it is `prompts/prompt-teardown-cloud.md` except commit+push and the destruction.*
+**Teardown:** stop cleanly → edit the living handoff (`prompts/handoff-cloud.md`, dated, leg named) →
+`scripts/teardown-prep.sh` (backup → contract → commit+push → **pre-flight GO**) → destroy (instance, then
+filesystem; **never the bucket**).
 
-**Rebuild:** launch identically → bootstrap → **restore memories** → recreate `env.sh` + `--check` →
-env-prep + conda + cuFile → mount → **verify contract** → re-hydrate + byte-verify → Stage-0 proof →
-`run-leg.sh`.
-*The first thing a rebuilt session should read is `docs/cloud-setup/HANDOFF-NEXT-SESSION.md` — the previous
-session's own account of where it left off.*
+**Rebuild:** `terraform apply` → `claude /login` (Leg B: the Lustre prompt first) → paste the living
+handoff → contract **verify** → re-hydrate + byte-verify → Stage-0 proof → `run-leg.sh` resumes.
 
-**The three that are easiest to skip and most expensive to skip:** the handoff prompt (step 2), the
+**The three that are easiest to skip and most expensive to skip:** the living-handoff edit (step 2), the
 environment contract (step 4 — and `env.sh` recovery depends on it), and the pre-flight telemetry check
 (step 6).

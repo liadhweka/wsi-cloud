@@ -701,6 +701,26 @@ held-constant input across legs (**D6**).
 
 ---
 
+## Environment specs (`../scripts/env-specs/`)
+
+Four kinds of file, **not interchangeable** — pick deliberately, because `conda_env_main` and
+`python_version` are `MUST_MATCH` contract fields, so the environment is a **held-constant input**: whatever
+Leg A ends up with, Leg B must reproduce bit-identically.
+
+| File | What it is | Use it when |
+|---|---|---|
+| `env-create-history.txt` | **The recipe** — the actual `mamba create`/`install` commands, loose pins that re-solve against the CUDA present | Building the FIRST environment on a new stack (the bootstrap's route) |
+| `*.conda-explicit.txt` | Fully pinned package URLs — reproduces the environment **bit-identically** (`conda create -p <path> --file <file>`) | **The Leg-B rebuild**, so Leg B matches Leg A exactly |
+| `*.environment.yml` | Solved spec with versions; its `name:` is an absolute **path**, so create with `-p`, not `-n` | A middle route if the explicit file will not solve |
+| `*.pip-freeze.txt` | Record of the pip-installed remainder | Cross-check only — never the primary route |
+
+**After Leg A's environments are final, regenerate these files from what was actually built** — the explicit
+file is only a valid Leg-B target once it describes the real environment. If the explicit file will not solve
+on the Leg-B instance, that is a **finding to surface** (the two legs cannot share an environment), not
+something to work around silently.
+
+---
+
 ## Cross-references
 
 `../CLAUDE.md` (rules, recording, durability) · `../PROJECT-THESIS.md` (the question, both asymmetries, and
