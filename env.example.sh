@@ -252,6 +252,14 @@ if [ "${1:-}" = "--check" ]; then
   _rec     WEKA_EC_SCHEME         "needed to derive the WEKA canary relation (D12) — Leg A"
   _rec     LUSTRE_STRIPE_LAYOUT   "needed to derive the Lustre canary relation (D12) — Leg B"
   _rec     WEKA_BACKEND_RAM_TOTAL "drives Stage 6.B corpus sizing"
+  _rec     FS_CLIENT_RESERVED_CORES "record-run.sh records cores_reserved from it; CPU aggregation REFUSES runs recorded without it (D15). Set 'none' on a leg that reserves none"
+  _rec     INSTANCE_USD_PER_HR    "cost input (D7) — fetch dated, never recall"
+  _rec     FS_USD_PER_HR          "cost input (D7) — per leg, fetch dated"
+  _rec     SOFTWARE_USD_PER_HR    "cost input (D7) — WEKA: public Marketplace rate; Lustre: 0 (FSx is software-inclusive)"
+  _rec     PRICE_CHECKED_UTC      "an undated price cannot be audited — treat undated as missing"
+  _rec     FS_PER_CLIENT_CEILING_GBPS "measured-vs-ceiling table (D7) — documented per-client cap (Lustre) or instance line rate (WEKA)"
+  _rec     FS_PER_CLIENT_CEILING_BASIS "which kind of ceiling it is, with the source URL"
+  _rec     CEILING_CHECKED_UTC    "dated like a price"
 
   # Workload shape: report OVERRIDES, not absences. An unset knob is the driver's own
   # default, identical on both legs by construction; a SET one applies to every cell of

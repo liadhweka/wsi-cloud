@@ -25,15 +25,18 @@ latency and its percentiles, metadata rates, concurrency scaling, wallclock — 
 meaningful. Naming a headline metric in advance would pre-decide the most contested question in the
 comparison; **which axis turns out to be decisive is a result.**
 
-**Cost to complete is measured, not estimated.** `(instance $/hr + filesystem $/hr) × measured wallclock`, per
-cell and per leg. It is the figure a buyer actually faces, and the only place the provisioning asymmetry below
-stops being a caveat and becomes arithmetic.
+**Cost to complete is measured, not estimated — in both bases.** `infra-only = (instance + filesystem $/hr) ×
+measured wallclock` and `all-in = (instance + filesystem + storage-software $/hr) × measured wallclock`, per
+cell and per leg, every quoted figure naming its basis. It is the figure a buyer actually faces, and the only
+place the provisioning asymmetry below stops being a caveat and becomes arithmetic.
 
 **Two asymmetries, deliberate and stated up front** — naming them is what makes the result credible:
 
 1. **Provisioning.** Lustre at **maximum capability**; WEKA at a **realistic production configuration**; cost
    for both reported alongside. Beating a competitor's best configuration is worth far more than beating one
-   we sized ourselves. Both sides are sized above what the client can drive, so neither is the constraint.
+   we sized ourselves. Both sides are sized above what the client can drive, so neither is the constraint —
+   and because a single client cannot drive an aggregate maximum, results are framed as **measured at
+   single-client scale, with the recorded per-client ceilings beside them**.
 2. **Transport / GPU-direct.** Lustre over EFA supports GPUDirect Storage; whether WEKA on AWS does is
    **settled empirically by a single cell before the matrix is committed**, because the vendor's materials and
    the transport analysis disagree. We **keep** the GPU-direct path rather than dropping it for symmetry, and

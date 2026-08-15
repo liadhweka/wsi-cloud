@@ -227,8 +227,8 @@ scoped as half an unfinished comparison.
 - **`--fs` is a dimension, not a fork.** One `runs/` tree; the filesystem is a run-dir segment and a
   `metadata.json` field; the `-<leg>-` segment is what the S3 sync and the teardown gate glob on — a run
   dir without it is never backed up **and the gate does not notice.**
-- **No metric is designated primary**; every cell records the full set plus wallclock and both date-stamped
-  price inputs, fetched never recalled.
+- **No metric is designated primary**; every cell records the full set plus wallclock and the date-stamped
+  price inputs (instance, filesystem, storage-software), fetched never recalled — cost in both bases (**D7**).
 - **Per-filesystem primaries invert:** the client's kernel network counters are diagnostic on WEKA and ARE
   the data path on Lustre. Never quote a bypassed source.
 - **Every "% of ceiling" divides by the block-size-matched Stage-1.0 cell.**
