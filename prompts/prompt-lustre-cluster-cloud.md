@@ -23,9 +23,9 @@ from the per-client-per-file-server bandwidth cap. This project's fairness basis
 maximum capability"; a TCP mount breaks that promise while still producing numbers. **Step 5 is a hard gate.**
 Tracked as deferred item `D-16`.
 
-**2. Changing the kernel.** `kernel` is a `MUST_MATCH` field in the cross-leg environment contract. Installing
-`linux-aws` pulls the *latest* AWS kernel, and `apt-get upgrade` can move it too — so the documented Lustre
-client install can invalidate the very comparison the contract protects. **Step 4 must not run before the kernel
+**2. Changing the kernel.** `kernel` is a `MUST_MATCH` field in the cross-leg environment contract. The
+documented Lustre client install can pull a newer kernel, and any OS upgrade can move it too — so the Leg-B
+procedure can invalidate the very comparison the contract protects. **Step 4 must not run before the kernel
 question is settled with the human.** Tracked as `D-17`.
 
 Neither is a reason to avoid the work. Both are reasons to check, record, and surface.
@@ -112,7 +112,7 @@ fi_info -p efa -t FI_EP_RDM        # must list an "efa" provider
 generic provider there is no EFA LND for Lustre to use, so continuing only arrives at the Step 5 gate having
 spent two installs and a reboot.
 
-Ubuntu also needs one protection setting relaxed for EFA's shared-memory path:
+If the kernel enables Yama, relax it for EFA's shared-memory path (skip if the sysctl does not exist):
 
 ```bash
 sudo sysctl -w kernel.yama.ptrace_scope=0
@@ -125,11 +125,11 @@ echo "kernel.yama.ptrace_scope = 0" | sudo tee /etc/sysctl.d/10-ptrace.conf
 
 **Settle the kernel question before running anything here.** The two options, and the human picks:
 
-- **Pin the kernel** — install the module matching the running kernel
-  (`lustre-client-modules-$(uname -r)`), checking availability first with
-  `apt-cache search lustre-client-modules`. Keeps the contract intact. **Preferred.**
-- **Accept a kernel change** — install `linux-aws` and the generic module, then **re-baseline both legs** and
-  record that decision. Expensive; only if the pinned module does not exist.
+- **Pin the kernel** — install a Lustre client build that matches the *running* kernel, checking
+  availability first against AWS's Lustre-client install page for this OS (Amazon Linux 2023). Keeps the
+  contract intact. **Preferred.**
+- **Accept a kernel change** — take the kernel the client packages require, then **re-baseline both legs**
+  and record that decision. Expensive; only if no matching client build exists.
 
 Add AWS's FSx Lustre client repository per the current AWS "installing the Lustre client" documentation, then
 install, then reboot, then:
@@ -140,8 +140,8 @@ modinfo lustre | head -3           # module present?
 ```
 
 > **If the module will not load or does not exist for this kernel**, that is the known trap: the client packages
-> must match the kernel exactly. Surface it with the output of
-> `apt-cache search lustre-client-modules` and let the human choose. **Do not** silently take the
+> must match the kernel exactly. Surface it with the
+> package-search output for the Lustre client on this OS and let the human choose. **Do not** silently take the
 > kernel-upgrading path.
 
 ## Step 5 — Configure the Lustre client for EFA — THE GATE *(ask first)*

@@ -174,7 +174,7 @@ These change what the numbers mean, so resolving them after cells have run means
     `prompts/handoff-cloud.md`: **Tier 0** transport, before *any* cell including the throwaway; **Tier 1**
     recording adapters, consistency relation, worker-correctness bugs, the 1.7 driver, and the Stage-1.0 cache
     regime — all before hydration and the baseline, because those produce kept numbers; **Tier 2** the rest,
-    before 4.6. Reported at the baseline greenlight *and* before 4.6. **What is still open is closing the
+    before the main sweep. Reported at the baseline greenlight *and* before the leg starts. **What is still open is closing the
     rows**, not the ordering.
 
 ## B. Watch during benchmarking

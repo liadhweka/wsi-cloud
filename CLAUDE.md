@@ -202,7 +202,7 @@ comparable; a mismatch is a fail-loud condition, not a footnote.
 ```
 docs/      what we decided — methodology, roadmaps, findings, provisioning procedure
 scripts/   what we run with — the library, manifests, environment specs
-runs/      what we got — INDEX.md and run directories, nothing else
+runs/      what we got — INDEX.md, run directories, the per-leg resume markers, sweep logs, contracts
 prompts/   the living handoff (edited to current state at each teardown) + the Leg-B cluster prompt
 ```
 
