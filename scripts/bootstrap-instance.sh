@@ -478,7 +478,8 @@ step "SUMMARY"
 mkdir -p /etc/motd.d 2>/dev/null || true
 {
   echo "wsi-cloud client bootstrapped $(date -u). Remaining HUMAN steps:"
-  echo "  1. GitHub push: automatic if the SSM deploy key is set; else add ~/GITHUB-DEPLOY-KEY.pub (repo Deploy keys, write access)"
+  echo "  1. Verify GitHub push works: ssh -T git@github.com  (the SSM deploy key installs automatically;"
+  echo "     only if that fails: add ~/GITHUB-DEPLOY-KEY.pub as a repo deploy key with write access)"
   echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
   echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
   echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
