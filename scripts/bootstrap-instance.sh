@@ -4,9 +4,9 @@
 # WHAT THIS IS
 #   The single, git-tracked copy of instance provisioning. On the WEKA leg it is
 #   launched by terraform-aws-weka's clients_custom_data_post_mount wrapper, as
-#   root, AFTER /mnt/weka is mounted. It replaces NEW-CLOUD-SETUP Parts 3-4 and
-#   most of Part 5's mechanical steps, and collapses TEARDOWN-AND-REBUILD's
-#   rebuild to: terraform apply -> SSH in -> claude /login.
+#   root, AFTER /mnt/weka is mounted. It builds the client end-to-end and
+#   collapses TEARDOWN-AND-REBUILD's rebuild to: terraform apply -> SSH in ->
+#   claude /login.
 #
 # DESIGN RULES (CLAUDE.md)
 #   - Facts land in env.sh from THIS instance's own evidence, never from config
@@ -81,7 +81,7 @@ echo "node=$(node --version 2>/dev/null || echo none) npm=$(npm --version 2>/dev
 if ! command -v fpsync >/dev/null; then
   ( cd /tmp && rm -rf fpart && git clone -q --depth 1 https://github.com/martymac/fpart.git \
     && cd fpart && autoreconf -i >/dev/null 2>&1 && ./configure >/dev/null && make -s && make -s install ) \
-    || warn "fpsync build failed — Stage 1.1/6.C ingest cells need it (env-prep can retry)"
+    || warn "fpsync build failed — Stage 1.1/6.C ingest cells need it (install fpart by hand and retry)"
 fi
 echo "fpsync=$(command -v fpsync || echo MISSING)"
 
@@ -107,14 +107,14 @@ fi
 # system libcufile preloaded over cuCIM's bundled one segfaults (standing constraint),
 # and gdscheck must come from the line the kvikIO cells actually preload.
 dnf install -y cuda-toolkit-12-9 || dnf install -y cuda-toolkit || warn "CUDA toolkit install failed"
-dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until env-prep resolves"
+dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until resolved by hand"
 systemctl enable --now nvidia-persistenced 2>/dev/null || true
 modprobe nvidia 2>/dev/null; modprobe nvidia_fs 2>/dev/null || true
 if nvidia-smi >/dev/null 2>&1; then
   DRIVER_V=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
   echo "GPU OK: driver=$DRIVER_V  gpus=$(nvidia-smi -L | wc -l)"
 else
-  fatal "nvidia-smi failed — GPU stack NOT working; env-prep session must resolve before any GPU cell"
+  fatal "nvidia-smi failed — GPU stack NOT working; must be resolved before any GPU cell"
 fi
 ls -d /usr/local/cuda* 2>/dev/null || warn "no /usr/local/cuda — check cuda-toolkit install"
 
@@ -198,7 +198,7 @@ if [ -n "$WEKA_PASS" ]; then
     warn "weka user login failed with the retrieved secret ($SECRET_ID)"
   fi
 else
-  warn "no WEKA password retrievable (id + discovery both failed: IAM GetSecretValue/ListSecrets? KMS?) — cluster facts stay pending; log in manually and re-run with FORCE=1, or let env-prep record them"
+  warn "no WEKA password retrievable (id + discovery both failed: IAM GetSecretValue/ListSecrets? KMS?) — cluster facts stay pending; log in manually and re-run with FORCE=1, or record them into env.sh by hand"
 fi
 unset WEKA_PASS
 
@@ -282,7 +282,7 @@ step "6.5 cuFile/GDS wiring (weka leg: compat mode — D-10 mechanical half)"
 # mode by design (D8 runs the kvikIO path on both legs). gdscheck reporting GDS
 # unsupported here is a recorded fact, not a failure; per-cell GPU-direct-vs-
 # bounced accounting (D-6) remains the proof of path. Tuning judgment stays with
-# the env-prep session; this step does only the mechanical wiring.
+# the benchmark session (D-10); this step does only the mechanical wiring.
 CUFILE_DIR=$UH/cufile-config
 mkdir -p "$CUFILE_DIR"
 if [ ! -f "$CUFILE_DIR/cufile.json" ]; then
@@ -298,7 +298,7 @@ if [ -n "$LIBCUFILE" ]; then
   py_set LIBCUFILE_PRELOAD "$LIBCUFILE"
   echo "LIBCUFILE_PRELOAD=$LIBCUFILE"
 else
-  warn "no versioned libcufile found under /usr/local/cuda* — kvikIO drivers will refuse to start until env-prep resolves"
+  warn "no versioned libcufile found under /usr/local/cuda* — kvikIO drivers will refuse to start until resolved by hand"
 fi
 GDSCHECK=$(ls /usr/local/cuda*/gds/tools/gdscheck 2>/dev/null | sort -V | tail -1)
 if [ -n "$GDSCHECK" ]; then
@@ -462,7 +462,7 @@ mkdir -p /etc/motd.d 2>/dev/null || true
   echo "wsi-cloud client bootstrapped $(date -u). Remaining HUMAN steps:"
   echo "  1. GitHub push: automatic if the SSM deploy key is set; else add ~/GITHUB-DEPLOY-KEY.pub (repo Deploy keys, write access)"
   echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
-  echo "  3. Paste prompts/prompt-env-prep-cloud.md (verification pass)"
+  echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
   echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
   echo "Triage: grep WSI- /var/log/wsi-bootstrap.log"
 } | tee /etc/motd.d/50-wsi 2>/dev/null || true

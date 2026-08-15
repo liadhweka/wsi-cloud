@@ -159,14 +159,15 @@ esac
 #
 # FS_TRANSPORT is written into env.sh FROM EVIDENCE (the client's own report), never
 # from the mount options that were passed — by bootstrap-instance.sh at boot where it
-# can prove the transport (WEKA leg: bound NICs + hugepages), and by the per-leg
-# cluster-setup prompt otherwise; the prompt always verifies it either way.
+# can prove the transport (WEKA leg: bound NICs + hugepages), and by the Lustre
+# cluster prompt on Leg B otherwise; verified either way.
 case "$LEG" in weka) WANT_TRANSPORT=dpdk ;; lustre) WANT_TRANSPORT=efa ;; esac
 WAIVER="$STATE/$LEG/transport-waiver"
 if [ -z "${FS_TRANSPORT:-}" ]; then
   die "FS_TRANSPORT is unset. D16 requires the transport to be EVIDENCED before a leg runs,
-       and an unrecorded transport cannot be shown to be '$WANT_TRANSPORT'. The
-       cluster-setup prompt for this leg records it; re-run that verification."
+       and an unrecorded transport cannot be shown to be '$WANT_TRANSPORT'. This
+       leg's setup records it (the bootstrap on WEKA; the cluster prompt on
+       Lustre); re-run that verification."
 elif [ "$FS_TRANSPORT" != "$WANT_TRANSPORT" ]; then
   if [ -f "$WAIVER" ]; then
     log "WARNING: transport is '$FS_TRANSPORT', not '$WANT_TRANSPORT' -- proceeding on the"

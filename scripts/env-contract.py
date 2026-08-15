@@ -344,7 +344,7 @@ def cmd_env(a, repo_root):
     print(f"# ── Specific to leg {src_leg!r} — COMMENTED deliberately ──")
     print("# On a SAME-leg rebuild (a cost pause) uncomment what still applies.")
     print("# On a CROSS-leg rebuild these belong to the other filesystem: leave them")
-    print("# commented and let the cluster-setup prompt write the new ones.")
+    print("# commented and let this leg's setup (bootstrap or cluster prompt) write the new ones.")
     for k, var in ENV_MAP_LEG.items():
         v = c.get(k)
         if v not in (None, ""):

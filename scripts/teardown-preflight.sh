@@ -79,13 +79,13 @@ fi
 
 # ── 2b. The next-session handoff prompt ──────────────────────────────────────────
 # WHY THIS IS A GATE. The teardown checklist calls this "the step most easily
-# skipped and most expensive to skip", and it was the only one of the seven with
-# nothing verifying it — and with no defined file, so a handoff "written" into the
-# chat would die with the instance alongside the very context it exists to carry.
+# skipped and most expensive to skip": prompts/handoff-cloud.md is THE living
+# handoff, edited to current state at every teardown — with no defined file, a
+# handoff "written" into the chat would die with the very context it exists to carry.
 hdr "Next-session handoff prompt"
-HANDOFF="$REPO/docs/cloud-setup/HANDOFF-NEXT-SESSION.md"
+HANDOFF="$REPO/prompts/handoff-cloud.md"
 if [ ! -f "$HANDOFF" ]; then
-  bad "no docs/cloud-setup/HANDOFF-NEXT-SESSION.md — the next session would start not knowing what this one did"
+  bad "no prompts/handoff-cloud.md — the next session would start not knowing what this one did"
 else
   # It is git-tracked, so the PREVIOUS teardown's copy would sail through a mere
   # existence check. Require a dated header and refuse a stale one.
@@ -94,7 +94,7 @@ else
   w_epoch=""
   [ -n "$written" ] && w_epoch=$(date -u -d "$written" +%s 2>/dev/null || true)
   if [ -z "$w_epoch" ]; then
-    bad "HANDOFF-NEXT-SESSION.md has no usable 'Written: YYYY-MM-DD' header — this teardown's copy is indistinguishable from the last one's"
+    bad "handoff-cloud.md has no usable 'Written: YYYY-MM-DD' header — this teardown's state is indistinguishable from the last one's"
   else
     age=$(( ( $(date -u +%s) - w_epoch ) / 86400 ))
     if [ "$age" -le 1 ]; then ok "handoff prompt written $written (${age}d old)"

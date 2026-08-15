@@ -436,9 +436,9 @@ WEKA, and TCP forfeits both GPUDirect Storage and the escape from Lustre's per-c
 cap, breaking the "Lustre at maximum" fairness basis (**D7**) invisibly. So the intended transport is **not** a
 tuning preference to be optimised toward; it is a **precondition of the measurement**.
 
-**Enforcement.** Each cluster-setup prompt gates on positive evidence of the transport actually in use — the
-WEKA prompt requires DPDK-vs-UDP evidence from the client itself rather than an inference from the mount
-options passed, and the Lustre prompt requires `lnetctl net show` to list an `efa` net, not only `tcp`. The
+**Enforcement.** The transport in use is evidenced from the client's own report, never inferred from the
+mount options passed — the instance bootstrap records the WEKA leg's DPDK-vs-UDP evidence at boot, and the
+Lustre cluster prompt requires `lnetctl net show` to list an `efa` net, not only `tcp`. The
 evidence is written into `FS_TRANSPORT`, and **`run-leg.sh` refuses to start a leg when it is unset or shows
 the fallback** without a written waiver. **If the intended transport cannot be brought up, the instruction is
 STOP AND REPORT IMMEDIATELY — at the setup step, before mounting, and before any cell runs, including a

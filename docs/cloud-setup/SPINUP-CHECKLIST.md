@@ -9,8 +9,8 @@ cheap now and expensive later.
 > not made later under sunk cost; the trigger and its consequences are **D10** in
 > [`STAGES.md`](../STAGES.md).
 
-> **How this file relates to [`NEW-CLOUD-SETUP.md`](NEW-CLOUD-SETUP.md).** This one is **what to decide, and
-> why** — hand it to whoever provisions. That one is **how to do it**, click by click, in order. Where a fact
+> **How this file relates to [`TEARDOWN-AND-REBUILD.md`](TEARDOWN-AND-REBUILD.md).** This one is **what to
+> decide, and why** — hand it to whoever provisions. That one is the do-every-time procedure. Where a fact
 > appears in both, **this file is the authority for the reasoning and that file for the procedure**; fix the
 > reason here and the steps there, not the other way round.
 
@@ -21,9 +21,9 @@ cheap now and expensive later.
 1. **Region — pick one, put everything in it.** The EC2 instance, the WEKA backends, the S3 bucket, and
    (later) the FSx for Lustre file system must all share a region and ideally an AZ; cross-AZ/region adds
    latency and transfer cost and would silently contaminate the comparison.
-   *Tiebreaker only:* `us-west-2`, because the CAMELYON dataset is hosted there
-   (`s3://camelyon-dataset`, CC0, [AWS Open Data](https://registry.opendata.aws/camelyon/)) — but g6e
-   capacity and your company's standard region outrank that.
+   *Decided:* **`ap-northeast-2`**, on g6e capacity — which outranks every tiebreaker, including the
+   CAMELYON open-data bucket's home region (`s3://camelyon-dataset` in `us-west-2`, CC0,
+   [AWS Open Data](https://registry.opendata.aws/camelyon/)).
 
 2. **g6e service quota — request headroom now.** The "Running On-Demand G and VT instances" quota is
    counted in **vCPUs**: `g6e.12xlarge` = 48, `g6e.24xlarge` = 96, `g6e.48xlarge` = 192. We need **96**;
@@ -33,12 +33,9 @@ cheap now and expensive later.
 
 ## B. The compute instance
 
-2b. ⚠ **The AMI must already carry the GPU stack — and it must be PINNED.** A stock Ubuntu image ships no
-    NVIDIA driver, no CUDA toolkit, no `nvidia-fs` and no `libcufile`, and this project deliberately does not
-    automate installing a GPU driver (it is a reboot-class task). Launching plain Ubuntu therefore stalls the
-    setup before any software work can begin. Use a GPU-bearing image — e.g. the current *AWS Deep Learning
-    Base GPU AMI* on Ubuntu — and **confirm the exact name in the console**, because the variants change.
-    *Then pin and record the AMI ID:* `kernel`, `driver_version` and `cuda_version` are held-constant fields
+2b. ⚠ **The AMI must be PINNED.** The client builds on **Amazon Linux 2023**, and
+    `scripts/bootstrap-instance.sh` installs the NVIDIA driver, CUDA and the GDS stack unattended at first
+    boot — so the image needs no pre-baked GPU stack, but the exact AMI must be pinned and recorded: `kernel`, `driver_version` and `cuda_version` are held-constant fields
     in the cross-leg contract, so **Leg B must rebuild from the same image** or the comparison is invalid.
     "Latest" is not a pin — a newer base image silently changes the kernel and the driver.
 

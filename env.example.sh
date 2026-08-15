@@ -46,7 +46,7 @@ export CUFILE_ENV_PATH_JSON="${CUFILE_CONFIG_DIR}/cufile.json"   # generated per
 # drivers read it and refuse to start without it. What must NOT be exported
 # globally is LD_PRELOAD itself — the drivers set that per cell, on kvikIO cells
 # only, because cuCIM segfaults under a preloaded newer libcufile.
-# Written by bootstrap-instance.sh from the installed CUDA line; the env-prep
+# Written by bootstrap-instance.sh from the installed CUDA line; the benchmark
 # session verifies it matches the loaded nvidia-fs module (D-10).
 export LIBCUFILE_PRELOAD=""                      # e.g. /usr/local/cuda-<ver>/targets/x86_64-linux/lib/libcufile.so.<ver>
 
@@ -141,7 +141,7 @@ export LUSTRE_STRIPE_LAYOUT=""                   # REQUIRED to derive the Lustre
 #   weka:   dpdk | udp        lustre:  efa | tcp
 # Written from the client's own report, never from the mount options that were
 # passed — by bootstrap-instance.sh at boot where it can prove the transport, by the
-# per-leg cluster-setup prompt otherwise; the prompt verifies it either way. run-leg.sh REFUSES to start a leg when it is
+# Lustre cluster prompt on Leg B otherwise; verified either way. run-leg.sh REFUSES to start a leg when it is
 # unset, or when it is the fallback without a written waiver in
 # runs/.leg-state/$LEG/transport-waiver (D16). Why a hard gate and not a caveat: UDP
 # and TCP mount cleanly and report plausible numbers for a transport this project

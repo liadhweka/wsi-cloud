@@ -203,7 +203,7 @@ comparable; a mismatch is a fail-loud condition, not a footnote.
 docs/      what we decided — methodology, roadmaps, findings, provisioning procedure
 scripts/   what we run with — the library, manifests, environment specs
 runs/      what we got — INDEX.md and run directories, nothing else
-prompts/   paste-to-Claude task prompts, re-runnable on every rebuild
+prompts/   the living handoff (edited to current state at each teardown) + the Leg-B cluster prompt
 ```
 
 Scripts derive their repo root from their own location and **never hardcode a path.**
@@ -225,7 +225,6 @@ against.
 | `PROJECT-THESIS.md` | **Source of truth** — the question, the held-constant contract, both asymmetries, what gets measured, recording, sequencing, scope | Only when the methodology itself changes |
 | `CLAUDE.md` | How we work | Only when I steer a new convention (rare) |
 | `README.md` | Repo entry point: what this is, layout, the path to a first result | When the layout or that path changes |
-| `docs/cloud-setup/WORKFLOW.md` | One-page router: which doc to read and which prompt to paste, per scenario. **Ordering and pointers only** — a duplicated procedure step here is a bug | When a prompt is added or renamed, a handoff moves, or a scenario's order changes |
 | `docs/STAGES.md` | Stage map (`--stage` values) + the per-leg plan + the **cross-stage decision register** | On stage-status, plan or decision change |
 | `docs/Stage-<N>-*.md` | Per-stage roadmap: methodology, **why each substage exists**, per-cell results as produced, the stage's decision register | **Constantly** — most-edited doc |
 | `docs/RESULTS.md` | **Findings and their story** — the cross-stage synthesis (see below) | When a finding lands; heaviest at stage closeout |
@@ -233,7 +232,7 @@ against.
 | `docs/RUNBOOK.md` | How to run and record a cell; recovery; the canaries | When recording infrastructure changes |
 | `docs/FILESYSTEM-MAP.md` | "Where does X live?" — both mounts, S3 layout, scratch, tools | When a load-bearing path or environment fact emerges |
 | `docs/NAMING-AND-VARIABLES.md` | Every path, name and variable with its recommended value — the single source of truth for names, and the reason `$FS_MOUNT` exists. Paired with `env.example.sh` | When a variable is added, renamed, or its recommended value changes |
-| `docs/cloud-setup/*` | Human-facing procedure for a lifecycle event: spin-up, provisioning, teardown and rebuild, plus `WORKFLOW.md`, the one-page router | When provisioning or the bootstrap sequence changes |
+| `docs/cloud-setup/*` | Human-facing procedure: provisioning reasoning, and the teardown + rebuild checklist | When provisioning or the bootstrap sequence changes |
 | `runs/INDEX.md`, run-dir `0_README.md` | Run history / per-run description | **Auto-generated — never hand-edit** |
 | memory + `MEMORY.md` | Open items and external commitments | Per memory hygiene below |
 

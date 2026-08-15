@@ -67,7 +67,7 @@ These change what the numbers mean, so resolving them after cells have run means
     stats: Disabled` with `rw_stats_enabled=0` and `peer_stats_enabled=0`. A kvikIO cell run that way records a
     GPU-direct-vs-bounced split that is **present and entirely zero** — which reads as *"no GPU-direct
     traffic"* rather than *"accounting was off"*, and would corrupt the **D8** WEKA-GDS determination. Enable
-    the counters in env-prep, and have the pre-cell canary require them **enabled and non-zero on a known-good
+    the counters at instance build (the bootstrap does not yet do it), and have the pre-cell canary require them **enabled and non-zero on a known-good
     read** before any cuFile cell counts. `Active Shadow-Buffer (MiB)` is the compat-mode bounce signal the
     split depends on. Format is version-stamped (`NVFS statistics(ver: …)`), so re-verify on the cloud stack.
 7. **Size the 6.B synthetic corpus using BOTH filesystems' cache sizes.** There are two caches to exceed, not
@@ -209,15 +209,7 @@ These change what the numbers mean, so resolving them after cells have run means
 10. **UNI2-h results stay internal-only** — don't strip the tags in refactors; filter those rows before
    anything leaves the building. More important here than in an internal study, since a competitive comparison
    is likelier to be externalised. Detail: `[[uni2h-conditional-use-status]]`.
-11. **Docs cadence debt from the cloud-init batch.** `scripts/bootstrap-instance.sh` and
-   `scripts/prefetch-datasets-to-s3.sh` now provision the client end-to-end (Terraform
-   `clients_custom_data_post_mount` -> bootstrap: packages, NVIDIA/CUDA-12.9, scratch RAID, weka login via
-   Secrets Manager, env.sh generation from instance evidence, cuFile compat wiring, envs + smoke tests, HF
-   token/models, memories, S3 dataset prefetch). Triggered but deferred until the first live boot validates:
-   `NAMING-AND-VARIABLES.md` + slimmed `env.example.sh` pairing, `SCRIPT-TRACKER.md` entries for all three new scripts (bootstrap, prefetch, `scripts/teardown-prep.sh` — the pre-destroy orchestrator: backup+sync, commit+push, log archive, gated on teardown-preflight),
-   the `docs/cloud-setup/*` rewrite (rebuild = `clients_number` 0->1 + three human steps), and D-13's hydrate
-   driver writing `runs/.leg-state/$LEG/hydration-complete` (the bootstrap's re-hydration guard keys on it).
-12. **Next-rebuild verifications (raise at the next boot/teardown).** (a) SSM deploy key first
+11. **Next-rebuild verifications (raise at the next boot/teardown).** (a) SSM deploy key first
    silent install — the next boot log's step 11 must read "fixed deploy key installed from SSM"
    (fallback message means the SSM parameter or IAM is wrong). (b) First real teardown must run
    `sync-to-s3.sh`'s FIRST-RUN PROCEDURE (its header, steps 1-7 — the archive-vs-mirror semantics

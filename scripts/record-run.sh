@@ -74,7 +74,7 @@ fi
 # are dropped with no error at all. Refuse here rather than corrupt output at the end.
 command -v jq >/dev/null 2>&1 || {
   echo "FATAL: jq is not installed — metadata.json and the cost inputs cannot be written." >&2
-  echo "       Install it before running any cell (prompts/prompt-env-prep-cloud.md)." >&2
+  echo "       Install it before running any cell (the bootstrap installs it; dnf install jq if missing)." >&2
   exit 2
 }
 

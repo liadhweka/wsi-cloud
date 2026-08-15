@@ -49,7 +49,7 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 
 | If you want to… | Read |
 |---|---|
-| **Know what to read and paste, and when** | **`docs/cloud-setup/WORKFLOW.md`** — one page, per scenario (first spin-up · teardown · rebuild · leg switch) |
+| **Know what to do, per lifecycle event** | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — the one checklist (teardown · rebuild · leg switch) |
 | Understand what we measure and why | **`PROJECT-THESIS.md`** — the source of truth |
 | Know the rules this project runs under | **`CLAUDE.md`** |
 | See the stage map, plan, and every methodology decision | **`docs/STAGES.md`** — the cross-stage decision register |
@@ -58,11 +58,11 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Run or recover a benchmark cell | **`docs/RUNBOOK.md`** |
 | Know what a script does | **`docs/SCRIPT-TRACKER.md`** |
 | Find where something lives | **`docs/FILESYSTEM-MAP.md`** |
-| Provision the environment | **`docs/cloud-setup/NEW-CLOUD-SETUP.md`** + **`SPINUP-CHECKLIST.md`** |
-| Create + mount a filesystem for a leg | **`prompts/prompt-weka-cluster-cloud.md`** (Leg A) · **`prompts/prompt-lustre-cluster-cloud.md`** (Leg B) — paste-to-Claude, reusable on every rebuild |
+| Provision the environment | **`docs/cloud-setup/SPINUP-CHECKLIST.md`** — the reasoning; the build itself is Terraform + `scripts/bootstrap-instance.sh` |
+| Create + mount a filesystem for a leg | Leg A: Terraform + the bootstrap, automatic. Leg B: **`prompts/prompt-lustre-cluster-cloud.md`** — paste-to-Claude |
 | Know what every path / name / variable should be | **`docs/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
-| Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** (+ `scripts/teardown-preflight.sh`) — Claude runs it via **`prompts/prompt-teardown-cloud.md`**; the human only commits, pushes, and destroys |
-| Pick up where the last session stopped | **`docs/cloud-setup/HANDOFF-NEXT-SESSION.md`** — written at teardown, because Claude's context does not survive one. *Does not exist until the first teardown.* |
+| Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — `scripts/teardown-prep.sh` mechanises it, gated by `scripts/teardown-preflight.sh`; the human only commits, pushes, and destroys |
+| Pick up where the last session stopped | **`prompts/handoff-cloud.md`** — the living handoff, edited to current state at every teardown, because Claude's context does not survive one |
 
 **A fresh Claude session continuing this work** starts with the `cloud-session-open-items` memory (the work
 list) → `PROJECT-THESIS.md` → `CLAUDE.md` → `docs/STAGES.md` → the relevant roadmap → `docs/RUNBOOK.md` before
@@ -86,8 +86,9 @@ docs/
   SCRIPT-TRACKER.md    per-script reference + the deferred-work table
   FILESYSTEM-MAP.md    where everything lives
   NAMING-AND-VARIABLES.md  every path/name/variable with its recommended value
-  cloud-setup/         WORKFLOW.md (the router), provisioning, teardown + rebuild
-prompts/               the five paste-to-Claude prompts, re-runnable on every rebuild
+  cloud-setup/         SPINUP-CHECKLIST.md (provisioning reasoning) + TEARDOWN-AND-REBUILD.md (the checklist)
+prompts/               handoff-cloud.md (THE LIVING HANDOFF, edited to current state at each teardown)
+                       + the Leg-B cluster prompt
 scripts/               the script library + manifests/ + env-specs/
 runs/                  one directory per run, plus INDEX.md, the per-leg resume markers, and sweep logs
 ```
@@ -97,13 +98,12 @@ runs/                  one directory per run, plus INDEX.md, the per-leg resume 
 ## Getting to a first result
 
 1. **Provision** — `docs/cloud-setup/SPINUP-CHECKLIST.md` (region, quota, instance, S3 + IAM, WEKA cluster).
-2. **Bootstrap** — `docs/cloud-setup/NEW-CLOUD-SETUP.md`, which hands off to Claude four times (a fifth,
-   `prompts/prompt-teardown-cloud.md`, closes each leg out): the system stack
-   (`prompts/prompt-env-prep-cloud.md`), the WEKA filesystem (`prompts/prompt-weka-cluster-cloud.md`), the
-   project itself (`prompts/handoff-cloud.md`), and later the Lustre filesystem
-   (`prompts/prompt-lustre-cluster-cloud.md`). *Why prompts rather than checklist steps:* each runs again on
-   every instance rebuild, and the storage ones have silent-failure modes (a UDP-fallback WEKA mount, a
-   TCP-instead-of-EFA Lustre mount) that produce believable numbers for the wrong configuration.
+2. **Build** — `terraform apply` provisions the cluster and client, and `scripts/bootstrap-instance.sh`
+   (cloud-init) builds the whole client unattended, recording the transport from the client's own evidence.
+   The human runs `claude /login` and pastes **`prompts/handoff-cloud.md`** — the living handoff. *Why the
+   Leg-B mount keeps a prompt (`prompts/prompt-lustre-cluster-cloud.md`):* no Lustre automation exists yet,
+   and its silent-failure mode (a TCP-instead-of-EFA mount) produces believable numbers for the wrong
+   configuration.
 3. **Build + Leg A** — Claude does the deferred script work, proves the pipeline on a throwaway cell, takes a
    baseline, and runs Leg A. The deferred-work table in `docs/SCRIPT-TRACKER.md` is the authoritative list of
    what is still owed and what is already done.

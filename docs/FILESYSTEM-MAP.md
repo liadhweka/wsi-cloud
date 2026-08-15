@@ -55,15 +55,12 @@ run and a Lustre run is which mount `$FS_MOUNT` points at.
 │   ├── NAMING-AND-VARIABLES.md#   every path/name/variable, with its recommended value
 │   ├── Stage-{1..7}-*.md      #   per-stage roadmaps (the audit trail)
 │   └── cloud-setup/           #   human-facing procedure, one file per lifecycle event
-│       ├── WORKFLOW.md        #     ⭐ ONE-PAGE ROUTER: what to read/paste when, per scenario
-│       ├── NEW-CLOUD-SETUP.md #     the walkthrough: empty AWS account → running benchmark
 │       ├── SPINUP-CHECKLIST.md#     the reasoning behind the provisioning choices
-│       ├── TEARDOWN-AND-REBUILD.md# the do-every-time checklist for both halves
-│       └── HANDOFF-NEXT-SESSION.md# written at teardown; the next session reads it FIRST.
-│                              #     Absent until the first teardown; the teardown pre-flight gates on it
+│       └── TEARDOWN-AND-REBUILD.md# THE ONE CHECKLIST: teardown · rebuild · leg switch
 │
-├── prompts/                   # paste-to-Claude task prompts, re-runnable on every rebuild:
-│                              #   env prep · WEKA cluster · Lustre cluster · build+run · teardown
+├── prompts/                   # handoff-cloud.md — THE LIVING HANDOFF, edited to current state at each
+│                              #   teardown (the pre-flight gates on its Written: date) — plus the
+│                              #   Leg-B cluster prompt (prompt-lustre-cluster-cloud.md)
 │
 ├── scripts/                   # what we run with — the script library, the cuFile config template
 │   │                          #   and GDS-TUNING-CHECKLIST.md, plus:
@@ -233,10 +230,10 @@ else that is durable lives in the docs, not in memory.
 | Script library | `../scripts/` |
 | Dataset manifests | `../scripts/manifests/` |
 | Run history | `../runs/INDEX.md` (auto-generated) |
-| **Start here / what do I do next** | **`cloud-setup/WORKFLOW.md`** — the one-page router |
+| **Start here / what do I do next** | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** — the one checklist |
 | Provisioning checklist | `cloud-setup/SPINUP-CHECKLIST.md` |
-| Filesystem setup prompts | `../prompts/prompt-{weka,lustre}-cluster-cloud.md` |
-| Leg close-out / teardown | `../prompts/prompt-teardown-cloud.md` → `cloud-setup/HANDOFF-NEXT-SESSION.md` |
+| Leg-B filesystem setup | `../prompts/prompt-lustre-cluster-cloud.md` (Leg A's mount is bootstrap-automatic) |
+| Leg close-out / teardown | `../scripts/teardown-prep.sh` per `cloud-setup/TEARDOWN-AND-REBUILD.md`; the living handoff (`../prompts/handoff-cloud.md`) is edited to current state first |
 | The two mounts | `/mnt/weka` · `/mnt/lustre` — via `$FS_MOUNT` |
 | Datasets (per leg) | `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
 | Coords · raw-TIFF | `$FS_MOUNT/tissue-detection/3.0/…` · `$FS_MOUNT/data/<ds>-rawtiff/` |
