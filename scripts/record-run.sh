@@ -479,9 +479,10 @@ EOF
   done
 
   # ---------- wallclock + cost inputs into metadata.json ----------
-  # cost to complete = (instance $/hr + filesystem $/hr) x measured wallclock,
-  # computed per cell and per leg (PROJECT-THESIS.md section 4). The wallclock is
-  # measured here; the two prices are NOT. They are read from documented
+  # Two cost figures per cell and per leg (PROJECT-THESIS.md section 4, D7):
+  #   infra-only = (instance + filesystem $/hr) x measured wallclock
+  #   all-in     = (instance + filesystem + software $/hr) x measured wallclock
+  # The wallclock is measured here; the prices are NOT. They are read from documented
   # variables, because prices are FETCHED from current vendor pricing and stamped
   # with the date checked -- never recalled, and never baked into a script. A
   # stale price silently rewrites the conclusion, and an undated one cannot be

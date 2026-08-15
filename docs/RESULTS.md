@@ -27,10 +27,11 @@ A pointer cannot go stale in that way; at worst it dangles, which is visible.
   soften the numbers — record them plainly; it is the *claim* that stays scoped.
 - **Both asymmetries, stated on the page** (`../PROJECT-THESIS.md` §5). A reader's first question is what the
   other side was running; the answer must already be there.
-- **The cost to complete, labelled infrastructure-only** — excluding storage-software licensing, per
-  [`RUNBOOK.md`](RUNBOOK.md) — alongside the throughput or latency figure it belongs to. It is the figure the
-  buyer actually faces, and the only place the provisioning asymmetry stops being a caveat and becomes
-  arithmetic.
+- **The cost to complete, in both recorded bases** — infra-only and all-in, each named where quoted, with
+  the software input's asymmetry stated per **D7** (FSx software-inclusive; WEKA at the dated public
+  Marketplace rate) — alongside the throughput or latency figure it belongs to. It is the figure the buyer
+  actually faces, and the only place the provisioning asymmetry stops being a caveat and becomes arithmetic.
+  Which basis leads the writeup is a writing-time choice made with both present.
 - **Which axis was decisive, as a finding.** No metric was designated primary in advance, so what turned out
   to discriminate between the two architectures is itself a result worth stating.
 - **The caveats that change how the number is read** — cache state achieved, the I/O path proven, whether the

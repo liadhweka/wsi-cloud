@@ -78,8 +78,8 @@ Three rules that follow, and that you will be tempted to bend:
 3. **Every cell records the full measurement set, and no metric is designated primary**
    (`PROJECT-THESIS.md` § 4) — which axis turns out to be decisive is a *result*, so a cell that captured
    only the axis someone expected to matter cannot be repaired later. The set includes **measured wallclock
-   and both price inputs, each stamped with the date it was checked**, so cost-to-complete is computable per
-   cell and per leg. `docs/RUNBOOK.md` defines the set and the cost inputs — work from it.
+   and the price inputs — instance, filesystem, and storage-software, each stamped with the date checked** —
+   so cost-to-complete is computable per cell and per leg in both bases (infra-only and all-in, **D7**). `docs/RUNBOOK.md` defines the set and the cost inputs — work from it.
 
 ---
 

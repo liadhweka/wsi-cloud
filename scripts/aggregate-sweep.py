@@ -99,8 +99,8 @@ def extract_cell_summary(run_dir: Path):
     # The recorder's own window, from raw/.run_start + raw/.run_end.
     #
     # Without it this summary carries no time basis at all, and cost-to-complete
-    # -- (instance $/hr + filesystem $/hr) x measured wallclock,
-    # PROJECT-THESIS.md section 4 -- cannot be reconstructed from it afterwards.
+    # -- both bases, infra-only and all-in, PROJECT-THESIS.md section 4 --
+    # cannot be reconstructed from it afterwards.
     # That matters most here of all the aggregators: these are the Stage-1.0
     # synthetic ceiling cells, the denominator every downstream "% of ceiling"
     # divides by, so they are also the reference the per-leg cost roll-up is

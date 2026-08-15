@@ -158,13 +158,14 @@ Then, in dependency order:
 is a prediction. Each roadmap records actual durations as cells land, and the running total is maintained in
 `../runs/INDEX.md`.
 
-**Cost to complete is rolled up per leg from the same wallclock.** Each cell records its wallclock and both
-price inputs (`RUNBOOK.md`); the leg figure is
-`(instance $/hr + filesystem $/hr) × leg wallclock`, and it is the figure that turns the provisioning
+**Cost to complete is rolled up per leg from the same wallclock — in both bases.** Each cell records its
+wallclock and the price inputs (`RUNBOOK.md`); the leg figures are
+`infra-only = (instance + filesystem $/hr) × leg wallclock` and
+`all-in = (instance + filesystem + software $/hr) × leg wallclock`, and they are what turns the provisioning
 asymmetry (**D7**) from a caveat into arithmetic (`../PROJECT-THESIS.md` §4). Prices are **fetched from the
 vendor's current pricing and stamped with the date checked**, never recalled — a stale price silently rewrites
-the conclusion. The leg figure is **infrastructure-only, excluding storage-software licensing**, and carries
-that label wherever it is quoted (`RUNBOOK.md`).
+the conclusion. **Every quoted figure names its basis** (`RUNBOOK.md`); the software input's asymmetry is
+recorded in the data itself (**D7**: FSx software-inclusive → `0`; WEKA → the dated public Marketplace rate).
 
 ---
 
@@ -173,6 +174,12 @@ that label wherever it is quoted (`RUNBOOK.md`).
 ## Stage 0 — infra validation
 Smoke / recording-infra runs only. No real benchmark data. Used to prove `record-run.sh`, the per-FS adapters,
 the S3 sync, and both canaries work on a newly provisioned environment **before** any measured cell.
+
+## Stage `stability` — the run-to-run noise band (cross-stage)
+The fixed canary pair (`sweep-stability-canary.sh`, **D18**), interleaved across the whole leg by
+`run-leg.sh` steps `C0`–`C8` rather than belonging to any one stage. Its cells are deliberately identical
+every time; their spread **is** the leg's noise band, and a cross-leg delta is quoted only where it clears
+both legs' bands.
 
 ## Stage 1 — Ingest
 Substages: **1.0a/b/c/d** synthetic ceilings (fio: seqw / seqr / randw IOPS / randr IOPS — anchor first);
@@ -505,5 +512,6 @@ aggregation helper (**tracker D-4**).
 Run directories: `<UTC-timestamp>-<fs>-s<stage>-<workload>-<config>` — e.g.
 `2026-…-weka-s4.C-kvikio-brca-N4-compat`. The `--fs` and `--stage` values passed to `record-run.sh` become the
 `<fs>` and `s<stage>` segments automatically and are both recorded in `metadata.json`, so the aggregators pivot
-on filesystem without parsing directory names. `record-run.sh` derives the runs root from its own location on
+on filesystem without parsing directory names. A **D18 repeat** appends `-repN` to the name (`REP=2`/`REP=3`
+in the environment) and records the `rep` metadata field, so reps of one config group mechanically. `record-run.sh` derives the runs root from its own location on
 disk, so run dirs and `INDEX.md` land in this repo's `runs/` tree.

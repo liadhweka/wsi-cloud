@@ -221,7 +221,8 @@ recovery source for. It is invisible to `verify` and to `write`'s completeness c
 other two lists.
 
 ### `run-leg.sh` — unattended leg orchestrator ⭐ NEW (`D-14`)
-**What.** Drives one whole leg's sweeps in dependency order: **22 steps**, `--dry-run`, `--list`, `--from`,
+**What.** Drives one whole leg's sweeps in dependency order: **31 steps** (22 sweeps + the 9 interleaved
+stability-canary invocations `C0`–`C8`, **D18**), `--dry-run`, `--list`, `--from`,
 `--only`. Each step carries its driver **and that driver's target** where the driver dispatches on `$1`
 (4.C `tier1`, 5 `all`, 6.A `tier1`, 6.A.3 `tier3`, 6.B.3 `all`, 6.B.2 `all`, 6.C `all`, 7 `all`) — the runner
 word-splits the command, and `--from`/`--only` are validated against the step-id list so a typo cannot
