@@ -146,9 +146,12 @@ half-clean state.
 
 **Git: Claude commits and pushes autonomously** (`git add -A && git commit && git push`), at its own
 cadence — the working policy is a commit per coherent work block, always preceded by `./backup.sh`, with a
-message that summarizes the block. Keep commits reviewable: batch at checkpoints, not mid-edit. The push is
-also a teardown prerequisite, and an unpushed repo dies with the instance — so push promptly, never let
-work sit local-only overnight. `git reset --hard` / `git clean -f` remain ask-first (destructive).
+message that summarizes the block. Keep commits reviewable: batch at checkpoints, not mid-edit. **Never
+commit while a measured cell is in flight**: `backup.sh` carries a full S3 sync, which moves data over the
+client NIC and would perturb the cell — the same exclusivity rule that binds everything else (during
+sweeps, `run-leg.sh`'s own per-step sync covers durability). The push is also a teardown prerequisite, and
+an unpushed repo dies with the instance — so push promptly, never let work sit local-only overnight.
+`git reset --hard` / `git clean -f` remain ask-first (destructive).
 
 **tmux:** all work runs inside `tmux new -A -s wsi` — assume you're already in it. Still tee long output (it
 survives even if tmux dies). Don't propose `nohup`/`disown`.
