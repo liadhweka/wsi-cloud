@@ -33,7 +33,7 @@ for a valid cell.
 
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
-| **D-4** | **Per-filesystem recording adapters — design settled; build on-instance** | `record-run.sh`, `parse-results.py`, the aggregators' filesystem-side parsers | Each filesystem exposes different primary sources with different **schemas** (**D12**), so the recorder set and the required-stream list become **per-`$LEG`**: WEKA keeps `weka stats` plus the host recorders; Lustre records `/proc/fs/lustre` counters and `lctl get_param` (`osc.*.stats` / `llite.*.stats`) as its primaries, with the host `sar` streams promoted where the thesis's per-filesystem table says so. `record-run.sh` gains a per-leg required-stream list and **the INCOMPLETE rule is evaluated against the leg's own list** — today it demands the WEKA/IB streams on both legs, so every run marks INCOMPLETE off that stack. A **shared per-leg schema helper** (one module the aggregators import) replaces the per-file filesystem-side parsers; B-1's `_reserved_cores` folds into it. The helper also owns **metric-key naming**: the `non_dpdk_*` / `agg_cpu_busy_ex_dpdk_*` keys were deliberately left stable in the audit (labels fixed; zero docs cite the keys) and get normalized to leg-neutral names here, while no cell exists. Stream names, exact schemas and canary bands are **live-derived on the instance** — write the adapter against the real stats output, never a recalled format. The helper also groups rep-indexed runs (`rep` metadata field, **D18**) and reports **median + spread** for any config with multiple reps, computes the stability-canary noise band per leg, and **reconciles declared vs achieved cache state per cell** (**D13**): a cell whose `cache_state` declaration lacks its achieved evidence (recorded discard returns, drop_caches acknowledgments, the post-cell canary) is marked and never quoted as its declared regime — the Lustre-side evidence source gets named during this build. Capture note: flag-less `sar -o` is verified (sysstat 12.6.1) to record **all eight converted categories including per-core CPU**; re-verify once on the instance's sysstat via the first smoke's `sadf` output and the canary bands |
+| **D-4** | **Per-filesystem recording adapters — WEKA-leg recorder half DONE; remaining: the shared aggregation helper, and the Lustre half on Leg B** | the aggregators' filesystem-side parsers (helper); `record-run.sh` + `parse-results.py` (Lustre half) | **Done on the Leg-A instance against live streams:** `record-run.sh` now carries a per-`$FS` recorder set and required-stream list, the INCOMPLETE rule evaluates against the leg's own list, and a Stage-0 cell records `OK` with the WEKA primaries live (verified: client-summed WEKA-side vs fio app-level agree within ~5%). `parse-results.py` emits `weka_stats_client` — the pattern-#1 client-filtered per-timestamp-summed series — beside the whole-stream context aggregates. The wrapper **refuses `--fs lustre`** until the Lustre recorder set is written against the live `/proc/fs/lustre` + `lctl get_param` (`osc.*.stats` / `llite.*.stats`) streams on the provisioned Leg-B cluster — never a recalled format. **Still deferred:** the **shared per-leg schema helper** (one module the aggregators import) replacing the per-file filesystem-side parsers; B-1's `_reserved_cores` folds into it; it owns **metric-key naming** (normalize the `non_dpdk_*` / `agg_cpu_busy_ex_dpdk_*` keys to leg-neutral names while no sweep exists), groups rep-indexed runs (**D18**) reporting **median + spread**, computes the stability-canary noise band per leg, and **reconciles declared vs achieved cache state per cell** (**D13**) — a declaration without its achieved evidence is marked and never quoted as its declared regime; the Lustre-side evidence source gets named during the Leg-B build. Capture note: flag-less `sar -o` verified on this instance's sysstat — all converted categories populated on the Stage-0 smoke |
 | **D-5** | **Per-filesystem consistency relation** | The canary logic in the aggregators | Must be derived from the actual EC scheme (WEKA) and the actual stripe layout (Lustre) — neither exists yet |
 | **D-6** | **cuFile path accounting as a recorded source** | `record-run.sh` + the kvikIO readers. **`aggregate-stage4c-kvikio.py` is the concrete consumer:** its `gds_engaged` column is hardcoded `"unknown"` and stays that way until this source exists — so closing D-6 has a defined finish line, namely that column carrying a recorded value | Needs the real cuFile/nvidia-fs stats format. Every kvikIO cell must record GPU-direct-vs-bounced bytes or it is incomplete (**D8**) |
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
@@ -41,14 +41,11 @@ for a valid cell.
 | **D-9** | **Core-accounting values** | `env.sh`, per leg | The exclusion **mechanism** is in place — `record-run.sh` records `cores_reserved` from `FS_CLIENT_RESERVED_CORES` and every CPU aggregator reads it per run, refusing null. What remains is the per-leg **value**: measure the reserved-core list on each real client (**D15**) and set the variable (`none` on a leg that reserves none) |
 | **D-10** | **cuFile config + env VALUES** | ~20 files reference conda/cuFile/CUDA paths. They now genuinely read documented variables (`$CONDA_ENVS_DIR`, `$LIBCUFILE_PRELOAD`, `$CUFILE_ENV_PATH_JSON`) and refuse if unset — audit items `A-4`/`A-5`; before that they were literals from another machine. What remains is the **values** | Leg A's values are set by the bootstrap (`LIBCUFILE_PRELOAD` located and exported; a compat-mode `cufile.json` generated per instance). Remaining: rewrite `../scripts/GDS-TUNING-CHECKLIST.md` (bannered) incl. a Lustre-over-EFA branch, and Leg B's cufile config |
 | **D-11** | **Lustre tuning** | Stripe layout + client tunables | Needs FSx (Leg B). **Part of "Lustre at maximum" (D7)** — skipping it would understate Lustre and break the fairness basis |
-| **D-13** | **1.7 hydration driver** | New `sweep-stage1-hydrate.sh` | Needs the real bucket. `run-leg.sh` reports this step as **MISSING and aborts** rather than skipping it. On completion it must write `runs/.leg-state/$LEG/hydration-complete` — the bootstrap's re-hydration guard keys on that marker |
 | **D-15** | **Make step 4.D actually recorded** | `convert-stage4c-rawtiff.sh` | It is `run-leg.sh` step 4.D and its own header calls it a recorded cell, but it **never invokes `record-run.sh`** — no run dir, no telemetry, no `INDEX.md` row, no S3 sync for the 20× conversion the roadmap treats as a measured workload. It also does not fail loud when zero slides resolve from the manifest. Wrapping it changes what a substage produces, so it needs the owner's nod |
 | **D-16** | **Lustre client-side EFA configuration** | `../prompts/prompt-lustre-cluster-cloud.md` | The documented Leg-B flow enables EFA on the instance and the file system and installs the generic EC2 EFA software, but nothing yet runs AWS's FSx-Lustre EFA client setup — so the client would mount over TCP, forfeiting GDS **and** the per-server-cap escape while still producing numbers. That breaks the "Lustre at maximum" basis (**D7**) invisibly. Needs the current AWS FSx-Lustre client docs, plus a gate that `lnetctl net show` lists an `efa` net |
 | **D-17** | **Leg-B kernel-vs-contract policy** | `../prompts/prompt-lustre-cluster-cloud.md` | The documented Lustre client install can pull a newer kernel, and `kernel` is a `MUST_MATCH` contract field — so the Leg-B procedure can invalidate the comparison the contract exists to protect; any OS upgrade can too. Decide: pin the kernel and install a client build matching the running kernel (per AWS's install docs for this OS), or re-baseline both legs |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
-| **D-20** | **`prove-recording.sh`** | new script in `../scripts/` | The rebuild checklist and `../prompts/handoff-cloud.md` both say to run a throwaway Stage-0 cell and confirm **five** things by eye — recording complete, both canaries functional, S3 sync verified, the `INDEX.md` row correct, an aggregator emitting an `fs`-pivoted row — with no command given. It runs on every rebuild before wallclock is spent, and five eyeball checks is where one gets skipped. One script, a named non-zero exit per failed assertion. Needs the real environment: it runs an actual cell end to end |
 | **D-21** | **A contract-verified marker `run-leg.sh` refuses without** | `env-contract.py`, `run-leg.sh` | The rebuild runs `env-contract.py verify` as "the gate", then starts the leg **without checking the gate ever ran or passed.** Phase 1 (safe): `verify` writes `runs/.leg-state/$LEG/contract-verified` on PASS and unlinks it on FAIL; `run-leg.sh` warns loudly when it is absent or older than the contract. Phase 2 — promoting that to a refusal — **needs explicit ratification**, since it can abort a leg |
-| **D-22** | **`verify-conda-env.sh`** | new script in `../scripts/`, beside `restore-memories.sh` — the other bootstrap script | The rebuild asks for nine imports plus a visible-GPU count to be checked by hand every time. Script the **verification only** — imports, GPU count vs `nvidia-smi`, `python_version` against the reference contract, non-zero on drift — environment *creation* lives in the bootstrap, whose smoke test is import-only and warn-only — this script is the fail-loud verification it lacks |
 | **D-23** | **`sync-to-s3.sh --self-test`** | `../scripts/sync-to-s3.sh` | Its header carries a seven-step manual first-run procedure, including the one that matters: prove a file under a MIRROR path disappears when deleted locally and a file under an ARCHIVE path does **not**. Mechanise it under a namespaced `_selftest/` prefix, print (don't run) the cleanup command, and make removing the file's `UNVERIFIED` banner conditional on it passing. Needs the real bucket |
 | **D-24** | **Cross-leg artifact fingerprints** | new `capture`/`compare` in `../scripts/`, defined in `STAGES.md` | `RUNBOOK.md` declares four cross-leg integrity gates — same slides producing coords and same per-slide tile counts; same raw-TIFF byte counts and tile-grid dimensions; same feature file count, per-slide tile count and tensor shapes — each "fail-loud and invalidates downstream comparison", and **nothing computes or compares them.** A declared gate that no code implements is worse than no gate: it reads as covered. Propose the per-artifact-class fingerprint definitions for ratification now; build after Stage 3.0 has real output |
 | **D-25** | **Stage 6.C's 4-GPU partition** | `orchestrate-concurrent-stage6c.sh` | 6.C pins MIL to GPU 0 "to stay out of the extract workload's GPUs" while extract requests 4 — an isolation that is arithmetically impossible on a 4-GPU instance. Decide the partition (extract on 3 + MIL on 1, or accept sharing and delete the isolation claim); either way the retention denominators change, so it is a methodology call, not a tuning one |
@@ -122,11 +119,16 @@ identically, and per-cell failure is isolated — a bad cell goes `INCOMPLETE` w
 `FS_CLIENT_RESERVED_CORES`) and the declared `cache_state` (from `RECORD_CACHE_STATE`, set per cell by the
 sweep drivers) — each recorded null + warned when unset, never guessed; CPU aggregators refuse a null
 `cores_reserved` (**D15**/**D13**).
-**Caveats.** Honours `RECORD_RUN_DIR`. Marks `INCOMPLETE` if the command returns non-zero **or** any required
-stream has fewer than two lines.
-**⏳ DEFER:** per-filesystem recorders (D-4) — the current recorder set and the required-stream list are the
-WEKA-over-InfiniBand ones, so on AWS the IB streams are empty and **every run marks `INCOMPLETE` until D-4
-lands**; cuFile path accounting (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
+**Caveats.** Honours `RECORD_RUN_DIR`. Marks `INCOMPLETE` if the command returns non-zero **or** any stream
+in **this leg's required list** has fewer than two lines (per-`$FS`, D-4). The WEKA-leg set: `weka stats
+realtime` 1 Hz poll (all processes; client rows filtered at parse time), `nvidia-smi`, `sar`, kernel netdev
+counters (Diagnostic here except 1.7), RDMA/EFA device counters (header-only where absent, not required on
+this leg), and a **verbatim 1 Hz `/proc/driver/nvidia-fs/stats` capture** (the kernel half of cuFile path
+accounting). Snapshots also capture nvidia-fs params and the cell's cuFile config. `metadata.json` carries
+`fs_transport` from `FS_TRANSPORT`. **Refuses `--fs lustre`** until the Lustre recorder adapter is built on
+Leg B (D-4).
+**⏳ DEFER:** the Lustre recorder half (D-4); cuFile path accounting's reader half + the kvikIO-cell
+requirement wiring (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
 
 ### `parse-results.py` — raw CSVs → `results.json`
 **What.** Reads a run dir's `raw/` time series and writes aggregate statistics.
@@ -143,7 +145,12 @@ max), so the sampling actually achieved is visible rather than assumed to be 1 H
 corrupts a rate also tells a reader how much to trust the series. Recorder stamps are second-resolution, so a
 sub-second slip is quantised away; that residual is an open item, not silently absorbed.
 **Caveats.** Overwrites `results.json` in place; raw data untouched. Implements the active-window mean.
-**⏳ DEFER:** per-filesystem source schemas (D-4).
+Emits **`weka_stats_client`** — the pattern-#1 series: `Mode=="client"` rows only, summed across the
+client's processes per timestamp (latencies and CPU% averaged, since a latency does not sum) — the quotable
+filesystem-side number; the whole-stream `weka_stats` aggregates stay alongside as context, and divergence
+between the two is itself a check that the filter matched. `nvidia-fs-stats.log` is presence-only until its
+parser is written against the enabled-under-load format (D-6).
+**⏳ DEFER:** the Lustre source schemas (D-4, Leg B); the nvidia-fs block parser (D-6).
 
 ### `aggregate-sweep.py` — generic sweep aggregator
 **What.** Rolls N run dirs into a summary CSV, including block-size × concurrency grids.
@@ -243,8 +250,29 @@ entry point, and the fallback transports (UDP / TCP) mount cleanly and report pl
 instruction followed hours earlier is not evidence.
 **Caveats.** Refuses to start without `FS_MOUNT`/`S3_BUCKET`, and **refuses if `--leg` disagrees with
 `FS_MOUNT`**. A step whose driver does not exist yet is reported **MISSING and aborts** rather than being
-skipped — *a leg with a hole in it looks complete in `INDEX.md`*, which is the failure this prevents. Two
-steps are currently MISSING by design: 1.7 (`D-13`) and 6.B.1 (needs the corpus-size decision, open item 5b).
+skipped — *a leg with a hole in it looks complete in `INDEX.md`*, which is the failure this prevents. One
+step is currently MISSING by design: 6.B.1 (needs the corpus-size decision, the open-items memory).
+
+### `prove-recording.sh` — the scripted Stage-0 recording proof (was `D-20`)
+**What.** Runs one real ~15 s fio cell through `record-run.sh` and asserts, each with a named non-zero
+exit: the cell recorded and `INDEX.md` says OK; the leg's core streams carry data; `results.json` has a
+**non-zero client-summed filesystem-side rate** (a present-but-zero series means the client filter matched
+nothing); every `raw/` file is verifiably in S3 after a run-mode sync; and the generic aggregator emits the
+cell's row (the proof cell is named `-bs1m-jobs4` so `aggregate-sweep.py` can parse it).
+**Why.** The rebuild checklist's five eyeball checks are where one gets skipped; this runs on every rebuild
+before wallclock is spent.
+**Caveats.** Three assertions print **loud SKIPs until their subjects exist**: the mechanical pre-cell
+canary (`D-7`), the post-cell consistency canary (`D-5`), and the fs-pivoted aggregation column (`D-4`
+helper). **Extend this script when each lands** — a proof that silently proves less than the checklist
+promises is the failure it exists to prevent. Its run dir is a real Stage-0 run dir; never delete it.
+
+### `verify-conda-env.sh` — fail-loud environment verification (was `D-22`)
+**What.** Real imports per env (main: torch/cupy/cucim/kvikio/openslide/tifffile/h5py/timm/transformers;
+alt: torch/cucim/openslide/tifffile/h5py/numpy), CUDA availability and visible-GPU count vs `nvidia-smi`,
+and — when a reference environment contract exists — `python_version` against it. Non-zero on any drift.
+**Why.** The bootstrap's smoke is import-only and warn-only; this is the verification it lacks. On a
+first Leg-A build the contract cross-check reports itself skipped rather than silently passing.
+**Caveats.** Verification only — environment creation stays in the bootstrap.
 
 ### `teardown-preflight.sh` — prove nothing is lost, before tearing down ⭐ NEW
 **What.** Checks nine things and prints **GO / NO-GO**: nothing in flight · live memories mirrored · **the
@@ -283,7 +311,9 @@ being ahead after a session wrote new memories; *missing* or *differing* files a
 
 **What.** The Terraform `clients_custom_data_post_mount` payload: builds the whole client on first boot —
 dnf packages, the pinned NVIDIA/CUDA-12.9 stack (chosen so `nvidia-fs` and the system `libcufile` are
-version-matched), local-NVMe RAID0+XFS scratch, WEKA login via Secrets Manager and mount verification,
+version-matched), **the nvidia-fs I/O counters enabled and persisted via modprobe.d** (default-off, and an
+off state records a present-but-all-zero GPU-direct byte split that corrupts the **D8** determination),
+local-NVMe RAID0+XFS scratch, WEKA login via Secrets Manager and mount verification,
 `env.sh` generated from instance evidence (IMDS plus the client's own transport report → `FS_TRANSPORT`),
 `LIBCUFILE_PRELOAD` located and exported, the compat-mode `cufile.json`, both conda envs from
 `env-specs/` with smoke tests, HF token + model prefetch from SSM, memory restore, and the S3 dataset
@@ -309,7 +339,11 @@ verification, open-items memory).
 S3 is then the per-leg hydration source (1.7), so both legs read byte-identical datasets (**D6**).
 
 **Caveats.** Consumes the gdc-manifest-format TSVs from `build-tcga-manifest.py`. Not a measured cell.
-Requires local staging space under `$SCRATCH_DIR`.
+Requires local staging space under `$SCRATCH_DIR`. **The per-mode completion marker
+(`datasets/.prefetch-complete-<mode>`) is written only on a zero-failure pass** — per-file failures land in
+`$STAGE/.prefetch-failures-<mode>` and any entry there blocks the marker and exits non-zero, because the
+marker short-circuits every future run and would otherwise hide a gap until 1.7's byte-verify, mid-leg.
+The pilot and full modes share the same S3 keys, so a full pass skips (never duplicates) pilot objects.
 
 ### `teardown-prep.sh` — the pre-destroy orchestrator ⭐ NEW
 
@@ -341,6 +375,24 @@ project, since `fio` is filesystem-agnostic.
 **Caveats.** `--unlink=1` cleans per cell. Read sweeps need a layout phase before the timed window.
 **⏳ DEFER:** nothing driver-side — mount, repo root and filesystem labelling are all done. The remaining
 work for these cells is in the aggregator: per-filesystem sources (D-4) and the consistency relation (D-5).
+
+### `sweep-stage1-hydrate.sh` — Stage 1.7 S3 → filesystem hydration (was `D-13`)
+**What.** The head-to-head ingest sweep: `max_concurrent_requests ∈ {4, 16, 64, 256}` = 4 cells, each a
+**full `aws s3 sync` of both dataset prefixes** with the target wiped before it (same-region transfer is
+free; the write workload is the measurement). The **final cell's data is kept and byte-verified** — TCGA
+per-file md5 + count + size against the manifest; CAMELYON16 count + per-file size (its manifest carries
+multipart ETags, not md5s; the staging copy was checksummed by S3 end-to-end — basis recorded in the
+verification report at `runs/.leg-state/$LEG/hydration-verification.txt`). Only a clean verify writes
+`runs/.leg-state/$LEG/hydration-complete`, the marker `run-leg.sh` and the bootstrap's re-hydration guard
+key on.
+**Why the last pass is the kept corpus.** Wipe-before-cell (never after) means the grid needs no extra
+hydration pass, and a failed verify blocks the marker so a partial corpus cannot poison downstream stages.
+**I/O.** `s3://$S3_BUCKET/datasets/{tcga-brca,camelyon16}/` → `$FS_MOUNT/data/{tcga-brca,camelyon16}/`.
+**Caveats.** Refuses without the S3 `.prefetch-complete-full` marker (hydrating a partial corpus would fail
+the verify only after every pass has run) and without corpus-size + 10% free space. Sets
+`RECORD_CACHE_STATE=na-write-cell` — a write cell has no cold/warm regime. `max_concurrent_requests` is a
+config-file setting, so each cell runs under a generated per-cell `AWS_CONFIG_FILE` with the region passed
+explicitly. Identical grid verbatim on both legs; FSx's native import is 1.8, a separate capability cell.
 
 ### `chain-stage1-bcd.sh` — sweep chainer
 **What.** Runs several Stage-1 sweeps back to back unattended.

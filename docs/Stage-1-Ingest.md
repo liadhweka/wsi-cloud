@@ -245,10 +245,10 @@ below.
 | **Status** | ⏳ both legs |
 | **Tool** | `aws s3 sync` / `aws s3 cp` (version recorded at run time) |
 | **Source → Target** | `s3://<bucket>/datasets/{tcga-brca,camelyon16}/` (same region) → `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
-| **Methodology** | Full-prefix hydration at a swept `max_concurrent_requests`, byte-verified against the dataset manifest on completion. **Identical tool, identical flags, identical concurrency grid on both filesystems.** |
+| **Methodology** | `max_concurrent_requests ∈ {4, 16, 64, 256}` = **4 cells**, each a **full hydration of both prefixes** with the target wiped before it — same-region S3 transfer is free, so the grid costs only wallclock and the write workload is the measurement. The **final cell's data is kept** and byte-verified: TCGA per-file md5 + count + size against the manifest; CAMELYON16 count + per-file size (its manifest carries multipart ETags, not md5s — the staging copy into our bucket was checksummed end-to-end by S3, and that basis is recorded in the verification report). A clean verify is what writes the `hydration-complete` marker; any mismatch blocks it and fails loud. **Identical tool, identical flags, identical concurrency grid on both filesystems.** |
 | **Why this exists** | This is how the datasets actually get onto each filesystem, so it is a real workload we are running anyway — and it is a legitimate large-write ingest measurement from a **same-region, high-bandwidth source**, which removes the WAN bottleneck that would otherwise dominate. It also doubles as the mechanism that makes the datasets a held-constant input (byte-verified identical bytes in both legs). |
 | **Why the same method on both — load-bearing** | FSx offers a native S3 data-repository import that has no WEKA counterpart. Using it for Lustre and a plain copy for WEKA would compare **two different mechanisms**, not two filesystems. So the head-to-head cell uses plain `aws s3` on both sides, and FSx's native import is measured separately as **1.8**. |
-| **Sweep driver** | Written on the instance — the driver needs the provisioned bucket, region and IAM role, which do not exist until the environment does; tracked in the deferred table in `SCRIPT-TRACKER.md`. |
+| **Sweep driver** | `../scripts/sweep-stage1-hydrate.sh` |
 | **Aggregated output** | `s1.7-hydrate-summary.csv` |
 | **Recorded per cell** | The full measurement set and the cost inputs (`RUNBOOK.md`), plus the byte-verification result against the dataset manifest — a partial hydration that is not caught here poisons every stage that reads the corpus. |
 
@@ -353,6 +353,15 @@ One entry per live Stage 1 decision. Cross-stage decisions live in `STAGES.md`.
 - **The synthetic cells (1.0a–d) run before the real-data cells.** *Why:* real-data numbers need an
   isolated-storage anchor or they are uninterpretable, and every downstream "% of ceiling" divides by a
   **block-size-matched** 1.0 cell.
+- **1.7's sweep is N full passes with the target wiped before each cell, and the final pass's corpus is the
+  one kept and verified.** *Why each cell is a full pass:* same-region S3 transfer is free and resumable, so
+  repeating the full hydration per concurrency point costs only wallclock while keeping every cell's unit of
+  work identical — a per-cell slice of the corpus would put different files (and a different size mix) under
+  each concurrency point. *Why wipe-before rather than wipe-after:* the last cell then doubles as the leg's
+  real hydration, and a failed byte-verify blocks the completion marker so a partial corpus cannot be
+  consumed downstream. *Verification basis:* TCGA md5-per-file (the GDC manifest carries md5s); CAMELYON16
+  count + size, because its manifest carries multipart ETags — the S3→S3 staging copy was checksummed by S3
+  itself, and the report states that basis rather than implying an md5 check that never ran.
 - **The `fio` recipe is grounded in each vendor's current performance-testing guidance at run time**
   (libaio + `--direct=1`; sequential grid at iodepth=1; IOPS grid at iodepth=8). *Why:* recipes and
   recommended flags change between versions, and `../CLAUDE.md` forbids quoting them from memory —

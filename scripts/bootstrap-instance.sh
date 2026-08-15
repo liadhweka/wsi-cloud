@@ -109,7 +109,15 @@ fi
 dnf install -y cuda-toolkit-12-9 || dnf install -y cuda-toolkit || warn "CUDA toolkit install failed"
 dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until resolved by hand"
 systemctl enable --now nvidia-persistenced 2>/dev/null || true
+# nvidia-fs I/O counters default OFF, and a kvikIO cell run that way records a
+# GPU-direct-vs-bounced byte split that is present and entirely zero — read as
+# "no GPU-direct traffic" instead of "accounting was off", corrupting the D8
+# determination. Enable before first use and persist across module reloads.
+printf 'options nvidia_fs rw_stats_enabled=1 peer_stats_enabled=1\n' > /etc/modprobe.d/nvidia-fs-stats.conf
 modprobe nvidia 2>/dev/null; modprobe nvidia_fs 2>/dev/null || true
+for _p in rw_stats_enabled peer_stats_enabled; do
+  echo 1 > "/sys/module/nvidia_fs/parameters/$_p" 2>/dev/null || warn "could not enable nvidia_fs $_p — cuFile path accounting will read all-zero"
+done
 if nvidia-smi >/dev/null 2>&1; then
   DRIVER_V=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
   echo "GPU OK: driver=$DRIVER_V  gpus=$(nvidia-smi -L | wc -l)"

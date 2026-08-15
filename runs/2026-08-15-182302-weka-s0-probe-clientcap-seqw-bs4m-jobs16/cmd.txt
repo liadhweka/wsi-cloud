@@ -1,0 +1,1 @@
+fio --name=clientcap --directory=/mnt/weka/benchmarks/fio-scratch --rw=write --bs=4M --size=10G --numjobs=16 --iodepth=8 --ioengine=libaio --direct=1 --runtime=300 --time_based --group_reporting --output-format=json+ 

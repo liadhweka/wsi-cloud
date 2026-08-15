@@ -97,7 +97,7 @@ STEPS=(
   "1.0b|Synthetic ceiling: sequential read|$LIB/sweep-stage1-seqr.sh"
   "1.0c|Synthetic ceiling: random write IOPS|$LIB/sweep-stage1-randw.sh"
   "1.0d|Synthetic ceiling: random read IOPS|$LIB/sweep-stage1-randr.sh"
-  "1.7|S3 -> filesystem hydration (head-to-head ingest)|NOT_YET_BUILT:D-13 sweep-stage1-hydrate.sh"
+  "1.7|S3 -> filesystem hydration (head-to-head ingest)|$LIB/sweep-stage1-hydrate.sh"
   "3.0|Tissue detection -- generates the 20x coords that gate 4/5/6/7|$LIB/sweep-stage3-tissue-detection.sh"
   "C1|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "4.D|20x raw-TIFF conversion -- gates every kvikIO cell|$LIB/convert-stage4c-rawtiff.sh"

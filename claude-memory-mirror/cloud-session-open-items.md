@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-10T17:57:07.502Z
+  modified: 2026-08-15T18:38:56.633Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -33,7 +33,10 @@ These change what the numbers mean, so resolving them after cells have run means
    the transport analysis. Detail: `docs/STAGES.md` **D8**.
 3. **Derive each filesystem's consistency relation.** The canary cannot run without it and it must never be
    ported between legs: WEKA from the actual EC scheme, Lustre from the actual stripe layout. Detail:
-   `docs/STAGES.md` **D12**.
+   `docs/STAGES.md` **D12**. *Empirical anchors from the 2026-08-15 Stage-0 probes (5+2 cluster):* write
+   wire/app ≈ **1.455** (≈ 7/5 EC + ~4% protocol, measured at `L6 Sent_client_sum` vs app 5.2 GB/s), read
+   wire/app ≈ **1.034**. Re-derive + re-calibrate on the post-switch cluster before the canary bands are set
+   (same 5+2 scheme expected → ratios should reproduce; a shift is itself a finding).
 4. **Determine the Lustre LND actually in use** (kernel TCP vs the EFA provider). This decides which client
    counters are primary versus diagnostic — get it wrong and every Lustre number cites a bypassed source.
 5. **Cache-clearing mechanism per filesystem.** How you reach a cold state differs per side and includes a
@@ -62,42 +65,44 @@ These change what the numbers mean, so resolving them after cells have run means
    **Sizes are parameters, never literals:** the corpus size is a function of the provisioned server-side
    cache, so it is read from configuration set at provisioning, not written into the driver.
    Detail: `docs/Stage-1-Ingest.md`, `docs/Stage-2-Cataloging.md`, `docs/Stage-4-Patching.md`, **D13**.
-6b. ⚠ **nvidia-fs I/O counters are OFF by default, and the D-6 gate row can pass all-zeros because of it.**
-    On a host with the GDS stack loaded, `/proc/driver/nvidia-fs/stats` reports `IO stats: Disabled, peer IO
-    stats: Disabled` with `rw_stats_enabled=0` and `peer_stats_enabled=0`. A kvikIO cell run that way records a
-    GPU-direct-vs-bounced split that is **present and entirely zero** — which reads as *"no GPU-direct
-    traffic"* rather than *"accounting was off"*, and would corrupt the **D8** WEKA-GDS determination. Enable
-    the counters at instance build (the bootstrap does not yet do it), and have the pre-cell canary require them **enabled and non-zero on a known-good
-    read** before any cuFile cell counts. `Active Shadow-Buffer (MiB)` is the compat-mode bounce signal the
-    split depends on. Format is version-stamped (`NVFS statistics(ver: …)`), so re-verify on the cloud stack.
-7. **Size the 6.B synthetic corpus using BOTH filesystems' cache sizes.** There are two caches to exceed, not
-   one: the client page cache **plus** each filesystem's own server-side cache, which differ per side. A corpus
-   genuinely cold on one and partly warm on the other produces a **cache-size artifact that looks like a
-   filesystem difference.** *This is the one place a Leg-A parameter must be chosen using Leg-B information* —
-   compute FSx's cache size in advance and generate **one identical corpus definition** for both legs.
-   *Timing:* 6.B.1 sits late in Leg A; what is needed at spin-up is only **recording the WEKA backends'
-   aggregate RAM**, the sole path by which this could force a larger corpus and affect capacity sizing.
-   Detail: `docs/Stage-6-Feature-Extraction.md`.
+6b. **nvidia-fs I/O counters — enablement DONE (Leg-A instance, 2026-08-15: enabled live, persisted in
+    `/etc/modprobe.d/nvidia-fs-stats.conf`, and the bootstrap now enables them at build). What remains is the
+    D-6 canary half:** the pre-cell canary must require them **enabled and non-zero on a known-good read**
+    before any cuFile cell counts — a present-but-all-zero split reads as "no GPU-direct traffic" rather than
+    "accounting was off" and would corrupt the **D8** determination. `Active Shadow-Buffer (MiB)` is the
+    compat-mode bounce signal. Stats format on this stack: `NVFS statistics(ver: 4.0)`, driver 2.29.4.
+6c. **GDS stack version skew — verify before any kvikIO cell counts (D-10 / Tier-2 row 7).** This instance
+    runs libcufile **1.14.1** (CUDA 12.9 toolkit) against nvidia-fs **2.29.4** (driver 595.71.05; the module
+    self-reports GDS 1.18.0.62). `gdscheck -p` runs clean and reports compat mode, but "matched" must be
+    verified (docs + the D-6 known-good-read showing the counters move), not assumed from a clean probe.
+    Matters more on Leg B, where GDS is expected to engage for real.
+7. **Size the 6.B synthetic corpus using BOTH filesystems' cache sizes — inputs fetched; freeze after the
+   backend switch is real.** The corpus must exceed the client page cache (768 GiB) **plus** the larger
+   server-side cache. Fetched 2026-08-15: FSx PERSISTENT-1000 carries **27.3 GiB RAM cache/TiB**
+   (docs.aws.amazon.com/fsx/latest/LustreGuide/ssd-storage.html) → ≈721 GiB at the proposed 26.4 TiB; after
+   the ratified switch to 8 × i8ge.6xlarge the WEKA backends' RAM is **1536 GiB (8 × 192 GiB)** and becomes
+   the larger side. Working sizes: **6.B corpus 3.0 TiB** (> 768+1536 = 2304 GiB, ~30% margin);
+   **Stage-1.0 read corpus 2.0 TiB** (> 1536 GiB). Freeze both — one identical definition per corpus for
+   both legs — once the new cluster's actual RAM is confirmed at spin-up. Detail:
+   `docs/Stage-6-Feature-Extraction.md`.
 8. **Confirm real per-slide tile counts from the actual 3.0 coords** before sizing the 6.B.1 file-size grid or
    committing 6.A Tier 2 wallclock — both currently rest on magnification arithmetic, not measurement.
 9. **Counter-semantics check for cross-leg `ops/s`.** Until counter semantics are verified equivalent and that
    verification recorded, app-level metrics are the cross-leg-comparable ones and filesystem-reported ops/s
    is within-leg only. Detail: `docs/Stage-2-Cataloging.md`.
-10. **Core accounting — values only; the mechanism is built.** `record-run.sh` records
-    `cores_total/reserved/available` from `FS_CLIENT_RESERVED_CORES`, and every CPU aggregator excludes the
-    recorded set per run, refusing null. Remaining: measure the WEKA client's reserved core **list** on the
-    real instance (the client's own report), set it in `env.sh`, confirm the Lustre leg sets `none`, and
-    report the reservation as part of WEKA's cost. Detail: `docs/STAGES.md` **D15**.
+10. **Core accounting — WEKA value SET (2026-08-15): `FS_CLIENT_RESERVED_CORES="1-4,49-52"` in env.sh**
+    (4 DPDK FRONTENDs pinned to vCPUs 1–4 per the client's own report, plus their HT siblings per the D15
+    sibling rule; ratified). Remaining: the Lustre leg sets `none`, and the reservation is reported as part
+    of WEKA's cost at writing time. Detail: `docs/STAGES.md` **D15**.
 11. **Record both sides' provisioned configuration into the environment contract** — WEKA: backend type and
     count, capacity, EC scheme, client networking mode. FSx: tier, capacity, provisioned metadata IOPS, EFA
     state. Without these the fairness basis is unverifiable after the fact. Detail: `docs/STAGES.md` **D6/D7**.
-12. **Confirm capacity headroom on both filesystems before committing — three retained corpora, not one.**
-    (a) raw-TIFF, order ~7 TB at full cohort (before 4.D); (b) the **Stage-1.0 read corpus** and (c) the
-    **6.B synthetic corpus** — both of which must exceed **the larger of the two server-side caches** to read
-    cold (**D13**) and are retained rather than deleted per cell, so both are capacity inputs with a
-    cache-derived floor. On FSx capacity is simultaneously a performance knob, so raising it to fit them
-    changes what is measured (**D7**). Compute (b) and (c) from the fetched cache figures at provisioning and
-    check the total against the planned capacity. Detail: `docs/cloud-setup/SPINUP-CHECKLIST.md` item 12.
+12. **Capacity headroom — recomputed 2026-08-15 for the ratified 6xlarge switch; fits everywhere.** Worst
+    case: datasets 1.75 TiB + full-cohort raw-TIFF ~6.4 TiB (if D-28 retains it) + Stage-1.0 corpus 2.0 TiB
+    + 6.B corpus 3.0 TiB + features/heatmaps/scratch ≲ 1 TiB ≈ **14.2 TiB** — fits FSx at 26.4 TiB and fits
+    the new WEKA cluster trivially (8 × i8ge.6xlarge carries ~109 TiB raw). Corpus sizes stay parameters
+    read from env, never literals (variables defined during the read-driver rework). Delete once both sizes
+    are frozen (item 7) and recorded in the stage roadmaps.
 13. **Two remainders from the worker measurement-correctness pass.** The seven bugs themselves are **fixed**
     (see `docs/SCRIPT-TRACKER.md` for what each script now does); these two were deliberately left because
     each needs something that does not exist yet:
@@ -142,20 +147,21 @@ These change what the numbers mean, so resolving them after cells have run means
     default to 200, sized against a different environment. **This decides whether Tier 2 fits on disk at all**
     — too large and the conversion fails mid-cohort after hours; too small and it wastes wallclock. Use the
     **same** value on both legs, since chunk size changes the write/delete cadence the filesystem sees.
-16. **Verify the cuCIM install path on the cloud stack (conda vs pip).** pip wheels have crashed with a
-    libstdc++ ABI mismatch inside `read_region()` where the RAPIDS conda build does not.
 17. **[USER] Should `env.sh --check` hard-fail on the running leg's canary field?** `WEKA_EC_SCHEME` and
     `LUSTRE_STRIPE_LAYOUT` are warn-only, yet the canary relation for the running leg cannot be derived
     without whichever applies (**D12**) — so a leg can start with `--check` passing and no consistency check
     possible. A leg-conditional requirement would catch it but changes *when* the gate blocks: it would fail
     before the filesystem is provisioned. *Recommend* a separate `--check-ready` mode meaning "ready to
     measure", distinct from "configured" — the two questions are genuinely different.
-18. **[USER] Set the cost AND ceiling inputs at each leg's setup, from that day's pages.** The licensing
-    question is decided (record both bases; presentation at writing time — `docs/STAGES.md` **D7**): what
-    remains is the per-leg values — `INSTANCE_USD_PER_HR`, `FS_USD_PER_HR`, `SOFTWARE_USD_PER_HR` (WEKA: the
-    **public AWS Marketplace rate**; Lustre: `0`, FSx is software-inclusive), `PRICE_CHECKED_UTC`; plus the
-    per-client ceiling trio `FS_PER_CLIENT_CEILING_{GBPS,BASIS}` + `CEILING_CHECKED_UTC` (Lustre: documented
-    per-client cap from the D7-cited AWS page; WEKA: instance line rate). Fetch, don't recall.
+18. **Cost + ceiling inputs — WRITTEN into env.sh 2026-08-15 (ratified). Two remainders:** (a) the software
+    basis is **raw NVMe** ($1,000/TB/12mo × 40 TB = 4.566/hr) per the ratification; **the human checks the
+    raw-vs-usable metering basis with WEKA Sales** — the usable-capacity alternative (22.49 TB → 2.567/hr)
+    is recorded in env.sh's comment; prices are backfillable as long as methodology/sources/dates stay
+    recorded (all are). (b) **Re-derive `FS_USD_PER_HR`, `SOFTWARE_USD_PER_HR`, `WEKA_BACKEND_RAM_TOTAL`,
+    `WEKA_BACKEND_TYPE` and capacity after the ratified backend switch** (item 22): 8 × i8ge.6xlarge →
+    infra 8 × 3.3516 = **26.8128/hr**, raw NVMe 120 TB → software **13.699/hr** (fewer-drives-per-host, if
+    the terraform module supports it, shrinks this). Leg B's documented per-client caps (2026-08-15,
+    performance.html): EFA 700 Gbps, EFA+GDS 1200 Gbps — set at Leg-B spin-up.
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
     "% of this filesystem's metadata capability", and 1.0d's random-read IOPS would be a mismatched one. Stage 2
@@ -174,11 +180,44 @@ These change what the numbers mean, so resolving them after cells have run means
       land first. Content stays synthetic — visibility depends on size, tiling and fsync-then-rename, not
       pixels. Detail: `docs/Stage-6-Feature-Extraction.md`, `docs/Stage-7-Clinical-Inference-Deployment.md`.
 21. **The blocker gate is now three tiers, and two of them gate cells that used to precede it.**
-    `prompts/handoff-cloud.md`: **Tier 0** transport, before *any* cell including the throwaway; **Tier 1**
-    recording adapters, consistency relation, worker-correctness bugs, the 1.7 driver, and the Stage-1.0 cache
-    regime — all before hydration and the baseline, because those produce kept numbers; **Tier 2** the rest,
-    before the main sweep. Reported at the baseline greenlight *and* before the leg starts. **What is still open is closing the
-    rows**, not the ordering.
+    `prompts/handoff-cloud.md`: **Tier 0** transport, before *any* cell including the throwaway (**CLOSED on
+    Leg A, 2026-08-15** — DPDK evidenced from the client's own report; run-leg.sh refusal verified in code);
+    **Tier 1** recording adapters, consistency relation, worker-correctness bugs, the 1.7 driver, and the
+    Stage-1.0 cache regime — all before hydration and the baseline, because those produce kept numbers;
+    **Tier 2** the rest, before the main sweep. Reported at the baseline greenlight *and* before the leg
+    starts. **What is still open is closing the rows**, not the ordering. **Row-1 status (2026-08-15): its
+    closure criterion is met** — the Stage-0 cell `2026-08-15-171240-weka-s0-smoke-recording-proof` records
+    the WEKA-leg primaries and INDEX.md says OK, with client-summed FS-side vs fio app-level agreeing within
+    ~5%. The D-4 remainder (shared aggregation helper; Lustre half) stays open in the tracker and must land
+    before the first sweep's numbers are read.
+22. **Backend switch to 8 × i8ge.6xlarge — RATIFIED in principle 2026-08-15, then CHALLENGED on cost and
+    SETTLED EMPIRICALLY the same day (Stage-0 probes `2026-08-15-182302-…-probe-clientcap-seqw…` and
+    `…-182852-…-probe-clientcap-seqr…`, diagnostic, never quote):** the 4-FE-core client sustained
+    **11.6 GB/s reads for 8 min flat** (FE CPU ~68% — headroom left) against backend-RAM-resident data —
+    ≥40% above the 8×2xlarge backends' 67.2 Gbps (8.4 GB/s) sustained aggregate, only possible on burst
+    credits; writes ran 5.2 GB/s app × **1.455 measured wire amplification** (≈ 5+2 EC's 7/5 + ~4% protocol;
+    read relation measured 1.034) = wire already grazing baseline. So the ceiling cells WOULD measure the
+    backend fabric and its credit state; the switch is confirmed necessary, execution pending, timing =
+    after this build session, before hydration/baseline. The human runs the destroy/switch/reapply; treat it as a standard
+    TEARDOWN-AND-REBUILD cycle (handoff edit → backup → commit+push → preflight → destroy → apply), since
+    env.sh and the mount die with it and Tier 0 must be re-evidenced against the NEW cluster. On the rebuilt
+    environment: (a) re-verify transport (DPDK) from the client's own report; (b) re-derive
+    `WEKA_BACKEND_TYPE/RAM_TOTAL`, capacity, EC scheme, `FS_CLIENT_RESERVED_CORES`, `FS_USD_PER_HR`,
+    `SOFTWARE_USD_PER_HR` (item 18); (c) **sweep every stale `i8ge.2xlarge` reference out of docs, env.sh
+    and memory** (human asked explicitly); (d) keep protection 5+2 + hot spare identical unless deliberately
+    changed (the D-5 relation derives from the actual scheme either way). ⚠ Surfaced consequences: raw NVMe
+    becomes 120 TB → software 13.699/hr at the raw basis (ask whether the terraform module can give WEKA one
+    drive per host — 60 TB → 6.85/hr — before locking); backend RAM 1536 GiB → corpus sizes per item 7.
+    Frontend stays one g6e.24xlarge with 4 FE cores unless the human ratifies otherwise (thesis §9:
+    single-client is the unit of analysis; the FE-core count is part of WEKA's "realistic production config"
+    and its cost accounting).
+23. **Full dataset prefetch to S3 is RUNNING (relaunched 2026-08-15 at PREFETCH_PARALLEL=32 after PAR=8
+    measured WAN-bound at ~13 MB/s aggregate; now ~80 MB/s; log
+    `runs/sweep-logs/2026-08-15-*-prefetch-full-par32.log`).** Expected: 1133 TCGA files / 1079 GiB + 1365
+    CAMELYON16 objects / 710 GiB. On completion: verify object counts + total bytes against both manifests,
+    confirm `datasets/.prefetch-complete-full` exists (the patched script refuses it on any failure), then
+    delete this item. 1.7 hydration cannot run before this finishes — and hydration also waits for the
+    item-22 backend switch (a cluster destroy wipes the mount, so hydrate only the NEW cluster).
 
 ## B. Watch during benchmarking
 
@@ -217,10 +256,8 @@ These change what the numbers mean, so resolving them after cells have run means
 10. **UNI2-h results stay internal-only** — don't strip the tags in refactors; filter those rows before
    anything leaves the building. More important here than in an internal study, since a competitive comparison
    is likelier to be externalised. Detail: `[[uni2h-conditional-use-status]]`.
-11. **Next-rebuild verifications (raise at the next boot/teardown).** (a) SSM deploy key first
-   silent install — the next boot log's step 11 must read "fixed deploy key installed from SSM"
-   (fallback message means the SSM parameter or IAM is wrong). (b) First real teardown must run
-   `sync-to-s3.sh`'s FIRST-RUN PROCEDURE (its header, steps 1-7 — the archive-vs-mirror semantics
-   test is the one that matters), then remove its UNVERIFIED banner. Tracked cosmetic, no action:
-   a mamba "error opening log file: Permission denied" warn at the env-build log tail — envs build
-   and smoke-pass regardless; investigate only if impact ever appears.
+11. **Next-teardown verification.** First real teardown must run `sync-to-s3.sh`'s FIRST-RUN PROCEDURE
+   (its header, steps 1-7 — the archive-vs-mirror semantics test is the one that matters), then remove its
+   UNVERIFIED banner. (The SSM deploy-key silent-install check passed on the 2026-08-15 boot: "fixed deploy
+   key installed from SSM".) Tracked cosmetic, no action: a mamba "error opening log file: Permission denied"
+   warn at the env-build log tail — envs build and smoke-pass regardless; investigate only if impact appears.

@@ -453,7 +453,10 @@ flatters Lustre's available parallelism, while excluding the reserved cores from
 per-core efficiency. **How every stage handles it:** record **cores reserved by the filesystem client**,
 **cores available to the application**, and **total cores** per cell on both legs; compute compute-saturation
 readings over **application-available** cores; treat the reserved-core exclusion list as a **per-filesystem
-adapter parameter, not a constant**; and report the reservation itself as part of that filesystem's cost rather
+adapter parameter, not a constant**; **include the reserved cores' hyperthread siblings in the exclusion
+list** — a sibling shares its physical core with a spin-polling thread, so counting it as
+application-available pollutes the reading in exactly the direction the exclusion exists to prevent; and
+report the reservation itself as part of that filesystem's cost rather
 than netting it out silently. Most load-bearing in the compute-leaning stages (3, and the CPU backends in 4.B /
 5.B / 6.A), and it also shifts *effective* parallelism at a given nominal concurrency, so both nominal `n` and
 available-core count are recorded per cell.

@@ -1,0 +1,52 @@
+{
+  "run_name": "probe-clientcap-seqw-bs4m-jobs16",
+  "stage": "0",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-15T18:23:05Z",
+  "hostname": "ip-10-0-1-181.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-write-cell",
+  "rep": null,
+  "command": [
+    "fio",
+    "--name=clientcap",
+    "--directory=/mnt/weka/benchmarks/fio-scratch",
+    "--rw=write",
+    "--bs=4M",
+    "--size=10G",
+    "--numjobs=16",
+    "--iodepth=8",
+    "--ioengine=libaio",
+    "--direct=1",
+    "--runtime=300",
+    "--time_based",
+    "--group_reporting",
+    "--output-format=json+"
+  ],
+  "note": "DIAGNOSTIC PROBE, never quote: client-capability seq WRITE, bs=4M numjobs=16 iodepth=8, 300s. Decision support for the backend-sizing question (memory item 22): does the 4-FE-core client exceed the 8x i8ge.2xlarge backends' 67 Gbps sustained aggregate? Files retained for the read probe.",
+  "wallclock_s": 301,
+  "started_utc": "2026-08-15T18:23:07Z",
+  "ended_utc": "2026-08-15T18:28:08Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 8.9376,
+    "software_usd_per_hr": 4.566,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

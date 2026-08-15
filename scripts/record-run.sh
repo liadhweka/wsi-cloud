@@ -118,16 +118,26 @@ RUN_ID="$(basename "$RUN_DIR")"
 
 mkdir -p "$RUN_DIR/pre" "$RUN_DIR/post" "$RUN_DIR/raw/.pids" "$RUN_DIR/plots"
 
-# IB netdevs for the IPoIB control-plane capture. Discovered dynamically rather
-# than named, so the client's actual NIC binding is always what gets captured and
-# nothing carries over from another machine.
-# ⏳ D-4: on AWS there are no InfiniBand devices at all — the wire path is ENA
-# (WEKA leg, via DPDK) or ENA/EFA (Lustre leg). This capture yields nothing there
-# and must be replaced by the per-filesystem wire-counter adapter. Left in place
-# rather than deleted because it is the shape the adapter replaces, and deleting
-# it would lose the "capture every device, let analysis pick the active ones"
-# property that the replacement needs.
-IB_NETDEVS=$(for n in /sys/class/net/ib*; do [[ -e "$n" ]] || continue; [[ "$(cat "$n/operstate" 2>/dev/null)" == up ]] && basename "$n"; done | tr '\n' ' ')
+# Per-filesystem recorder set (D-4). The WEKA set below is written against this
+# instance's live streams. The Lustre set must be written against the live
+# /proc/fs/lustre and `lctl get_param` streams on the provisioned Leg-B cluster —
+# never from a recalled format — so until that build exists, recording a lustre
+# cell would produce a run with a hole where that leg's Primary sources belong,
+# which the INCOMPLETE flag would catch only after the wallclock is spent.
+# Refuse up front instead.
+if [[ "$FS" == "lustre" ]]; then
+  echo "FATAL: the Lustre recorder adapter is not built (SCRIPT-TRACKER D-4, Lustre half)." >&2
+  echo "       Build it on the Leg-B instance against the live stats streams, then" >&2
+  echo "       extend the per-leg recorder set and required-stream list here." >&2
+  exit 2
+fi
+
+# Kernel netdevs, discovered not named ("capture every device, let analysis pick
+# the active ones"). On the WEKA leg these are Diagnostic — DPDK owns the data
+# NICs, which are invisible to the kernel — EXCEPT on 1.7, whose S3 source
+# traffic rides the kernel TCP stack and makes them Primary on both legs
+# (Stage-1 roadmap). On the Lustre leg they are the data path itself.
+NETDEVS=$(for n in /sys/class/net/*; do b=$(basename "$n"); [[ "$b" == lo ]] && continue; echo "$b"; done | tr '\n' ' ')
 
 # ---------- helpers ----------
 log() { echo "[record-run $(date -u +%FT%TZ)] $*" >&2; }
@@ -166,8 +176,8 @@ snapshot() {
   dump "$dir/fio-version.txt"          fio --version
   dump "$dir/python-version.txt"       python3 --version
 
-  # IB cumulative counters (snapshot only — we also poll during the run)
-  for iface in $IB_NETDEVS; do
+  # Kernel netdev cumulative counters (snapshot only — also polled during the run)
+  for iface in $NETDEVS; do
     if [[ -d "/sys/class/net/$iface/statistics" ]]; then
       {
         echo "interface=$iface"
@@ -175,9 +185,18 @@ snapshot() {
         for stat in /sys/class/net/$iface/statistics/*; do
           echo "$(basename "$stat")=$(cat "$stat")"
         done
-      } > "$dir/ib-counters-$iface.txt"
+      } > "$dir/netdev-counters-$iface.txt"
     fi
   done
+
+  # cuFile / GDS state — the per-cell I/O-path provenance (D8, D-6): the loaded
+  # nvidia-fs accounting verbatim, its enable switches, and the cuFile config the
+  # cell would run under. A config flag is not proof of behaviour, but WHICH
+  # config and WHETHER the counters were on must be on record per cell.
+  dump "$dir/nvidia-fs-stats.txt"      cat /proc/driver/nvidia-fs/stats
+  dump "$dir/nvidia-fs-params.txt"     bash -c 'grep -H . /sys/module/nvidia_fs/parameters/* 2>/dev/null'
+  [[ -n "${CUFILE_ENV_PATH_JSON:-}" && -f "${CUFILE_ENV_PATH_JSON:-}" ]] && \
+    dump "$dir/cufile-config.json"     cat "$CUFILE_ENV_PATH_JSON"
 }
 
 # ---------- pre-run snapshot ----------
@@ -242,6 +261,7 @@ cat > "$RUN_DIR/metadata.json" <<EOF
   "stage": "$STAGE",
   "fs": "$FS",
   "fs_mount": "${FS_MOUNT:-unset}",
+  "fs_transport": $(if [[ -n "${FS_TRANSPORT:-}" ]]; then jq -n --arg t "$FS_TRANSPORT" '$t'; else echo null; fi),
   "timestamp_utc": "$META_TS",
   "hostname": "$HN",
   "user": "${USER:-unknown}",
@@ -283,12 +303,16 @@ ${NOTE:-(no note provided)}
 - \`metadata.json\` — structured metadata (programmatic).
 - \`cmd.txt\` / \`cmd.log\` — exact command and tee'd stdout+stderr from the benchmark.
 - \`pre/\` — cluster + host state snapshot before the run.
-- \`raw/\` — during-run time series at 1-second resolution. Which streams are
-  present depends on the filesystem under test — the recorder set is a
-  per-filesystem adapter (deferred item \`D-4\`); \`docs/RUNBOOK.md\` holds the
-  authoritative Primary-vs-Diagnostic table for each leg. Always present:
+- \`raw/\` — during-run time series at 1-second resolution. The recorder set is
+  per-filesystem (\`docs/RUNBOOK.md\` holds each leg's Primary-vs-Diagnostic
+  table). On this leg:
+  - \`weka-stats.csv\` — per-process cluster stats, 1 Hz poll (filter \`Mode==client\` for this client).
   - \`nvidia-smi.csv\` — per-GPU per-second.
   - \`sar-{cpu,disk,net,mem,swap,paging,queue,ctxsw}.csv\` — host-side categories.
+  - \`netdev-counters.csv\` — kernel NIC counters (Diagnostic here — DPDK bypasses
+    the kernel — except on 1.7, where the S3 source traffic makes them Primary).
+  - \`rdma-counters.csv\` — RDMA/EFA device counters; header-only where no such device exists.
+  - \`nvidia-fs-stats.log\` — verbatim 1 Hz nvidia-fs accounting (cuFile path proof, D8).
 - \`post/\` — same snapshot taken after the run, for delta computation.
 - \`results.json\` — parsed aggregates. Re-runnable any time via \`scripts/parse-results.py <this-dir>\`.
 
@@ -337,14 +361,16 @@ nvidia-smi --query-gpu=index,timestamp,utilization.gpu,utilization.memory,memory
   > "$RUN_DIR/raw/nvidia-smi.csv" 2> "$RUN_DIR/raw/nvidia-smi.err" &
 echo $! > "$PIDS_DIR/nvidia-smi.pid"
 
-# (4) IPoIB counters from /sys/class/net/<iface>/statistics/.
-# Important: these reflect the IPoIB layer ONLY — wekafs uses native RDMA
-# which bypasses this path. Kept as a link/control-plane sanity check.
+# (4) Kernel netdev counters from /sys/class/net/<iface>/statistics/, all
+# non-lo interfaces. On the WEKA leg this is control-plane only — DPDK owns the
+# data NICs, invisible here — EXCEPT on 1.7, where the S3 source traffic rides
+# the kernel stack and this stream is Primary on both legs. On the Lustre leg
+# it is the data path (ENA) or its control plane (EFA), per the RUNBOOK table.
 {
   echo "timestamp,interface,tx_bytes,rx_bytes,tx_packets,rx_packets,tx_dropped,rx_dropped,tx_errors,rx_errors"
   while true; do
     ts=$(date -u +%FT%T.%3NZ)
-    for iface in $IB_NETDEVS; do
+    for iface in $NETDEVS; do
       base=/sys/class/net/$iface/statistics
       if [[ -d "$base" ]]; then
         printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n" \
@@ -361,41 +387,58 @@ echo $! > "$PIDS_DIR/nvidia-smi.pid"
     done
     sleep 1
   done
-} > "$RUN_DIR/raw/ipoib-counters.csv" 2> "$RUN_DIR/raw/ipoib-counters.err" &
-echo $! > "$PIDS_DIR/ipoib-counters.pid"
+} > "$RUN_DIR/raw/netdev-counters.csv" 2> "$RUN_DIR/raw/netdev-counters.err" &
+echo $! > "$PIDS_DIR/netdev-counters.pid"
 
-# (5) RDMA counters from /sys/class/infiniband/<ibdev>/ports/1/counters/.
-# THIS is the data plane wekafs actually uses. port_xmit_data and
-# port_rcv_data are in 4-byte words per the IB spec (multiplied by 4 here
-# for bytes). Poll ALL infiniband devices: a DPDK process binds to physical
-# devices that don't necessarily match the kernel netdev's symlink, so we never
-# assume which device carries data — we capture them all and let analysis pick
-# the active ones. That "capture everything, decide later" property is the part
-# the AWS replacement must keep (⏳ D-4).
+# (5) RDMA-device counters from /sys/class/infiniband/<dev>/ports/1/. Absent on
+# the WEKA-on-AWS leg (header-only file, not in its required list); present on
+# an EFA-attached instance, where EFA exposes an ibdev whose byte counters live
+# under hw_counters/ rather than the IB-spec counters/ (which count 4-byte
+# words). Both shapes captured — every device, analysis picks the active ones.
 IB_DEVICES=$(ls /sys/class/infiniband/ 2>/dev/null | tr '\n' ' ')
 {
-  echo "timestamp,ibdev,xmit_bytes,rcv_bytes,xmit_packets,rcv_packets,xmit_wait,xmit_discards"
+  echo "timestamp,ibdev,source,xmit_bytes,rcv_bytes,xmit_packets,rcv_packets"
   while true; do
     ts=$(date -u +%FT%T.%3NZ)
     for ibdev in $IB_DEVICES; do
-      base=/sys/class/infiniband/$ibdev/ports/1/counters
-      if [[ -d "$base" ]]; then
-        xd=$(cat $base/port_xmit_data 2>/dev/null || echo 0)
-        rd=$(cat $base/port_rcv_data 2>/dev/null || echo 0)
-        xp=$(cat $base/port_xmit_packets 2>/dev/null || echo 0)
-        rp=$(cat $base/port_rcv_packets 2>/dev/null || echo 0)
-        xw=$(cat $base/port_xmit_wait 2>/dev/null || echo 0)
-        xdis=$(cat $base/port_xmit_discards 2>/dev/null || echo 0)
-        printf "%s,%s,%d,%d,%s,%s,%s,%s\n" \
+      cbase=/sys/class/infiniband/$ibdev/ports/1/counters
+      hbase=/sys/class/infiniband/$ibdev/ports/1/hw_counters
+      if [[ -d "$cbase" ]]; then
+        xd=$(cat $cbase/port_xmit_data 2>/dev/null || echo 0)
+        rd=$(cat $cbase/port_rcv_data 2>/dev/null || echo 0)
+        printf "%s,%s,counters,%d,%d,%s,%s\n" \
+          "$ts" "$ibdev" $(( xd * 4 )) $(( rd * 4 )) \
+          "$(cat $cbase/port_xmit_packets 2>/dev/null || echo 0)" \
+          "$(cat $cbase/port_rcv_packets 2>/dev/null || echo 0)"
+      fi
+      if [[ -d "$hbase" ]]; then
+        printf "%s,%s,hw_counters,%s,%s,%s,%s\n" \
           "$ts" "$ibdev" \
-          $(( xd * 4 )) $(( rd * 4 )) \
-          "$xp" "$rp" "$xw" "$xdis"
+          "$(cat $hbase/tx_bytes 2>/dev/null || echo 0)" \
+          "$(cat $hbase/rx_bytes 2>/dev/null || echo 0)" \
+          "$(cat $hbase/tx_pkts 2>/dev/null || echo 0)" \
+          "$(cat $hbase/rx_pkts 2>/dev/null || echo 0)"
       fi
     done
     sleep 1
   done
 } > "$RUN_DIR/raw/rdma-counters.csv" 2> "$RUN_DIR/raw/rdma-counters.err" &
 echo $! > "$PIDS_DIR/rdma-counters.pid"
+
+# (6) nvidia-fs accounting, verbatim, 1 Hz — the kernel half of cuFile path
+# accounting (D8, D-6). Captured as timestamped raw blocks rather than parsed
+# fields: the stats format is version-stamped, and the enabled-under-load field
+# set is exactly what D-6 must be written against, so the record keeps the raw
+# truth and parsing follows it. Cheap on every cell; REQUIRED on kvikIO cells
+# once D-6 wires the requirement.
+{
+  while true; do
+    echo "=== $(date -u +%FT%T.%3NZ)"
+    cat /proc/driver/nvidia-fs/stats 2>/dev/null || echo "(unreadable)"
+    sleep 1
+  done
+} > "$RUN_DIR/raw/nvidia-fs-stats.log" 2> "$RUN_DIR/raw/nvidia-fs-stats.err" &
+echo $! > "$PIDS_DIR/nvidia-fs-stats.pid"
 
 # Brief settle so the first sample lands before the benchmark starts
 sleep 2
@@ -452,17 +495,20 @@ EOF
   log "post-run snapshot to $RUN_DIR/post/"
   snapshot "$RUN_DIR/post"
 
-  # Verify recordings produced data.
-  # ⏳ D-4: this required-stream list is the WEKA-over-InfiniBand set carried over
-  # from a previous environment. On AWS there are no IB devices, so
-  # rdma-counters.csv / ipoib-counters.csv will be header-only, and on the Lustre
-  # leg weka-stats.csv will be absent — which marks EVERY run INCOMPLETE until the
-  # per-filesystem recorder adapters replace both the recorders above and this
-  # list. Expect that on the first cloud cell; it is a known gap, not a surprise.
-  log "verifying recordings..."
+  # Verify recordings produced data — against THIS leg's required-stream list
+  # (D-4): the INCOMPLETE rule demands the leg's own Primary streams, not the
+  # other leg's. rdma-counters.csv is deliberately NOT required on the WEKA-on-AWS
+  # leg (no RDMA devices exist; the file is header-only) but is still captured so
+  # an EFA-attached instance records it without a code change. The Lustre list is
+  # built with that leg's adapter (the lustre guard above refuses until then).
+  case "$FS" in
+    weka)   REQUIRED_STREAMS="weka-stats.csv nvidia-smi.csv netdev-counters.csv \
+             sar-cpu.csv sar-disk.csv sar-net.csv sar-mem.csv sar-swap.csv sar-paging.csv" ;;
+    lustre) REQUIRED_STREAMS="" ;;  # unreachable today: the lustre guard refuses at start (D-4)
+  esac
+  log "verifying recordings (required set for fs=$FS)..."
   INCOMPLETE=0
-  for f in weka-stats.csv nvidia-smi.csv ipoib-counters.csv rdma-counters.csv \
-           sar-cpu.csv sar-disk.csv sar-net.csv sar-mem.csv sar-swap.csv sar-paging.csv; do
+  for f in $REQUIRED_STREAMS; do
     path="$RUN_DIR/raw/$f"
     if [[ ! -s "$path" ]]; then
       log "  WARN: $f is missing or empty"

@@ -137,11 +137,12 @@ yet, and its EFA-vs-TCP gate is a hard stop (**D16**), checked *before* anything
 > Read the file `prompts/handoff-cloud.md` and do everything it says, then report back.
 
 It carries the current state (edited at the last teardown) and drives the rest: verifying the bootstrap's
-work read-only, the environment-contract `verify` against the previous leg (**a VIOLATION is a stop** — any
-head-to-head number from two non-matching environments attributes an environment difference to the
-filesystem, the one error this project exists to avoid), the 1.7 re-hydration with byte-verification (the
-driver is `D-13`; `run-leg.sh` aborts rather than skips without it), the throwaway Stage-0 recording proof
-before wallclock is spent (`D-20`), and `run-leg.sh --leg $LEG`, which **resumes** from the git-tracked
+work read-only (`scripts/verify-conda-env.sh` for the environments), the environment-contract `verify`
+against the previous leg (**a VIOLATION is a stop** — any head-to-head number from two non-matching
+environments attributes an environment difference to the filesystem, the one error this project exists to
+avoid), the 1.7 re-hydration with byte-verification (`scripts/sweep-stage1-hydrate.sh`; `run-leg.sh` aborts
+rather than skips without its marker), the scripted Stage-0 recording proof before wallclock is spent
+(`scripts/prove-recording.sh`), and `run-leg.sh --leg $LEG`, which **resumes** from the git-tracked
 markers in `runs/.leg-state/$LEG/`.
 
 > ⚠ **If the marker directory is empty on a mid-leg rebuild, stop** — the previous teardown never committed

@@ -195,7 +195,7 @@ discovery made during analysis.
 | **Aggregator** | `../scripts/aggregate-stage2-properties.py` — rolls the sweep's cells into the summary CSV as the dataset × concurrency × cache-arm grid, and the arm must be a column rather than a name fragment (standing constraint below). Its app-level columns are filesystem-agnostic; its filesystem-side columns read WEKA's telemetry schema, so on the Lustre leg they stay empty and the cross-filesystem view is assembled by hand until the per-filesystem adapter work lands. Interface and that deferral: `SCRIPT-TRACKER.md` (`D-4`) |
 | **Aggregated output** | `s2.0-properties-summary.csv` |
 | **Recorded per cell** | slides catalogued and cell wallclock at that concurrency point; the per-slide latency distribution; the filesystem-side metadata operation rate (within-leg only, per the caveat above); the nominal concurrency and the effective parallelism; the dataset's on-disk layout; the **cache arm** the cell belongs to together with the clearing steps actually applied and what they are known to have cleared — plus the full measurement set, the cache state achieved, and the cost inputs (`RUNBOOK.md`) |
-| **Directory-layout observation to record** | The two datasets have different on-disk layouts — BRCA is nested (one subdirectory per slide, as delivered by the GDC download), CAMELYON16 is flat. Directory structure affects how many metadata operations an `open()` requires, so **the two datasets are reported separately and never averaged**, and the layout is noted alongside each number. This is also a second axis of interest in its own right: whether the two filesystems are affected differently by directory nesting is a metadata-architecture question, and it is recorded rather than predicted. |
+| **Directory-layout observation to record** | The hydrated layouts follow the S3 staging, which is what both legs read: **BRCA is one flat directory of 1133 SVS files** (the prefetch stages per-file GDC API pulls flat — not the per-slide subdirectories a `gdc-client` download would create), and **CAMELYON16's WSIs sit flat under `images/`** (399 files) beside sibling prefixes. Directory shape affects how many metadata operations an `open()` requires and how directory-entry lookup scales with entry count, so **the two datasets are reported separately and never averaged**, and the layout is noted alongside each number. The contrast the layouts actually offer is directory *size* (1133-entry vs 399-entry directories), not nesting depth. Identical on both legs by construction — both hydrate from the same S3 layout. |
 
 > ⚠ **Standing constraint — do not run `../scripts/sweep-stage2-properties.sh` as it stands.** The driver
 > implements no cache handling: no `drop_caches` step, no cold/warm cell token, and a cell loop that walks
@@ -270,9 +270,10 @@ Both are byte-verified held-constant inputs, identical in both legs (**D6**).
   all use it) and handles both formats (SVS, `.tif`). Adding a second reader would vary two things at
   once.
 - **Both datasets, reported separately, never averaged.** *Why:* cross-vendor format diversity (Aperio SVS
-  vs OME-TIFF) **and** different on-disk directory layouts (nested vs flat), which changes the metadata-op
-  count per open. Averaging them would hide the layout effect, which is itself an axis of interest for a
-  metadata comparison.
+  vs OME-TIFF) **and** different on-disk directory shapes (a 1133-entry flat directory vs a 399-entry
+  `images/` directory — both flat at the slide level, per the hydrated layout), which changes the
+  metadata-op profile per open. Averaging them would hide the layout effect, which is itself an axis of
+  interest for a metadata comparison.
 - **Concurrency grid {1, 8, 64, 256}, extending past the instance's core count.** *Why:* log-spaced
   bookends of the saturation curve, with the top point deliberately oversubscribed so client-side
   saturation is visible as its own regime and cannot be mistaken for a filesystem limit.

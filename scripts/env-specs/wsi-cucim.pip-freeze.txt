@@ -12,7 +12,7 @@ filelock @ file:///home/conda/feedstock_root/build_artifacts/filelock_1776621385
 fonttools==4.62.1
 fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1777547723461/work
 gmpy2 @ file:///home/conda/feedstock_root/build_artifacts/gmpy2_1773244929835/work
-h5py==3.16.0
+h5py @ file:///home/conda/feedstock_root/build_artifacts/h5py_1775581046779/work
 imagecodecs @ file:///home/conda/feedstock_root/build_artifacts/imagecodecs_1750866817142/work
 imageio @ file:///home/conda/feedstock_root/build_artifacts/imageio_1738273805233/work
 Jinja2 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_jinja2_1764517220/work
@@ -24,11 +24,11 @@ matplotlib==3.10.9
 monai @ file:///home/conda/feedstock_root/build_artifacts/monai_1769585314056/work
 mpmath @ file:///home/conda/feedstock_root/build_artifacts/mpmath_1733302684489/work
 networkx @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_networkx_1731521053/work
-numpy==2.2.6
+numpy @ file:///home/conda/feedstock_root/build_artifacts/numpy_1747544640217/work/dist/numpy-2.2.6-cp310-cp310-linux_x86_64.whl#sha256=d6d964caeef85d00073d27cd62b46883d275b3d8162f723f0fcabbd0b3cc3f9d
 opencv-python==4.13.0.92
-openslide-python==1.4.3
+openslide-python @ file:///home/conda/feedstock_root/build_artifacts/openslide-python_1768531687867/work
 optree @ file:///home/conda/feedstock_root/build_artifacts/optree_1778047560236/work
-packaging==26.2
+packaging @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_packaging_1777103621/work
 pandas==2.3.3
 pillow==12.2.0
 pybind11 @ file:///D:/bld/bld/rattler-build_pybind11_1755953378/work
@@ -47,5 +47,5 @@ torch @ file:///home/conda/feedstock_root/build_artifacts/libtorch_1772252368025
 torchvision @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_torchvision_1775790347/work
 tqdm==4.67.3
 triton @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_triton_1771627513/work
-typing_extensions==4.15.0
+typing_extensions @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_typing_extensions_1756220668/work
 tzdata==2026.2

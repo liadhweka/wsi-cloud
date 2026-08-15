@@ -1,0 +1,1 @@
+fio --name=smoke0 --directory=/mnt/weka/benchmarks/fio-scratch --rw=readwrite --rwmixread=50 --bs=1M --size=1G --direct=1 --ioengine=libaio --iodepth=4 --runtime=20 --time_based --unlink=1 --output-format=json+ 

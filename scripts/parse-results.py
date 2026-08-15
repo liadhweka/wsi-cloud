@@ -8,11 +8,13 @@ Re-runnable on any existing run directory; the parser is independent of the
 wrapper so improving the parser does NOT require re-running the benchmark.
 
 Reads:
-    raw/weka-stats.csv      WEKA per-process per-second
-    raw/nvidia-smi.csv      GPU per-second
-    raw/ib-counters.csv     IB cumulative byte/packet counters per-second
-    raw/sar.csv             sysstat all-metrics, semicolon-delimited
-    cmd.log                 if it contains fio JSON output, parsed structurally
+    raw/weka-stats.csv        WEKA per-process per-second (client rows summed per timestamp)
+    raw/nvidia-smi.csv        GPU per-second
+    raw/netdev-counters.csv   kernel NIC cumulative counters per-second
+    raw/rdma-counters.csv     RDMA/EFA device counters (absent -> header-only)
+    raw/nvidia-fs-stats.log   verbatim nvidia-fs accounting (presence only until D-6)
+    raw/sar-<cat>.csv         sysstat per-category CSVs
+    cmd.log                   if it contains fio JSON output, parsed structurally
 
 Writes:
     results.json — per-source aggregates: count, mean, p50, p95, p99,
@@ -286,15 +288,18 @@ def _delta_aggregate(rows, key_col, count_cols):
     return out
 
 
-def derive_ib_rates(path: Path):
-    """IPoIB counters from /sys/class/net/<iface>/statistics/. Cumulative -> deltas."""
+def derive_netdev_rates(path: Path):
+    """Kernel netdev counters from /sys/class/net/<iface>/statistics/.
+    Cumulative -> per-second rates. Primary-vs-Diagnostic is per-leg (RUNBOOK
+    table): Diagnostic on the WEKA leg (DPDK bypasses the kernel) except on
+    1.7, where the S3 source traffic makes them Primary on both legs."""
     rows = read_rows(path)
     if not rows:
         return {"present": False}
     return {
         "present": True,
         "row_count": len(rows),
-        "note": "IPoIB control-plane only; NOT the wekafs RDMA data path",
+        "note": "kernel netdev counters; Primary/Diagnostic split is per-leg (docs/RUNBOOK.md)",
         "interfaces": _delta_aggregate(
             rows, "interface",
             ["tx_bytes", "rx_bytes", "tx_packets", "rx_packets"],
@@ -303,20 +308,80 @@ def derive_ib_rates(path: Path):
 
 
 def derive_rdma_rates(path: Path):
-    """RDMA counters from /sys/class/infiniband/<dev>/ports/1/counters/. The
-    wekafs data path. xmit_bytes/rcv_bytes already converted from 4-byte
-    words to bytes by the wrapper."""
+    """RDMA-device counters from /sys/class/infiniband/<dev>/ports/1/. Two
+    shapes per device — IB-spec counters/ (4-byte words, converted to bytes by
+    the wrapper) and EFA hw_counters/ (bytes) — recorded as separate rows.
+    Keyed on device+source so deltas never mix the two streams."""
     rows = read_rows(path)
     if not rows:
         return {"present": False}
+    for r in rows:
+        if r.get("ibdev") and r.get("source"):
+            r["ibdev"] = f'{r["ibdev"]}/{r["source"]}'
     return {
         "present": True,
         "row_count": len(rows),
-        "note": "Native RDMA — wekafs data path",
+        "note": "RDMA/EFA device counters; header-only where no such device exists",
         "devices": _delta_aggregate(
             rows, "ibdev",
             ["xmit_bytes", "rcv_bytes", "xmit_packets", "rcv_packets"],
         ),
+    }
+
+
+# Columns summed across this client's processes per timestamp (rates and byte
+# gauges add); latency and CPU%% are averaged instead — a latency does not sum.
+_WEKA_SUM_COLS = ["Writes/s", "Write", "Reads/s", "Read", "Ops/s",
+                  "L6 Recv", "L6 Sent", "OBS Upload", "OBS Download",
+                  "RDMA Recv", "RDMA Sent"]
+_WEKA_MEAN_COLS = ["Write Latency(µs)", "Read Latency(µs)", "CPU%"]
+
+
+def derive_weka_client(path: Path):
+    """The filesystem-side number for THIS client, per cross-cutting pattern #1:
+    filter to the client's own rows by ROLE (Mode=="client" — this cluster runs
+    exactly one client container by design; never a hostname or numeric id),
+    sum across the client's processes PER TIMESTAMP, then aggregate the
+    per-second sums. A whole-stream mean averages in every idle backend row and
+    under-reports by ~100x while looking plausible."""
+    rows = read_rows(path)
+    client = [r for r in rows if (r.get("Mode") or "").strip().lower() == "client"]
+    if not client:
+        return {"present": False,
+                "note": "no Mode==client rows — the client filter matched nothing; "
+                        "the filesystem-side number for this cell is MISSING, not zero"}
+    by_ts = {}
+    for r in client:
+        ts = r.get("timestamp")
+        if ts:
+            by_ts.setdefault(ts, []).append(r)
+    series = {c: [] for c in _WEKA_SUM_COLS + _WEKA_MEAN_COLS}
+    for ts in sorted(by_ts):
+        group = by_ts[ts]
+        for c in _WEKA_SUM_COLS:
+            vals = [parse_unit(r.get(c, "")) for r in group]
+            vals = [v for v in vals if v is not None]
+            if vals:
+                series[c].append(sum(vals))
+        for c in _WEKA_MEAN_COLS:
+            vals = [parse_unit(r.get(c, "")) for r in group]
+            vals = [v for v in vals if v is not None]
+            if vals:
+                series[c].append(sum(vals) / len(vals))
+    metrics = {}
+    for c, vals in series.items():
+        agg = aggregate(vals)
+        if agg is not None:
+            suffix = "_client_sum" if c in _WEKA_SUM_COLS else "_client_mean"
+            metrics[c + suffix] = agg
+    return {
+        "present": True,
+        "client_process_count": len({r.get("Node ID") for r in client}),
+        "timestamp_count": len(by_ts),
+        "note": "Mode==client rows only, summed per timestamp across the client's "
+                "processes (latency/CPU%% averaged) — the quotable filesystem-side "
+                "series for this cell",
+        "metrics": metrics,
     }
 
 
@@ -405,13 +470,25 @@ def main():
         "sources": {},
     }
 
-    results["sources"]["weka_stats"]   = summarize_csv(raw / "weka-stats.csv")
+    # weka_stats: whole-stream per-column aggregates (context only — they average
+    # every process row, backends included). weka_stats_client is the quotable
+    # per-client series (pattern #1). Keep both: the divergence between them is
+    # itself a check that the filter matched.
+    results["sources"]["weka_stats"]        = summarize_csv(raw / "weka-stats.csv")
+    results["sources"]["weka_stats_client"] = derive_weka_client(raw / "weka-stats.csv")
     results["sources"]["nvidia_smi"]   = summarize_csv(raw / "nvidia-smi.csv")
-    # Two interface-level streams:
-    #   ipoib-counters: IPoIB control-plane traffic (NOT wekafs data path).
-    #   rdma-counters:  native RDMA, the actual wekafs data path.
-    results["sources"]["ipoib_counters"] = derive_ib_rates(raw / "ipoib-counters.csv")
-    results["sources"]["rdma_counters"]  = derive_rdma_rates(raw / "rdma-counters.csv")
+    results["sources"]["netdev_counters"] = derive_netdev_rates(raw / "netdev-counters.csv")
+    results["sources"]["rdma_counters"]   = derive_rdma_rates(raw / "rdma-counters.csv")
+    # nvidia-fs accounting is captured verbatim (timestamped raw blocks); its
+    # parser is written against the enabled-under-load format with D-6, so for
+    # now results.json records presence and block count only.
+    nvfs = raw / "nvidia-fs-stats.log"
+    if nvfs.exists() and nvfs.stat().st_size > 0:
+        blocks = sum(1 for ln in nvfs.open(errors="replace") if ln.startswith("=== "))
+        results["sources"]["nvidia_fs_stats"] = {"present": True, "block_count": blocks,
+                                                 "note": "verbatim 1 Hz capture; parsed with D-6"}
+    else:
+        results["sources"]["nvidia_fs_stats"] = {"present": False}
     # sar is split into per-category CSVs by record-run.sh's cleanup (cpu, disk,
     # net, mem, swap, paging, queue, ctxsw). Each is a clean single-header CSV.
     sar = {}

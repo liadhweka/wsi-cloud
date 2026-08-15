@@ -1,0 +1,52 @@
+{
+  "run_name": "smoke-recording-proof",
+  "stage": "0",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-15T17:12:43Z",
+  "hostname": "ip-10-0-1-181.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "warm",
+  "rep": null,
+  "command": [
+    "fio",
+    "--name=smoke0",
+    "--directory=/mnt/weka/benchmarks/fio-scratch",
+    "--rw=readwrite",
+    "--rwmixread=50",
+    "--bs=1M",
+    "--size=1G",
+    "--direct=1",
+    "--ioengine=libaio",
+    "--iodepth=4",
+    "--runtime=20",
+    "--time_based",
+    "--unlink=1",
+    "--output-format=json+"
+  ],
+  "note": "Stage-0 recording-infra proof after the D-4 WEKA-leg recorder rework: per-leg recorder set + required-stream list, netdev/rdma/nvidia-fs streams, client-summed parser. Cost inputs deliberately unset (pending price confirmation) — warning expected.",
+  "wallclock_s": 21,
+  "started_utc": "2026-08-15T17:12:46Z",
+  "ended_utc": "2026-08-15T17:13:07Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": null,
+    "filesystem_usd_per_hr": null,
+    "software_usd_per_hr": null,
+    "price_checked_utc": null,
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

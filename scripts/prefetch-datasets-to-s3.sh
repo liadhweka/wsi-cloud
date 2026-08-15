@@ -50,16 +50,23 @@ if [ "$SKIP_DATASETS" -eq 0 ]; then   # ---- dataset sections (skipped when mark
 # Staging dir is only needed by the dataset sections; the model half syncs
 # straight between S3 and $HOME and must work on a scratch-less box.
 mkdir -p "$STAGE" || { echo "prefetch: cannot create staging dir $STAGE (scratch not mounted?) — dataset sections cannot run" >&2; exit 1; }
+# Per-file failures land here; a non-empty log blocks the completion marker.
+# WHY: the marker short-circuits every future run, so writing it over failures
+# would hide the gap permanently — the byte-verify at 1.7 would be the first
+# thing to notice, hours later and mid-leg.
+FAIL_LOG="$STAGE/.prefetch-failures-$MODE"
+: > "$FAIL_LOG"
+export FAIL_LOG
 # ---- TCGA via the GDC data API (open-access diagnostic slides; no token) --------
 fetch_tcga_one() { # id filename md5 size
   local id="$1" fn="$2" md5="$3" size="$4" key local_f
   key="datasets/tcga-brca/$fn"; local_f="$STAGE/$fn"
   if s3_has "$key" "$size"; then echo "skip  $fn (already in S3)"; return 0; fi
   echo "fetch $fn ($size bytes)"
-  curl -fsSL --retry 5 --retry-delay 10 -o "$local_f" "https://api.gdc.cancer.gov/data/$id" || { echo "FAIL  $fn (download)"; rm -f "$local_f"; return 1; }
+  curl -fsSL --retry 5 --retry-delay 10 -o "$local_f" "https://api.gdc.cancer.gov/data/$id" || { echo "FAIL  $fn (download)"; echo "tcga $fn download" >> "$FAIL_LOG"; rm -f "$local_f"; return 1; }
   local got; got=$(md5sum "$local_f" | awk '{print $1}')
-  if [ "$got" != "$md5" ]; then echo "FAIL  $fn (md5 $got != $md5)"; rm -f "$local_f"; return 1; fi
-  aws s3 cp --only-show-errors "$local_f" "s3://$S3_BUCKET/$key" || { echo "FAIL  $fn (s3 cp)"; rm -f "$local_f"; return 1; }
+  if [ "$got" != "$md5" ]; then echo "FAIL  $fn (md5 $got != $md5)"; echo "tcga $fn md5" >> "$FAIL_LOG"; rm -f "$local_f"; return 1; fi
+  aws s3 cp --only-show-errors "$local_f" "s3://$S3_BUCKET/$key" || { echo "FAIL  $fn (s3 cp)"; echo "tcga $fn s3cp" >> "$FAIL_LOG"; rm -f "$local_f"; return 1; }
   rm -f "$local_f"; echo "done  $fn"
 }
 export -f fetch_tcga_one s3_has
@@ -79,7 +86,7 @@ fetch_cam_one() { # key size
   dest="datasets/camelyon16/${key#CAMELYON16/}"
   if s3_has "$dest" "$size"; then echo "skip  $key"; return 0; fi
   echo "copy  $key"
-  aws s3 cp --only-show-errors "s3://camelyon-dataset/$key" "s3://$S3_BUCKET/$dest" || echo "FAIL  $key"
+  aws s3 cp --only-show-errors "s3://camelyon-dataset/$key" "s3://$S3_BUCKET/$dest" || { echo "FAIL  $key"; echo "cam $key" >> "$FAIL_LOG"; }
 }
 export -f fetch_cam_one
 
@@ -91,6 +98,10 @@ else
   echo "prefetch: CAMELYON manifest not found: $CAM_MANIFEST (skipping)"
 fi
 
+if [ -s "$FAIL_LOG" ]; then
+  echo "prefetch: $(wc -l < "$FAIL_LOG") file(s) FAILED — NOT writing the completion marker. Re-run to retry; list: $FAIL_LOG" >&2
+  exit 1
+fi
 date -u > "$STAGE/.last-prefetch-$MODE"
 aws s3 cp --only-show-errors "$STAGE/.last-prefetch-$MODE" "s3://$S3_BUCKET/datasets/.prefetch-complete-$MODE" || true
 fi   # ---- end dataset sections
