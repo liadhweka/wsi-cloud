@@ -88,20 +88,29 @@ log() { echo "[$(date -u +%FT%TZ)] run-leg: $*"; }
 #                     is step 6.B.1, still blocked on the corpus-size decision.
 #      6.C   all     · 7 all — every tier, ascending.
 STEPS=(
+  # D18 stability canary — the same fixed pair, interleaved across the leg (unique
+  # step ids so resume semantics hold). Start/end pairs bracket the whole leg;
+  # interior ones land between the major sweeps ≈ three pairs/day. Their spread
+  # is the leg's noise band (RUNBOOK.md, "Run-to-run variance").
+  "C0|Stability canary (D18) — leg start|$LIB/sweep-stability-canary.sh"
   "1.0a|Synthetic ceiling: sequential write|$LIB/sweep-stage1-seqw.sh"
   "1.0b|Synthetic ceiling: sequential read|$LIB/sweep-stage1-seqr.sh"
   "1.0c|Synthetic ceiling: random write IOPS|$LIB/sweep-stage1-randw.sh"
   "1.0d|Synthetic ceiling: random read IOPS|$LIB/sweep-stage1-randr.sh"
   "1.7|S3 -> filesystem hydration (head-to-head ingest)|NOT_YET_BUILT:D-13 sweep-stage1-hydrate.sh"
   "3.0|Tissue detection -- generates the 20x coords that gate 4/5/6/7|$LIB/sweep-stage3-tissue-detection.sh"
+  "C1|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "4.D|20x raw-TIFF conversion -- gates every kvikIO cell|$LIB/convert-stage4c-rawtiff.sh"
   "4.C|kvikIO/cuFile from raw-TIFF, Tier 1 (both cuFile modes)|$LIB/sweep-stage4c-kvikio.sh tier1"
   "4.B|On-the-fly tile reads (OpenSlide + cuCIM CPU)|$LIB/sweep-stage4b-tilesread.sh"
+  "C2|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "4.A|Pre-extract tiles to HDF5|$LIB/sweep-stage4a-patches.sh"
   "5|ResNet-50 DDP scaling, both backends, N in {1,2,4}|$LIB/sweep-stage5-training.sh all"
+  "C3|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "6.A|Foundation-model extraction, Tier 1 (GPU-count scaling)|$LIB/sweep-stage6a-extract.sh tier1"
   "6.A.3|Foundation-model extraction, Tier 3 (CAMELYON16 cross-dataset)|$LIB/sweep-stage6a-extract.sh tier3"
   "6.A.2|Foundation-model extraction, Tier 2 (full cohort: 3 cuCIM + 1 chunked multi-model kvikIO)|$LIB/sweep-stage6a-extract.sh tier2"
+  "C4|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   # all_models, NOT all: `all` sweeps num_workers for ONE model (whatever MODEL
   # defaults to) = 3 cells, whereas the roadmap's 6.B.3 grid is 3 models x
   # num_workers {4,16,32} = 9 cells per leg. With `all` the leg completed, the
@@ -110,11 +119,15 @@ STEPS=(
   "6.B.3|Attention-MIL on real features (3 models x num_workers = 9 cells)|$LIB/sweep-stage6b-mil.sh all_models"
   "6.B.1|Synthetic feature corpus generation|NOT_YET_BUILT:needs corpus size decided (open item 5b)"
   "6.B.2|Small-file / metadata stress sweep|$LIB/sweep-stage6b-stress.sh all"
+  "C5|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "6.C|Concurrent multi-workload + endurance|$LIB/sweep-stage6c.sh all"
+  "C6|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "2.0|Cataloging / metadata sweep|$LIB/sweep-stage2-properties.sh"
   "7|Clinical inference deployment (7.1-7.6)|$LIB/sweep-stage7-clinical.sh all"
+  "C7|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "1.5|Bulk local->filesystem copy|$LIB/sweep-stage1-fpsync.sh"
   "1.6|Mixed concurrent ingest + read|$LIB/sweep-stage1-mixed.sh"
+  "C8|Stability canary (D18) — leg end|$LIB/sweep-stability-canary.sh"
 )
 
 step_id()   { echo "${1%%|*}"; }

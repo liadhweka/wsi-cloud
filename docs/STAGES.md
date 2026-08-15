@@ -456,6 +456,23 @@ transport fallback is a stop; a cuFile compat-mode result is data. *Sources:* `d
 `net=` mount options and the UDP-mode limitations (a UDP client "cannot be configured in high availability
 mode"); AWS FSx for Lustre client documentation for the EFA client configuration.
 
+**D18 — Run-to-run variance is measured, and deltas must clear the noise band.** *Why:* every cell is
+single-shot by default and the two legs run days apart on rebuilt hardware in a shared cloud — without a
+measured noise band, any cross-leg delta is arguable as jitter, and that argument lands on the weakest point
+of an otherwise fully-instrumented comparison. Three mechanisms, **identical on both legs** because the policy
+itself is a held-constant input: **(1)** a fixed **stability-canary pair** (`sweep-stability-canary.sh`: 8 GiB
+O_DIRECT fio read cell + create/stat/unlink metadata cell, ~3 min the pair) interleaved by `run-leg.sh` at
+nine points across the leg — a start/end bracket plus interior points between the major sweeps — whose spread
+is the leg's empirical noise band; a cross-leg delta is **quoted only where it clears both legs' bands**.
+**(2)** **N=3 for headline cells**: the per-leg knee and pinned-peak cells (discovered by each Tier-1, so the
+repeats run right after the peak cell completes — `REP=2` / `REP=3` re-invocations; `record-run.sh` suffixes
+the run name and records the `rep` field) plus the designated short headline cells; aggregation reports
+**median with spread** where a config has multiple reps. **(3)** Long cells (hours-scale, internally
+averaging) get a **split-window check** — first-half versus second-half agreement from the already-recorded
+timeline — instead of repeats. Estimated cost ≈ 4–6 h per leg (~4–6%); the canary alone is ~1.5–2 h.
+*Procedure:* `RUNBOOK.md` "Run-to-run variance". Band computation and rep-grouping live in the shared
+aggregation helper (**tracker D-4**).
+
 ---
 
 ## Naming convention

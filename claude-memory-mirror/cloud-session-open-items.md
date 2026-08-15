@@ -181,6 +181,11 @@ These change what the numbers mean, so resolving them after cells have run means
 
 ## B. Watch during benchmarking
 
+0. **D18 repeats are per-leg discoveries — do not miss them.** Immediately after each Tier-1 identifies the
+   knee / pinned-peak cell, re-invoke that exact target with `REP=2` then `REP=3` (same env). The canary pair
+   is wired into `run-leg.sh` (`C0`–`C8`); the knee repeats are NOT wireable in advance and exist only if run.
+   Detail: `docs/RUNBOOK.md` "Run-to-run variance", `docs/STAGES.md` **D18**.
+
 1. **Instance revisit trigger.** If Leg A's synthetic ceiling pins at line rate across block sizes **and** the
    `num_workers` sweep saturates on CPU cores rather than storage, the instance is measuring itself rather
    than the filesystems — move up before Leg B. Pre-committed so the call is not made later under sunk cost.

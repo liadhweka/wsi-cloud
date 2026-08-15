@@ -237,6 +237,27 @@ of contaminated cells that look fine.
 
 ---
 
+## Run-to-run variance — the D18 policy
+
+Cloud performance drifts, and the legs run days apart — so a cross-leg delta is a finding only once it clears
+the noise. Identical on both legs (the policy is itself a held-constant input):
+
+- **The stability-canary pair** (`sweep-stability-canary.sh`) runs at nine fixed points per leg —
+  `run-leg.sh` steps `C0`–`C8` bracket the leg and interleave the major sweeps. Both cells are deliberately
+  fixed configs; **their spread across the leg is the leg's empirical noise band.** A cross-leg delta is
+  **quoted only where it clears both legs' bands.** (Band computation ships with the shared aggregation
+  helper — tracker **D-4**.)
+- **N=3 for headline cells.** The knee and pinned-peak cells are discovered per leg by each Tier-1, so the
+  repeats cannot be pre-wired: **immediately after a pinned-peak / knee cell completes, re-invoke the same
+  target with `REP=2`, then `REP=3`** (same env, same config — `record-run.sh` suffixes `-repN` and records
+  the `rep` metadata field). Designated fixed headline cells get the same treatment. Aggregation reports
+  **median with spread** where a config carries multiple reps; a single-shot cell quoted as a headline must
+  say so.
+- **Long cells** (hours-scale) are not repeated — their stability evidence is the **split-window check**:
+  first-half vs second-half agreement computed from the already-recorded timeline, at zero added wallclock.
+
+---
+
 ## How to run a sweep, unattended
 
 A sweep is a driver in `scripts/` that loops parameters and calls `record-run.sh` per cell. Each cell is its

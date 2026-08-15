@@ -39,6 +39,11 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -z "$RUN_NAME" ]] && { echo "missing --run-name" >&2; exit 2; }
+
+# Repeat index (D18): REP=2 / REP=3 re-runs of a headline cell get their own run
+# dirs, distinguishable by name and groupable by the metadata field below —
+# aggregation reports median + spread for a config with multiple reps.
+[[ -n "${REP:-}" ]] && RUN_NAME="${RUN_NAME}-rep${REP}"
 [[ -z "$STAGE" ]]    && { echo "missing --stage"    >&2; exit 2; }
 # The sweep drivers take no ENVIRONMENT arguments — several do take a positional
 # target (see run-leg.sh's plan comment) — so none of them pass --fs; they inherit
@@ -245,6 +250,7 @@ cat > "$RUN_DIR/metadata.json" <<EOF
   "cores_reserved": $RESERVED_JSON,
   "cores_available": $CORES_AVAIL,
   "cache_state": $CACHE_JSON,
+  "rep": ${REP:-null},
   "command": $CMD_JSON,
   "note": $NOTE_JSON
 }

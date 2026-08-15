@@ -33,7 +33,7 @@ for a valid cell.
 
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
-| **D-4** | **Per-filesystem recording adapters — design settled; build on-instance** | `record-run.sh`, `parse-results.py`, the aggregators' filesystem-side parsers | Each filesystem exposes different primary sources with different **schemas** (**D12**), so the recorder set and the required-stream list become **per-`$LEG`**: WEKA keeps `weka stats` plus the host recorders; Lustre records `/proc/fs/lustre` counters and `lctl get_param` (`osc.*.stats` / `llite.*.stats`) as its primaries, with the host `sar` streams promoted where the thesis's per-filesystem table says so. `record-run.sh` gains a per-leg required-stream list and **the INCOMPLETE rule is evaluated against the leg's own list** — today it demands the WEKA/IB streams on both legs, so every run marks INCOMPLETE off that stack. A **shared per-leg schema helper** (one module the aggregators import) replaces the per-file filesystem-side parsers; B-1's `_reserved_cores` folds into it. The helper also owns **metric-key naming**: the `non_dpdk_*` / `agg_cpu_busy_ex_dpdk_*` keys were deliberately left stable in the audit (labels fixed; zero docs cite the keys) and get normalized to leg-neutral names here, while no cell exists. Stream names, exact schemas and canary bands are **live-derived on the instance** — write the adapter against the real stats output, never a recalled format. Capture note: flag-less `sar -o` is verified (sysstat 12.6.1) to record **all eight converted categories including per-core CPU**; re-verify once on the instance's sysstat via the first smoke's `sadf` output and the canary bands |
+| **D-4** | **Per-filesystem recording adapters — design settled; build on-instance** | `record-run.sh`, `parse-results.py`, the aggregators' filesystem-side parsers | Each filesystem exposes different primary sources with different **schemas** (**D12**), so the recorder set and the required-stream list become **per-`$LEG`**: WEKA keeps `weka stats` plus the host recorders; Lustre records `/proc/fs/lustre` counters and `lctl get_param` (`osc.*.stats` / `llite.*.stats`) as its primaries, with the host `sar` streams promoted where the thesis's per-filesystem table says so. `record-run.sh` gains a per-leg required-stream list and **the INCOMPLETE rule is evaluated against the leg's own list** — today it demands the WEKA/IB streams on both legs, so every run marks INCOMPLETE off that stack. A **shared per-leg schema helper** (one module the aggregators import) replaces the per-file filesystem-side parsers; B-1's `_reserved_cores` folds into it. The helper also owns **metric-key naming**: the `non_dpdk_*` / `agg_cpu_busy_ex_dpdk_*` keys were deliberately left stable in the audit (labels fixed; zero docs cite the keys) and get normalized to leg-neutral names here, while no cell exists. Stream names, exact schemas and canary bands are **live-derived on the instance** — write the adapter against the real stats output, never a recalled format. The helper also groups rep-indexed runs (`rep` metadata field, **D18**) and reports **median + spread** for any config with multiple reps, and computes the stability-canary noise band per leg. Capture note: flag-less `sar -o` is verified (sysstat 12.6.1) to record **all eight converted categories including per-core CPU**; re-verify once on the instance's sysstat via the first smoke's `sadf` output and the canary bands |
 | **D-5** | **Per-filesystem consistency relation** | The canary logic in the aggregators | Must be derived from the actual EC scheme (WEKA) and the actual stripe layout (Lustre) — neither exists yet |
 | **D-6** | **cuFile path accounting as a recorded source** | `record-run.sh` + the kvikIO readers. **`aggregate-stage4c-kvikio.py` is the concrete consumer:** its `gds_engaged` column is hardcoded `"unknown"` and stays that way until this source exists — so closing D-6 has a defined finish line, namely that column carrying a recorded value | Needs the real cuFile/nvidia-fs stats format. Every kvikIO cell must record GPU-direct-vs-bounced bytes or it is incomplete (**D8**) |
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
@@ -665,6 +665,20 @@ emitter — which a per-slide latency number alone would hide.
 
 **These are filesystem-agnostic and carry over unchanged** — they are part of what makes the datasets a
 held-constant input across legs (**D6**).
+
+---
+
+### `sweep-stability-canary.sh` — the run-to-run noise band (`D18`)
+**What.** Two fixed, short cells (~3 min the pair): an 8 GiB O_DIRECT fio read cell (60 s sequential + 60 s
+random) and a create/stat/unlink 2000-file metadata cell, each wrapped in `record-run.sh` under
+`--stage stability`.
+**Why.** The spread of a deliberately fixed config across the leg is the leg's empirical noise band — the
+thing a cross-leg delta must clear before it is a finding (**D18**). It measures *path stability*, not
+absolute capability: O_DIRECT keeps the client cache out, and the server side is consistently warm on purpose.
+**I/O.** No arguments; needs `FS_MOUNT`. Fixtures live at `${FS_MOUNT}/benchmarks/stability-canary/` (the io
+file is laid out by fio on first run and reused). → two run dirs per invocation.
+**Caveats.** Invoked by `run-leg.sh` steps `C0`–`C8` (unique ids, so resume semantics hold). Band computation
+and rep-grouping are aggregation-side — **D-4**'s shared helper.
 
 ---
 
