@@ -136,6 +136,17 @@ export FSX_TIER=""                               # Leg B
 export FSX_CAPACITY_TIB=""
 export FSX_METADATA_IOPS=""
 export FSX_EFA_ENABLED=""
+
+# ── Cost inputs (PROJECT-THESIS.md §4, STAGES.md D7) ─────────────────────────────
+# Fetch from CURRENT vendor pricing THE DAY you set these — never recall a price.
+# record-run.sh records all four per cell (null + warned when unset, never guessed);
+# both infra-only and all-in cost figures are computed from them.
+export INSTANCE_USD_PER_HR=""
+export FS_USD_PER_HR=""                          # per leg: the provisioned filesystem's rate
+# WEKA leg: the PUBLIC AWS Marketplace rate (citable; a negotiated price is not).
+# Lustre leg: 0 — the FSx service rate is software-inclusive (basis recorded per cell).
+export SOFTWARE_USD_PER_HR=""
+export PRICE_CHECKED_UTC=""                      # e.g. 2026-08-15 — undated is unusable
 export LUSTRE_STRIPE_LAYOUT=""                   # REQUIRED to derive the Lustre canary relation (D12)
 # SCRIPT_COMMIT is deliberately NOT here: env-contract.py collects it itself, from
 # `git rev-parse HEAD` at contract-write time. A hand-typed copy would be a second

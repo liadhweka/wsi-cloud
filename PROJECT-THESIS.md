@@ -79,7 +79,13 @@ winner is. **Which axis turns out to be decisive is a result.**
 **Cost and wallclock are measured on every cell, and cost-to-complete is calculated from them** — per cell and
 per leg:
 
-> **cost to complete = (instance $/hr + filesystem $/hr) × measured wallclock**
+> **infra-only cost = (instance $/hr + filesystem $/hr) × measured wallclock**
+> **all-in cost = (instance $/hr + filesystem $/hr + storage-software $/hr) × measured wallclock**
+
+**Both figures are recorded per cell, on both legs** — record to maximum granularity, decide the presentation
+at writing time. The software input is not symmetric, and the data says so instead of hiding it: FSx's service
+rate is software-inclusive, so its `software_usd_per_hr` is **0 with that stated basis**; WEKA's is the
+**public AWS Marketplace rate** (citable; a negotiated price is not), dated like every other price.
 
 *Why this matters more than either input alone:* it is the figure the buyer actually faces, and it is the only
 place where the deliberate provisioning asymmetry (§5) stops being a caveat and becomes arithmetic. "Lustre at

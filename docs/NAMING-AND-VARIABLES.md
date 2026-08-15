@@ -84,6 +84,9 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 | `DRIVER_VERSION` · `CUDA_VERSION` · `NVIDIA_FS_VERSION` · `LIBCUFILE_VERSION` · `KERNEL_VERSION` | The instance | Held-constant contract; the cuFile stack must be version-matched. |
 | `SCRIPT_COMMIT` | `git rev-parse HEAD` | Both legs must run the same code. **Collected by `env-contract.py` itself — never an `env.sh` field.** The contract is written at the *end* of a leg, so a hand-typed copy goes stale the moment the tree advances, and only the typed one would be wrong. |
 | `FS_TRANSPORT` | `dpdk` (WEKA) / `efa` (Lustre) | The transport actually in use, from the client's own report — never from the mount options passed. **`run-leg.sh` refuses to start a leg when it is unset or shows the fallback** (`udp`/`tcp`) without a written waiver (**D16**): the fallbacks mount cleanly and report plausible numbers for a configuration we decided not to measure. |
+| `INSTANCE_USD_PER_HR` · `FS_USD_PER_HR` | Vendor pricing pages, **fetched the day you set them** | The two infra cost inputs (`../PROJECT-THESIS.md` §4). Recorded per cell by `record-run.sh`; null + warned when unset, never guessed. |
+| `SOFTWARE_USD_PER_HR` | WEKA leg: the **public AWS Marketplace rate** (citable; a negotiated price is not). Lustre leg: **`0`** — the FSx service rate is software-inclusive, and the recorded basis states it | The all-in cost's third input (**D7**). Both infra-only and all-in are computed per cell; presentation is a writing-time choice. |
+| `PRICE_CHECKED_UTC` | The date you fetched the prices | An undated price cannot be audited and a stale one silently rewrites the conclusion — treat undated as missing. |
 
 ## Table 3 — DERIVED (computed; never set by hand)
 

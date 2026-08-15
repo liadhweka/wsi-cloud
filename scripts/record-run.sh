@@ -494,16 +494,19 @@ EOF
   # block existed, and neither the wallclock nor the prices can be recovered once the
   # instance is gone.
   if [[ -n "${WALLCLOCK_S:-}" ]]; then
-    if [[ -z "${INSTANCE_USD_PER_HR:-}" || -z "${FS_USD_PER_HR:-}" || -z "${PRICE_CHECKED_UTC:-}" ]]; then
-      log "  WARN: cost inputs incomplete (INSTANCE_USD_PER_HR / FS_USD_PER_HR / PRICE_CHECKED_UTC)."
-      log "        Cost-to-complete cannot be computed for this cell. Set them in env.sh from CURRENT"
-      log "        vendor pricing, with the date you checked -- do not recall a price."
+    if [[ -z "${INSTANCE_USD_PER_HR:-}" || -z "${FS_USD_PER_HR:-}" || -z "${SOFTWARE_USD_PER_HR:-}" || -z "${PRICE_CHECKED_UTC:-}" ]]; then
+      log "  WARN: cost inputs incomplete (INSTANCE_USD_PER_HR / FS_USD_PER_HR / SOFTWARE_USD_PER_HR /"
+      log "        PRICE_CHECKED_UTC). Cost-to-complete cannot be computed for this cell. Set them in"
+      log "        env.sh from CURRENT vendor pricing, with the date you checked -- do not recall a price."
+      log "        SOFTWARE_USD_PER_HR: the WEKA leg uses the public AWS Marketplace rate; the Lustre leg"
+      log "        sets 0 (the FSx service rate is software-inclusive)."
     fi
     jq \
       --argjson wall "$WALLCLOCK_S" \
       --arg startts "$START_TS" --arg endts "$END_TS" \
       --arg inst "${INSTANCE_USD_PER_HR:-}" \
       --arg fsp  "${FS_USD_PER_HR:-}" \
+      --arg soft "${SOFTWARE_USD_PER_HR:-}" \
       --arg when "${PRICE_CHECKED_UTC:-}" \
       '. + {
          wallclock_s: $wall,
@@ -512,8 +515,9 @@ EOF
          cost_inputs: {
            instance_usd_per_hr:   (if $inst == "" then null else ($inst | tonumber? // $inst) end),
            filesystem_usd_per_hr: (if $fsp  == "" then null else ($fsp  | tonumber? // $fsp)  end),
+           software_usd_per_hr:   (if $soft == "" then null else ($soft | tonumber? // $soft) end),
            price_checked_utc:     (if $when == "" then null else $when end),
-           basis: "infrastructure-only; excludes storage-software licensing"
+           basis: "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
          }
        }' "$RUN_DIR/metadata.json" > "$RUN_DIR/metadata.json.tmp" \
       && mv "$RUN_DIR/metadata.json.tmp" "$RUN_DIR/metadata.json" \

@@ -150,11 +150,11 @@ These change what the numbers mean, so resolving them after cells have run means
     possible. A leg-conditional requirement would catch it but changes *when* the gate blocks: it would fail
     before the filesystem is provisioned. *Recommend* a separate `--check-ready` mode meaning "ready to
     measure", distinct from "configured" — the two questions are genuinely different.
-18. **[USER] WEKA license cost in the price claim.** **Settled for now: every cost figure is labelled
-    infrastructure-only, excluding storage-software licensing** — so the figure is publishable without being
-    misleading. What stays open is whether to *price the licence in* before anything is externalised; "we're
-    cheaper" with it excluded is the most attackable number in the deliverable, and the label mitigates that
-    rather than removing it. Detail: `docs/STAGES.md` **D7**, `docs/RUNBOOK.md` (where the formula lives).
+18. **[USER] Set the four cost inputs at each leg's setup, from that day's pricing.** The licensing question
+    is decided (record both bases; presentation chosen at writing time — `docs/STAGES.md` **D7**): what
+    remains is the per-leg values — `INSTANCE_USD_PER_HR`, `FS_USD_PER_HR`, `SOFTWARE_USD_PER_HR` (WEKA: the
+    **public AWS Marketplace rate**; Lustre: `0`, FSx is software-inclusive), `PRICE_CHECKED_UTC`. Fetch,
+    don't recall. Detail: `docs/RUNBOOK.md` "Cost inputs".
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
     "% of this filesystem's metadata capability", and 1.0d's random-read IOPS would be a mismatched one. Stage 2

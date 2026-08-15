@@ -308,9 +308,14 @@ the environment contract, so the fairness basis is verifiable after the fact rat
 *Sources:* [FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html),
 [SSD storage performance characteristics](https://docs.aws.amazon.com/fsx/latest/LustreGuide/ssd-storage.html)
 — fetch both at provisioning time; tier names, per-TiB figures and limits change.
-*Open sub-item — whether to price WEKA licensing in.* Until that is decided, **every cost figure is labelled
-infrastructure-only, excluding storage-software licensing** (`RUNBOOK.md`): "we're cheaper" is not credible
-with the licence excluded and unlabelled.
+*Licensing is priced in — as a second recorded figure, not a replacement.* Every cell records
+`software_usd_per_hr` alongside the other price inputs, and **both** cost figures — infra-only and all-in —
+are computed per cell on **both** legs; which one leads the writeup is a writing-time choice made with all the
+data present. The input is deliberately asymmetric and the recorded basis says so: FSx's service rate is
+software-inclusive (`0` there), while WEKA's is the **public AWS Marketplace rate** — citable where a
+negotiated price is not — dated like every price. An all-in figure with the asymmetry stated beats an
+infra-only figure with the licence silently excluded: the latter is the most attackable number in the
+deliverable.
 
 **D8 — GPU-direct retained, and asymmetric by design.** kvikIO/cuFile is **not** dropped to force symmetry.
 *Why:* Lustre-over-EFA supports GDS while WEKA-over-ENA may fall back to compat mode, and **that is precisely

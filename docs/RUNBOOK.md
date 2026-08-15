@@ -55,29 +55,30 @@ are visible.
 
 ### Cost inputs — recorded per cell, because they cannot be reconstructed later
 
-`cost to complete = (instance $/hr + filesystem $/hr) × measured wallclock`, calculated **per cell and per
-leg** (`../PROJECT-THESIS.md` §4). So every cell records:
+`infra-only = (instance + filesystem $/hr) × wallclock` and `all-in = (instance + filesystem + software $/hr)
+× wallclock`, both calculated **per cell and per leg** (`../PROJECT-THESIS.md` §4). So every cell records:
 
 - **measured wallclock** (already in the set above),
-- **the instance price** in effect, and **the filesystem price** in effect for the provisioned configuration,
+- **the instance price**, **the filesystem price** for the provisioned configuration, and **the
+  storage-software price** — `0` on the Lustre leg (the FSx service rate is software-inclusive; the recorded
+  basis says so), the **public AWS Marketplace rate** on the WEKA leg,
 - **the date each price was checked.**
 
 **Prices are fetched from the vendor's current pricing, never recalled.** Cloud prices change without notice,
 and a stale price silently rewrites the conclusion. An undated price is not usable — treat it as missing.
 
 **How the wrapper gets them.** `record-run.sh` measures the wallclock itself and reads the prices from the
-environment — `INSTANCE_USD_PER_HR`, `FS_USD_PER_HR`, `PRICE_CHECKED_UTC` — writing all of it into each cell's
-`metadata.json` as `wallclock_s` plus a `cost_inputs` block. **No price is ever baked into a script.** Set the
-three in `env.sh` at provisioning, from pricing fetched that day; the filesystem price is per-leg by
-construction, since the filesystem is the variable under test. An unset price is recorded as `null` and warned
-about rather than guessed — a cell with null prices is one whose cost cannot be computed, which is visible and
-repairable, whereas a fabricated one is neither.
+environment — `INSTANCE_USD_PER_HR`, `FS_USD_PER_HR`, `SOFTWARE_USD_PER_HR`, `PRICE_CHECKED_UTC` — writing all
+of it into each cell's `metadata.json` as `wallclock_s` plus a `cost_inputs` block. **No price is ever baked
+into a script.** Set the four in `env.sh` at provisioning, from pricing fetched that day; the filesystem and
+software prices are per-leg by construction. An unset price is recorded as `null` and warned about rather than
+guessed — a cell with null prices is one whose cost cannot be computed, which is visible and repairable,
+whereas a fabricated one is neither.
 
-**The figure is infrastructure-only: it excludes storage-software licensing.** Both price inputs are the cloud
-bill — the instance, and the provisioned filesystem — so on the self-managed side the WEKA licence sits outside
-them. **Every cost figure carries that label wherever it is quoted**, until a decision is taken to price the
-licence in (**D7**, open sub-item). An unlabelled "we're cheaper" with the licence silently excluded is the
-most attackable number in the deliverable, and the label costs nothing.
+**Two figures, one label rule.** Infra-only and all-in are both computed everywhere; **every quoted cost names
+its basis** — and the software input's asymmetry is stated in the data itself (**D7**): FSx's rate is
+software-inclusive so its software price is `0` with that basis recorded; WEKA's is the public AWS Marketplace
+rate, citable where a negotiated price is not.
 
 This is the figure that turns the deliberate provisioning asymmetry (**D7**) from a caveat into arithmetic:
 "Lustre at maximum versus WEKA at a realistic production configuration" is a fairness claim a reader can argue
