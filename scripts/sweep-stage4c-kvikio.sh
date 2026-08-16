@@ -140,6 +140,7 @@ run_cell() {
   echo "=========================================="
 
   RECORD_RUN_DIR="$run_dir" \
+  RECORD_KVIKIO_CELL=1 \
   "$RECORD" \
     --run-name "$run_name" \
     --stage 4.C \

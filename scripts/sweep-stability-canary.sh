@@ -28,6 +28,10 @@ log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 
 log "=== stability canary pair (D18) ==="
 
+# na-*: NOT_APPLICABLE to the D13 reconciler — cache regime is deliberately not an
+# axis here. The io cell's fixture is client-cold (O_DIRECT) and server-warm BY
+# DESIGN (D18: it measures path stability, not absolute capability).
+RECORD_CACHE_STATE="na-stability-fixture" \
 bash "$REPO/scripts/record-run.sh" --stage stability --run-name canary-io \
   --note "D18 stability canary (io): fio 60s seqread (1M, iodepth 8) + 60s randread (64k, iodepth 16), O_DIRECT, one fixed 8 GiB file at ${CANARY_DIR}. Fixed config by design — this cell's spread across the leg is the leg's noise band for throughput-class cells. It measures path stability, not absolute capability: O_DIRECT keeps the client cache out; the server side is consistently warm." \
   -- fio --name=canary-seqread --filename="$CANARY_DIR/canary-io.bin" --size=8G \
@@ -38,6 +42,7 @@ bash "$REPO/scripts/record-run.sh" --stage stability --run-name canary-io \
          --runtime=60 --time_based \
   || log "WARN: canary io cell failed"
 
+RECORD_CACHE_STATE="na-stability-fixture" \
 bash "$REPO/scripts/record-run.sh" --stage stability --run-name canary-meta \
   --note "D18 stability canary (meta): create/stat/unlink 2000 empty files in a fresh dir, one timed phase each, ops/s printed to stdout. Fixed config by design — this cell's spread across the leg is the leg's noise band for metadata-class cells." \
   -- bash -c '

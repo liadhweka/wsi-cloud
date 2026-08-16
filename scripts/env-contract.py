@@ -24,7 +24,10 @@ USAGE
     env-contract.py write  --leg {weka|lustre} [-o PATH]
     env-contract.py verify --against PATH [--leg {weka|lustre}]
     env-contract.py show   --file PATH
-    env-contract.py env    --file PATH   # emit env.sh export lines (rebuild recovery)
+    env-contract.py env    --file PATH [--for-leg {weka|lustre}]
+                                         # emit env.sh export lines (rebuild recovery);
+                                         # --for-leg matching the contract's leg emits
+                                         # the leg-specific fields LIVE (same-leg rebuild)
 
     Facts are collected automatically where possible (uname, nvidia-smi, git,
     versions, mount info) and read from the environment otherwise — see
@@ -52,15 +55,25 @@ MUST_MATCH = [
     "gpu_model", "gpu_count", "cpu_count", "mem_total_kb",
     "script_commit", "dataset_manifest_sha",
     "conda_env_main", "python_version",
+    # The Stage-1.0 read-corpus definition is identical-by-design across legs
+    # (D13: one corpus definition serves both, or the held-constant contract
+    # breaks on the substage most sensitive to cache). Carrying it here both
+    # enforces that mechanically and lets the emit rebuild env.sh with it.
+    "stage1_seq_corpus_gib", "stage1_randr_region_gib", "stage1_randr_regions",
 ]
-# EXPECTED to differ: filesystem-specific, i.e. the variable under test.
+# EXPECTED to differ: filesystem-specific, i.e. the variable under test — plus the
+# per-leg inputs that legitimately drift (prices, dated ceilings, reserved cores):
+# they are recorded for recovery and reporting, and must never fail a verify.
 MAY_DIFFER = [
     "leg", "fs_mount", "fs_type", "fs_transport", "client_hostname", "libcufile_path",
-    "weka_backend_type", "weka_backend_count", "weka_capacity_tb",
+    "weka_backend_type", "weka_backend_count", "weka_backend_ami", "weka_capacity_tb",
     "weka_ec_scheme", "weka_backend_ram_total",
     "weka_client_cores", "weka_client_nics",
     "fsx_tier", "fsx_capacity_tib", "fsx_metadata_iops",
     "fsx_efa_enabled", "lustre_stripe_layout",
+    "fs_client_reserved_cores",
+    "instance_usd_per_hr", "fs_usd_per_hr", "software_usd_per_hr", "price_checked_utc",
+    "per_client_ceiling_gbps", "per_client_ceiling_basis", "ceiling_checked_utc",
     "written_utc", "instance_id",
 ]
 # Neither compared nor expected-to-differ: present ONLY so the contract can rebuild
@@ -85,6 +98,21 @@ def sh(cmd, default=None):
 def env(name):
     v = os.environ.get(name, "").strip()
     return v or None
+
+
+def _env_python_version():
+    """The benchmark environment's Python, never this tool's interpreter.
+
+    platform.python_version() reports whichever interpreter happens to RUN this
+    script — miniforge base at a teardown, system python at boot — so the field
+    described the launcher, not the held-constant environment, and the identical
+    environment then 'failed' verify whenever a different launcher ran the check.
+    Collect from the env's own binary; null when it is not built yet, never guessed.
+    """
+    d, e = env("CONDA_ENVS_DIR"), env("CONDA_ENV_MAIN")
+    if not (d and e):
+        return None
+    return sh(f'"{d}/{e}/bin/python" -c "import platform; print(platform.python_version())"')
 
 
 def _libcufile_version(path):
@@ -172,7 +200,10 @@ def collect(leg, repo_root):
         "dataset_manifest_sha": sh(f"cat {repo_root}/scripts/manifests/*.tsv 2>/dev/null | sha256sum "
                                    "| cut -c1-16"),
         "conda_env_main":  env("CONDA_ENV_MAIN"),
-        "python_version":  platform.python_version(),
+        "python_version":  _env_python_version(),
+        "stage1_seq_corpus_gib":   env("STAGE1_SEQ_CORPUS_GIB"),
+        "stage1_randr_region_gib": env("STAGE1_RANDR_REGION_GIB"),
+        "stage1_randr_regions":    env("STAGE1_RANDR_REGIONS"),
         # ---- expected to differ ----
         "leg":             leg,
         "fs_mount":        fs_mount,
@@ -185,6 +216,9 @@ def collect(leg, repo_root):
         "client_hostname": env("CLIENT_HOSTNAME") or platform.node(),
         "weka_backend_type":      env("WEKA_BACKEND_TYPE"),
         "weka_backend_count":     env("WEKA_BACKEND_COUNT"),
+        # Backend AMI is recorded, never pinned (ratified): backends are MAY_DIFFER
+        # and absent on Leg B, but the leg's provenance must say what they ran.
+        "weka_backend_ami":       env("WEKA_BACKEND_AMI"),
         "weka_capacity_tb":       env("WEKA_CAPACITY_TB"),
         "weka_ec_scheme":         env("WEKA_EC_SCHEME"),
         "weka_backend_ram_total": env("WEKA_BACKEND_RAM_TOTAL"),
@@ -206,6 +240,15 @@ def collect(leg, repo_root):
         "ceiling_checked_utc":      env("CEILING_CHECKED_UTC"),
         "lustre_stripe_layout":   (sh(f"lfs getstripe -d {fs_mount} 2>/dev/null | tr '\\n' ' '")
                                    or env("LUSTRE_STRIPE_LAYOUT")) if fs_mount else None,
+        # Per-leg measured/priced inputs. Recorded so the recovery emit can rebuild
+        # env.sh with them (the 2026-08 rebuild lost every value that lived only in
+        # the gitignored env.sh); MAY_DIFFER because prices and reserved cores
+        # legitimately differ per leg and must never fail a verify.
+        "fs_client_reserved_cores": env("FS_CLIENT_RESERVED_CORES"),
+        "instance_usd_per_hr":      env("INSTANCE_USD_PER_HR"),
+        "fs_usd_per_hr":            env("FS_USD_PER_HR"),
+        "software_usd_per_hr":      env("SOFTWARE_USD_PER_HR"),
+        "price_checked_utc":        env("PRICE_CHECKED_UTC"),
         "instance_id":     _reconcile(conflicts, "instance_id", "INSTANCE_ID", "instance-id"),
         "written_utc":     datetime.now(timezone.utc).isoformat(),
         # ---- recovery only: not compared, see RECOVERY_ONLY ----
@@ -256,11 +299,24 @@ def cmd_verify(a, repo_root):
     leg = a.leg or env("LEG") or "unknown"
     cur = collect(leg, repo_root)
 
-    violations, expected, unrecorded = [], [], []
+    violations, expected, unrecorded, advanced = [], [], [], []
     for k in MUST_MATCH:
         r, v = ref.get(k), cur.get(k)
         if r in (None, "") or v in (None, ""):
             unrecorded.append((k, r, v))
+        elif k == "script_commit" and str(r) != str(v):
+            # The teardown writes the contract BEFORE its own final commit+push, so
+            # HEAD is legitimately ahead of the recorded commit on every rebuild —
+            # equality here failed structurally, for a reason nobody chose. The real
+            # invariant is that the tree only moved FORWARD: the recorded commit must
+            # be an ancestor of HEAD. Divergence (a revert, a different branch, a
+            # rewritten history) stays a VIOLATION. The forward diff is auditable in
+            # git; measured cells additionally record their own commit per run.
+            ok_hex = all(re.fullmatch(r"[0-9a-f]{7,40}", str(x)) for x in (r, v))
+            anc = ok_hex and subprocess.run(
+                f"git -C {repo_root} merge-base --is-ancestor {r} {v}",
+                shell=True, capture_output=True).returncode == 0
+            (advanced if anc else violations).append((k, r, v))
         elif str(r) != str(v):
             violations.append((k, r, v))
     for k in MAY_DIFFER:
@@ -268,12 +324,16 @@ def cmd_verify(a, repo_root):
             expected.append((k, ref.get(k), cur.get(k)))
 
     print(f"env-contract verify: this leg = {leg!r}  vs  reference leg = {ref.get('leg')!r}\n")
-    print(f"── Held constant: {len(MUST_MATCH) - len(violations) - len(unrecorded)} match, "
-          f"{len(violations)} VIOLATION, {len(unrecorded)} unverifiable ──")
+    print(f"── Held constant: {len(MUST_MATCH) - len(violations) - len(unrecorded) - len(advanced)} match, "
+          f"{len(violations)} VIOLATION, {len(unrecorded)} unverifiable"
+          + (f", {len(advanced)} advanced (ancestor-ok)" if advanced else "") + " ──")
     for k, r, v in violations:
         print(f"  VIOLATION  {k}\n               reference: {r}\n               this leg : {v}")
     for k, r, v in unrecorded:
         print(f"  UNVERIFIABLE {k} (reference={r!r}, this leg={v!r})")
+    for k, r, v in advanced:
+        print(f"  advanced   {k}: {str(r)[:12]} -> {str(v)[:12]} (reference is an ancestor of HEAD —\n"
+              f"             the tree only moved forward; audit the diff with `git diff {str(r)[:12]}..{str(v)[:12]}`)")
 
     print(f"\n── Differs as expected (the variable under test): {len(expected)} ──")
     for k, r, v in expected:
@@ -287,14 +347,30 @@ def cmd_verify(a, repo_root):
             print(f"\n  NOTE ({label}) {x['field']}: env.sh said {x['env_sh']!r}, "
                   f"instance said {x['instance_metadata']!r} — the instance value was used.")
 
+    # D-21 phase 1: the verified marker. run-leg.sh refuses a leg without a marker
+    # matching the current contract (phase 2, ratified 2026-08-16) — "verify ran and
+    # passed" must be a checkable fact, not an instruction followed hours earlier.
+    # The marker records the contract's sha256 so a re-written contract invalidates
+    # a stale PASS mechanically, without trusting mtimes across git checkouts.
+    import hashlib
+    marker = Path(repo_root) / "runs" / ".leg-state" / leg / "contract-verified"
     if violations or unrecorded:
+        marker.unlink(missing_ok=True)
         print("\nenv-contract verify: FAILED.", file=sys.stderr)
         print("  The two legs are NOT demonstrably comparable. Any head-to-head number\n"
               "  produced from them would be attributing an environment difference to the\n"
               "  filesystem. Resolve every VIOLATION, and record every UNVERIFIABLE field,\n"
               "  before running a measured cell.", file=sys.stderr)
         return 1
-    print("\nenv-contract verify: PASSED — every held-constant field matches. Cleared for Leg B.")
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(json.dumps({
+        "verified_utc": datetime.now(timezone.utc).isoformat(),
+        "against": str(Path(a.against).resolve()),
+        "against_sha256": hashlib.sha256(Path(a.against).read_bytes()).hexdigest(),
+        "advanced_script_commit": ({"from": advanced[0][1], "to": advanced[0][2]}
+                                   if advanced else None),
+    }, indent=2) + "\n")
+    print(f"\nenv-contract verify: PASSED — every held-constant field matches. Marker: {marker}")
     return 0
 
 
@@ -307,17 +383,30 @@ def cmd_verify(a, repo_root):
 # itself and in Terraform, not in env.sh.
 ENV_MAP_HELD = {
     "aws_region": "AWS_REGION", "conda_env_main": "CONDA_ENV_MAIN",
+    "stage1_seq_corpus_gib": "STAGE1_SEQ_CORPUS_GIB",
+    "stage1_randr_region_gib": "STAGE1_RANDR_REGION_GIB",
+    "stage1_randr_regions": "STAGE1_RANDR_REGIONS",
 }
 ENV_MAP_LEG = {
     "leg": "LEG",
     "libcufile_path": "LIBCUFILE_PRELOAD", "fs_transport": "FS_TRANSPORT",
     "weka_backend_type": "WEKA_BACKEND_TYPE", "weka_backend_count": "WEKA_BACKEND_COUNT",
+    "weka_backend_ami": "WEKA_BACKEND_AMI",
     "weka_capacity_tb": "WEKA_CAPACITY_TB", "weka_ec_scheme": "WEKA_EC_SCHEME",
     "weka_backend_ram_total": "WEKA_BACKEND_RAM_TOTAL",
     "weka_client_cores": "WEKA_CLIENT_CORES", "weka_client_nics": "WEKA_CLIENT_NICS",
     "fsx_tier": "FSX_TIER", "fsx_capacity_tib": "FSX_CAPACITY_TIB",
     "fsx_metadata_iops": "FSX_METADATA_IOPS", "fsx_efa_enabled": "FSX_EFA_ENABLED",
     "lustre_stripe_layout": "LUSTRE_STRIPE_LAYOUT",
+    "fs_client_reserved_cores": "FS_CLIENT_RESERVED_CORES",
+    # Prices ride here so a SAME-leg rebuild recovers them; on a cross-leg rebuild
+    # they emit commented, which is correct — the next leg re-fetches its own,
+    # dated the day they are set, per the pricing rule.
+    "instance_usd_per_hr": "INSTANCE_USD_PER_HR", "fs_usd_per_hr": "FS_USD_PER_HR",
+    "software_usd_per_hr": "SOFTWARE_USD_PER_HR", "price_checked_utc": "PRICE_CHECKED_UTC",
+    "per_client_ceiling_gbps": "FS_PER_CLIENT_CEILING_GBPS",
+    "per_client_ceiling_basis": "FS_PER_CLIENT_CEILING_BASIS",
+    "ceiling_checked_utc": "CEILING_CHECKED_UTC",
 }
 
 
@@ -333,10 +422,14 @@ def cmd_env(a, repo_root):
 
     Held-constant values are emitted live; leg-specific ones are emitted COMMENTED,
     because on a cross-leg rebuild the previous leg's filesystem facts must not be
-    carried over — they are the variable under test.
+    carried over — they are the variable under test. On a SAME-leg rebuild pass
+    --for-leg: when it matches the contract's leg, the leg-specific fields emit
+    LIVE too — the 2026-08 mid-leg rebuild lost exactly those fields because the
+    bootstrap's merge consumes only live lines.
     """
     c = json.loads(Path(a.file).read_text())
     src_leg = c.get("leg") or "unknown"
+    same_leg = bool(getattr(a, "for_leg", None)) and a.for_leg == src_leg
     print(f"# Generated from {a.file} (leg {src_leg!r}) by env-contract.py env")
     print("# Paste these OVER the placeholders in the top half of env.sh.")
     print("# Do NOT '>>' append: env.sh's --check block sits at the bottom and runs")
@@ -351,14 +444,19 @@ def cmd_env(a, repo_root):
         else:
             print(f'export {var}="{v}"')
     print()
-    print(f"# ── Specific to leg {src_leg!r} — COMMENTED deliberately ──")
-    print("# On a SAME-leg rebuild (a cost pause) uncomment what still applies.")
-    print("# On a CROSS-leg rebuild these belong to the other filesystem: leave them")
-    print("# commented and let this leg's setup (bootstrap or cluster prompt) write the new ones.")
+    if same_leg:
+        print(f"# ── Specific to leg {src_leg!r} — emitted LIVE (--for-leg matches) ──")
+        print("# Same-leg rebuild: these describe THIS leg and carry over. Re-verify any")
+        print("# value the rebuild could have changed (cluster facts) against the live system.")
+    else:
+        print(f"# ── Specific to leg {src_leg!r} — COMMENTED deliberately ──")
+        print("# On a SAME-leg rebuild pass --for-leg (or uncomment what still applies).")
+        print("# On a CROSS-leg rebuild these belong to the other filesystem: leave them")
+        print("# commented and let this leg's setup (bootstrap or cluster prompt) write the new ones.")
     for k, var in ENV_MAP_LEG.items():
         v = c.get(k)
         if v not in (None, ""):
-            print(f'# export {var}="{v}"')
+            print(('export' if same_leg else '# export') + f' {var}="{v}"')
     print()
     print("# ── NOT in the contract; supply these yourself ──")
     print("#   everything else has a working default in env.example.sh")
@@ -388,7 +486,7 @@ def main():
     w = sub.add_parser("write");  w.add_argument("--leg", required=True, choices=["weka", "lustre"]); w.add_argument("-o", "--output")
     v = sub.add_parser("verify"); v.add_argument("--against", required=True); v.add_argument("--leg", choices=["weka", "lustre"])
     s = sub.add_parser("show");   s.add_argument("--file", required=True)
-    e = sub.add_parser("env");    e.add_argument("--file", required=True)
+    e = sub.add_parser("env");    e.add_argument("--file", required=True); e.add_argument("--for-leg", dest="for_leg", choices=["weka", "lustre"])
     a = ap.parse_args()
     return {"write": cmd_write, "verify": cmd_verify, "show": cmd_show,
             "env": cmd_env}[a.cmd](a, repo_root)

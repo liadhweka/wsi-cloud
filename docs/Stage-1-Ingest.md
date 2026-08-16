@@ -384,6 +384,14 @@ One entry per live Stage 1 decision. Cross-stage decisions live in `STAGES.md`.
   a repeat re-reading its first run's region measures that run's cache. Sizes are env parameters derived
   from the fetched cache figures at provisioning (`STAGE1_SEQ_CORPUS_GIB`, `STAGE1_RANDR_REGION_GIB`,
   `STAGE1_RANDR_REGIONS`) — one identical definition serving both legs, never driver literals.
+- **The frozen Stage-1.0 corpus sizes (ratified against the confirmed 1536 GiB backend RAM):
+  `STAGE1_SEQ_CORPUS_GIB=3072`, `STAGE1_RANDR_REGION_GIB=256`, `STAGE1_RANDR_REGIONS=26`.** *Why these
+  values:* the seq scan corpus is 2.0× the larger of the two server-side caches (WEKA's 8 × 192 GiB
+  = 1536 GiB > FSx's ~721 GiB at PERSISTENT-1000 × 26.4 TiB, both fetched at provisioning), per the
+  ≥ ~2× rule above; the region pool is the 21 grid cells plus 5 reserve regions for the D18 knee/peak
+  repeats. One identical definition serves both legs (**D13**), so the values are carried in the
+  environment contract (`stage1_*`, MUST_MATCH) — a value that lived only in the gitignored env.sh died
+  with the last rebuild.
 - **A reference cell is the standard evidence device wherever cache discipline rests on construction or on
   an exemption — and its direction follows the grid's default regime.** 1.6's grid is warm-by-exemption, so
   its reference is **cold**; 1.0b/1.0d's grids are cold-by-construction, so their references are **warm** — a

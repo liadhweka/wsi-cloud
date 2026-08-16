@@ -43,6 +43,11 @@ mkdir -p "$RECORD_RUN_DIR"
 
 NOTE="Single-cell kvikIO/cuFile spot check on fs=${LEG}, PIPELINE path: random raw-TIFF tile reads, N=${NGPU} processes on GPUs ${GPUS}, compat_mode=${COMPAT} (REQUESTED, not proven — path accounting per D-6 settles which path ran), n_buffer=${NB}, num_threads=${NT}, DATASET=${DATASET}. LABEL=${LABEL} = the client configuration being varied across successive runs; record what it means in this note when you use it. PRIMARY = aggregate app tiles/sec + GB/s from the per-process summaries, cross-checked against this leg's filesystem-side primary per docs/RUNBOOK.md's source table (which differs per leg — never quote a bypassed source). NOT a % -of-ceiling denominator: those come from the block-size-matched Stage 1.0 cells."
 
+# RECORD_KVIKIO_CELL: record-run refuses to stamp a kvikIO cell OK without the
+# recorded path_accounting split (D-30/D8). na-*: this helper is a diagnostic
+# spot check that manages no cache regime — NOT_APPLICABLE to the reconciler.
+RECORD_KVIKIO_CELL=1 \
+RECORD_CACHE_STATE="na-diagnostic-spot-check" \
 "$RECORD" --stage "$STAGE" --run-name "$RUN_NAME" --note "$NOTE" -- \
   "$MULTI" "$NGPU" "$GPUS" "$COMPAT" "$NB" "$NT" "$RECORD_RUN_DIR"
 

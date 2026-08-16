@@ -121,6 +121,7 @@ esac
 # captured progressively rather than up front.
 export WEKA_BACKEND_TYPE=""
 export WEKA_BACKEND_COUNT=""
+export WEKA_BACKEND_AMI=""                       # recorded, never pinned: backends are MAY_DIFFER and absent on Leg B, but the leg's provenance must say what they ran
 export WEKA_CAPACITY_TB=""
 export WEKA_EC_SCHEME=""                         # REQUIRED to derive the WEKA canary relation (D12)
 export WEKA_BACKEND_RAM_TOTAL=""                 # drives Stage 6.B corpus sizing (tracker item 5b)

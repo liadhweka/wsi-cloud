@@ -45,14 +45,14 @@ for a valid cell.
 | **D-16** | **Lustre client-side EFA configuration** | `../prompts/prompt-lustre-cluster-cloud.md` | The documented Leg-B flow enables EFA on the instance and the file system and installs the generic EC2 EFA software, but nothing yet runs AWS's FSx-Lustre EFA client setup — so the client would mount over TCP, forfeiting GDS **and** the per-server-cap escape while still producing numbers. That breaks the "Lustre at maximum" basis (**D7**) invisibly. Needs the current AWS FSx-Lustre client docs, plus a gate that `lnetctl net show` lists an `efa` net |
 | **D-17** | **Leg-B kernel-vs-contract policy — and the same "latest is not a pin" hazard in the NVIDIA stack** | `../prompts/prompt-lustre-cluster-cloud.md`, `bootstrap-instance.sh` | The documented Lustre client install can pull a newer kernel, and `kernel` is a `MUST_MATCH` contract field — so the Leg-B procedure can invalidate the comparison the contract exists to protect; any OS upgrade can too. Decide: pin the kernel and install a client build matching the running kernel (per AWS's install docs for this OS), or re-baseline both legs. **Same class, one layer down:** the client AMI is now pinned in terraform (`client_instance_ami_id`, 2026-08-15), but the bootstrap installs the NVIDIA driver via unpinned `dnf install nvidia-driver`, so `DRIVER_VERSION`/`NVIDIA_FS_VERSION` can drift between legs independently of the AMI. Before Leg B's rebuild: pin the driver package to Leg A's recorded versions (dnf versionlock or explicit package versions from the contract), or accept the contract verify as the tripwire and re-baseline deliberately if it fires |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
-| **D-21** | **A contract-verified marker `run-leg.sh` refuses without** | `env-contract.py`, `run-leg.sh` | The rebuild runs `env-contract.py verify` as "the gate", then starts the leg **without checking the gate ever ran or passed.** Phase 1 (safe): `verify` writes `runs/.leg-state/$LEG/contract-verified` on PASS and unlinks it on FAIL; `run-leg.sh` warns loudly when it is absent or older than the contract. Phase 2 — promoting that to a refusal — **needs explicit ratification**, since it can abort a leg |
 | **D-24** | **Cross-leg artifact fingerprints — definitions RATIFIED (2026-08-15, register entry D19); build the `capture`/`compare` CLI once 3.0 has real output** | new `capture`/`compare` in `../scripts/`; definitions in `STAGES.md` **D19** + the `RUNBOOK.md` gates table | The four per-class definitions are decided (dataset bytes: hashed path/size/md5 list; coords: per-slide count + array-contents hash; raw-TIFF: byte count + tile grid; features: counts + shapes + dtype, never values) and fingerprints land in `runs/.leg-state/<leg>/fingerprints/` (git-tracked). Building the CLI against imagined 3.0 output would be rewritten anyway — build it right after 3.0's first real cells, before Stage 4 consumes the coords |
 | **D-25** | **Stage 6.C's 4-GPU partition** | `orchestrate-concurrent-stage6c.sh` | 6.C pins MIL to GPU 0 "to stay out of the extract workload's GPUs" while extract requests 4 — an isolation that is arithmetically impossible on a 4-GPU instance. Decide the partition (extract on 3 + MIL on 1, or accept sharing and delete the isolation claim); either way the retention denominators change, so it is a methodology call, not a tuning one |
 | **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
-| **D-30** | **`record-run.sh`'s OK/INCOMPLETE verdict enforces none of RUNBOOK's per-cell requirements** | `record-run.sh:394-422` | A cell missing cost inputs, cache state, core accounting or cuFile path proof is still stamped `OK`. Decide what blocks versus warns — same shape as **D-21** phase 2, and it should be decided with it |
+| **D-30** | **Verdict semantics DECIDED + wrapper half DONE (ratified 2026-08-16; register D21): cache_state undeclared on a stage≥1 cell → INCOMPLETE; `RECORD_KVIKIO_CELL=1` without a recorded `path_accounting` split → INCOMPLETE; missing cost inputs → warn only (re-derivable arithmetic); contract-verified marker absent at leg start → refuse (was D-21). Remaining: the driver declarations** | stage 3–7 sweep drivers | The wrapper now refuses undeclared cells, so **every stage 3–7 driver must set `RECORD_CACHE_STATE` per cell (and `RECORD_KVIKIO_CELL=1` on kvikIO cells) before its stage runs, or the chain aborts on a mislabelled-as-INCOMPLETE cell**: `sweep-stage3-tissue-detection.sh`, `sweep-stage4a-patches.sh`, `sweep-stage4c-kvikio.sh` (kvikIO flag done; cache regime pending — per-mode regimes are a methodology call), `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage6b-{mil,stress}.sh`, `sweep-stage6c.sh`, `sweep-stage7-clinical.sh`, `convert-stage4c-rawtiff.sh` (with D-15). Regimes follow each roadmap's cache-discipline row; surface any stage whose roadmap defines none |
 | **D-31** | **The environment contract omits the 20 workload-shape variables** | `env-contract.py:48-72` | `docs/NAMING-AND-VARIABLES.md` Table 5 declares them identical-across-legs, but the contract records none. **Do not simply append them to `MUST_MATCH`:** `verify()` pushes a null-vs-null pair into `unrecorded` and returns FAILED, so the normal case (both legs on defaults) would fail. Needs a tri-state or a defaults-aware comparison |
 | **D-32** | **`dataset_manifest_sha` hashes the manifest, not the dataset bytes** | `env-contract.py:174-175` | The held-constant field "the datasets and their byte contents" is therefore asserted, never verified. Full rehashing costs hours of leg wallclock, so the cheaper options (file count + total bytes + newest mtime; or a sampled hash) are a methodology call |
 | **D-33** | **Stage 7's `## 7.1` headline grid is structurally always empty** | `aggregate-stage7-clinical.py` | The grid filters on `cell_name.startswith('7.1')`, but `RUN_NAME_RE` strips the stage segment, so a `record-run.sh`-named dir `…-s7.1-baseline-…` yields `cell_name='baseline-…'` and never matches. 7.2 only appears because its driver pre-computes a `-s7-7.2-…` dir, leaving the sub-tier inside the name. Either match on the recorded `stage` field or stop stripping the segment — but the two naming shapes must be reconciled first, which is why this is not a one-line fix |
+| **D-34** | **Short-cell recorder poll rate — DECIDED (ratified 2026-08-16, Stage-2 register): raise the filesystem-side poll rate for short cells (~10 Hz), identically on both legs; build it** | `record-run.sh` (recorder set) | Sub-second high-concurrency Stage 2/3 cells yield 1–3 samples at 1 Hz, so any sustained mean is ill-defined and both legs lose filesystem-side evidence exactly where the metadata architectures differ most. Implement before the first Stage 2/3 cell; verify the higher rate does not itself perturb the measurement (the recorded `_sample_interval_s` block is the evidence) |
 
 > **Nothing was deleted.** An earlier plan assumed GPUDirect Storage would be dropped, which would have
 > removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**), so
@@ -116,8 +116,13 @@ identically, and per-cell failure is isolated — a bad cell goes `INCOMPLETE` w
 `FS_CLIENT_RESERVED_CORES`) and the declared `cache_state` (from `RECORD_CACHE_STATE`, set per cell by the
 sweep drivers) — each recorded null + warned when unset, never guessed; CPU aggregators refuse a null
 `cores_reserved` (**D15**/**D13**).
-**Caveats.** Honours `RECORD_RUN_DIR`. Marks `INCOMPLETE` if the command returns non-zero **or** any stream
-in **this leg's required list** has fewer than two lines (per-`$FS`, D-4). The WEKA-leg set: `weka stats
+**Caveats.** Honours `RECORD_RUN_DIR`. Marks `INCOMPLETE` if the command returns non-zero, **or** any stream
+in **this leg's required list** has fewer than two lines (per-`$FS`, D-4), **or** — the ratified D-30
+verdict semantics (register D21) — a **stage ≥ 1 cell has no `RECORD_CACHE_STATE` declared** (write cells
+declare `na-write-cell`; deliberate non-axes declare `na-*`; stage 0 is exempt — infra proofs measure the
+recorder, not storage), **or** a cell declared `RECORD_KVIKIO_CELL=1` has **no recorded `path_accounting`
+split** in the run dir (a config flag is not proof of path, D8). **Missing cost inputs stay warn-only** —
+cost is re-derivable arithmetic from wallclock + a dated price; a missing regime or path proof is not. The WEKA-leg set: `weka stats
 realtime` 1 Hz poll (all processes; client rows filtered at parse time), `nvidia-smi`, `sar`, kernel netdev
 counters (Diagnostic here except 1.7), RDMA/EFA device counters (header-only where absent, not required on
 this leg), and a **verbatim 1 Hz `/proc/driver/nvidia-fs/stats` capture** (the kernel half of cuFile path
@@ -231,6 +236,18 @@ under test.
 anything unavailable is recorded as **null, never guessed**. `verify` treats a null on a held-constant field
 as **unverifiable → FAILED**, because *an unrecorded fact cannot be shown to have matched*. `write` also exits
 non-zero when held-constant fields are missing, so an incomplete contract cannot pass unnoticed.
+**`python_version` is collected from `$CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python`, never from the
+interpreter running the tool** — the latter recorded the launcher (miniforge base at a teardown, system
+python at boot), so the identical environment "failed" verify under a different launcher.
+**`script_commit` compares by ancestry, not equality:** the teardown writes the contract before its own
+final commit+push, so HEAD is legitimately ahead on every rebuild; the recorded commit must be an
+**ancestor** of HEAD (reported as *advanced, ancestor-ok* with the auditable diff range), and divergence
+stays a VIOLATION. **`verify` writes `runs/.leg-state/$LEG/contract-verified` on PASS** (with the contract's
+sha256) and unlinks it on FAIL — the marker `run-leg.sh` refuses without (D-21, ratified). The contract also
+carries the per-leg **recovery fields** (prices + dates, ceiling, `FS_CLIENT_RESERVED_CORES`, backend AMI)
+and the held-constant **`STAGE1_*` corpus definition**, because the 2026-08 rebuild lost every value that
+lived only in the gitignored env.sh. `env --for-leg <leg>` matching the contract's leg emits the
+leg-specific fields **live** (same-leg rebuild); without it they emit commented (cross-leg, correct).
 **`env.sh` is reconciled against instance metadata, not trusted.** `instance_type`, `aws_region`, `aws_az`,
 `ami_id` and `instance_id` are fetched from **both** `env.sh` and IMDS; **metadata wins** and any disagreement
 is recorded in `source_conflicts`. *Why metadata wins:* `env.sh` is a generated
@@ -253,7 +270,7 @@ silently skip the whole leg.
 **Why.** A leg is many hours of sweeps that must run in a fixed order because each stage produces inputs the
 next consumes. Driving that by hand overnight invites a missed step or a silently-continued failure.
 **It orchestrates SWEEPS, not cells** — per-cell recording and failure isolation stay with `record-run.sh`.
-**The five guards, each with its reason:** (1) **abort the chain on any step failure** — later steps consume
+**The six guards, each with its reason:** (1) **abort the chain on any step failure** — later steps consume
 earlier outputs, so continuing would build cells on missing inputs; (2) **checkpoint + resume** via per-step
 done-markers, so a crash re-runs only what is missing; (3) **S3 sync after every step**, because both mounts
 and local scratch are ephemeral; (4) **tee everything** — on an overnight run the log is the only forensic
@@ -263,7 +280,11 @@ prompt verifies it (and records it on Leg B). Unset refuses too, because an
 unrecorded transport cannot be shown to be the right one. Overridable only by a written reason in
 `runs/.leg-state/$LEG/transport-waiver`, which is then echoed into the log. *Why here:* this is the unattended
 entry point, and the fallback transports (UDP / TCP) mount cleanly and report plausible numbers, so an
-instruction followed hours earlier is not evidence.
+instruction followed hours earlier is not evidence; (6) **refuse a leg whose environment contract was never
+verified** (ratified, was D-21): when `runs/env-contract-leg-$LEG.json` exists, the `contract-verified`
+marker written by `env-contract.py verify` must exist and its recorded sha256 must match the current
+contract file — "the procedure says verify ran" is an instruction, and this converts it into a checkable
+fact. `--dry-run` is exempt (it executes nothing).
 **Caveats.** Refuses to start without `FS_MOUNT`/`S3_BUCKET`, and **refuses if `--leg` disagrees with
 `FS_MOUNT`**. A step whose driver does not exist yet is reported **MISSING and aborts** rather than being
 skipped — *a leg with a hole in it looks complete in `INDEX.md`*, which is the failure this prevents. One
@@ -343,7 +364,12 @@ build records mechanically.
 fail-loud verification is `D-22`. The re-hydration guard keys on
 `runs/.leg-state/$LEG/hydration-complete`, which only the `D-13` hydrate driver will write. Boot progress
 lands in the instance log; the SSM deploy-key step must report the fixed key installed (next-rebuild
-verification, open-items memory).
+verification, open-items memory). **The rebuild's env.sh merge runs the contract emit FIRST
+(`env --for-leg weka`, so same-leg fields arrive live) and applies this instance's freshly-derived cluster
+evidence AFTER it** — a mid-leg rebuild can deliberately change the cluster, so live facts must beat the
+torn-down cluster's recorded ones, while contract-only values (prices, corpus sizes, reserved cores) still
+recover. `weka status` reports capacity in **TiB**; the bootstrap converts to TB before writing
+`WEKA_CAPACITY_TB` (the 2026-08 rebuild wrote the TiB number under the TB name — a ~10% silent unit error).
 
 ### `prefetch-datasets-to-s3.sh` — one-time dataset staging ⭐ NEW
 

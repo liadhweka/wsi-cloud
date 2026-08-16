@@ -72,6 +72,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 | `INSTANCE_ID` | Instance launch | Provenance. |
 | `CLIENT_HOSTNAME` | `hostname` on the instance | Provenance. The aggregators select client telemetry by **role** (`Mode=="client"`), never by hostname — hostnames are rebuild-unstable, and this cluster runs exactly one client container by design. |
 | `WEKA_BACKEND_TYPE` · `WEKA_BACKEND_COUNT` | Your WEKA provisioning | Sizing evidence for the fairness basis (**D7**). |
+| `WEKA_BACKEND_AMI` | `describe-instances` at spin-up | **Recorded, never pinned:** backends are `MAY_DIFFER` and absent on Leg B, but the leg's provenance must say what they ran (STAGES.md **D20**). |
 | `WEKA_CAPACITY_TB` | WEKA provisioning | Same. |
 | `WEKA_EC_SCHEME` | WEKA provisioning | **Required** to derive the WEKA cross-source consistency relation (**D12**) — the canary cannot run without it. |
 | `WEKA_BACKEND_RAM_TOTAL` | Sum of backend instance RAM | WEKA's half of the cache the Stage 6.B corpus must exceed. The corpus is sized against **both** filesystems' caches so one identical definition serves both legs (**D13**) — see the open-items memory, the 6.B corpus-sizing item. |

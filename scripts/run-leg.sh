@@ -200,6 +200,31 @@ elif [ "$FS_TRANSPORT" != "$WANT_TRANSPORT" ]; then
   fi
 fi
 
+# ── D-21 phase 2 (ratified 2026-08-16): the contract gate must have RUN and PASSED ─
+# `env-contract.py verify` writes $STATE/$LEG/contract-verified on PASS (recording
+# the contract file's sha256) and unlinks it on FAIL. Refusing here converts "the
+# rebuild procedure says verify ran" — an instruction followed hours earlier — into
+# a checkable fact at the unattended entry point. A marker whose recorded sha no
+# longer matches the contract file is stale: the contract changed after the PASS,
+# so the PASS proves nothing about it. --dry-run is exempt (it executes nothing).
+CONTRACT_FILE="$REPO/runs/env-contract-leg-$LEG.json"
+CV_MARKER="$STATE/$LEG/contract-verified"
+if [ "$DRY" -ne 1 ] && [ -f "$CONTRACT_FILE" ]; then
+  if [ ! -f "$CV_MARKER" ]; then
+    die "FATAL: no contract-verified marker at $CV_MARKER (D-21 phase 2).
+       Run:  scripts/env-contract.py verify --against $CONTRACT_FILE --leg $LEG
+       A leg started without a passed contract verify can attribute an environment
+       difference to the filesystem — the one error this project exists to avoid."
+  fi
+  _want_sha=$(sha256sum "$CONTRACT_FILE" | cut -d' ' -f1)
+  _have_sha=$(sed -n 's/.*"against_sha256": "\([0-9a-f]*\)".*/\1/p' "$CV_MARKER" | head -1)
+  if [ "$_want_sha" != "$_have_sha" ]; then
+    die "FATAL: contract-verified marker is STALE (D-21 phase 2): the contract at
+       $CONTRACT_FILE
+       changed after the recorded PASS. Re-run the verify against the current file."
+  fi
+fi
+
 # --from / --only must name a real step. Without this check a typo (a missing dot,
 # the wrong case) silently matches nothing: every step is skipped and the script
 # exits 0 reporting "0 step(s) run" — which reads as success on an overnight run.

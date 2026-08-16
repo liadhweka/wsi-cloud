@@ -219,7 +219,11 @@ step "5. WEKA facts (evidence, not intent — D16)"
 FS_NAME=$(findmnt -n -o SOURCE "$WEKA_MNT" 2>/dev/null | awk -F/ '{print $NF}')
 WSTAT=$(weka status 2>/dev/null || true)
 EC=$(echo "$WSTAT"     | sed -n 's/.*protection: \([0-9]\++[0-9]\+\).*/\1/p' | head -1)
-CAP=$(echo "$WSTAT"    | sed -n 's/.*drive storage: \([0-9.]\+\) TiB total.*/\1/p' | head -1)
+# `weka status` reports TiB; the env variable is WEKA_CAPACITY_TB, so convert —
+# the 2026-08 rebuild wrote the TiB number under the TB name and the ~10% unit
+# error would have flowed into the contract and every capacity computation.
+CAP_TIB=$(echo "$WSTAT" | sed -n 's/.*drive storage: \([0-9.]\+\) TiB total.*/\1/p' | head -1)
+CAP=$([ -n "$CAP_TIB" ] && awk -v t="$CAP_TIB" 'BEGIN{printf "%.2f", t*1.099511627776}')
 read -r BACKENDS CLIENT_CORES <<< "$(weka cluster container -J 2>/dev/null | python3 -c "
 import json,sys
 try:
@@ -246,7 +250,7 @@ BOUND_NICS=$(( ENA_TOTAL - ENA_KERNEL )); [ "$BOUND_NICS" -lt 0 ] && BOUND_NICS=
 HUGE=$(awk '/HugePages_Total/ {print $2}' /proc/meminfo)
 FS_TRANSPORT=""
 if [ "$BOUND_NICS" -ge 1 ] && [ "${HUGE:-0}" -gt 0 ]; then FS_TRANSPORT="dpdk"; fi
-echo "fs_name=$FS_NAME ec=$EC cap_tib=$CAP backends=$BACKENDS client_cores=$CLIENT_CORES bound_nics=$BOUND_NICS hugepages=$HUGE -> FS_TRANSPORT='${FS_TRANSPORT:-<blank: no evidence>}'"
+echo "fs_name=$FS_NAME ec=$EC cap_tb=$CAP (=${CAP_TIB:-?} TiB) backends=$BACKENDS client_cores=$CLIENT_CORES bound_nics=$BOUND_NICS hugepages=$HUGE -> FS_TRANSPORT='${FS_TRANSPORT:-<blank: no evidence>}'"
 
 step "6. env.sh (rebuild-aware)"
 ENV_SH=$REPO/env.sh
@@ -270,17 +274,16 @@ if not done:
 open(p,'w').writelines(lines)
 PY
 }
-py_set AWS_REGION "$REGION";            py_set S3_BUCKET "$S3_BUCKET"
-[ -n "$EC" ]           && py_set WEKA_EC_SCHEME "$EC"
-[ -n "$CAP" ]          && py_set WEKA_CAPACITY_TB "$CAP"
-[ -n "$BACKENDS" ]     && py_set WEKA_BACKEND_COUNT "$BACKENDS"
-[ -n "$CLIENT_CORES" ] && py_set WEKA_CLIENT_CORES "$CLIENT_CORES"
-[ "$BOUND_NICS" -ge 1 ] && py_set WEKA_CLIENT_NICS "$BOUND_NICS"
-[ -n "$FS_TRANSPORT" ] && py_set FS_TRANSPORT "$FS_TRANSPORT"
 if [ $REBUILD -eq 1 ]; then
-  # Contract values win over freshly-derived ones where both exist: the contract is
-  # what Leg A actually measured under.
-  python3 "$REPO/scripts/env-contract.py" env --file "$CONTRACT" 2>/dev/null | \
+  # Contract merge runs FIRST; this instance's freshly-derived evidence is applied
+  # AFTER it and therefore wins where both exist. A mid-leg rebuild can deliberately
+  # change the cluster (the 2026-08 backend switch did), so live cluster facts must
+  # beat the torn-down cluster's recorded ones — while everything only the contract
+  # knows (prices, corpus sizes, reserved cores) still recovers from it.
+  # --for-leg weka: this bootstrap builds only the WEKA leg, so a rebuild here is
+  # same-leg by definition — the leg-specific fields must emit LIVE or the merge
+  # (which consumes only live export lines) drops them, as the 2026-08 rebuild did.
+  python3 "$REPO/scripts/env-contract.py" env --file "$CONTRACT" --for-leg weka 2>/dev/null | \
   while IFS= read -r line; do
     case "$line" in export\ *=\"*\")
       k=${line#export }; k=${k%%=*}; v=${line#*\"}; v=${v%\"*}
@@ -288,6 +291,13 @@ if [ $REBUILD -eq 1 ]; then
     esac
   done
 fi
+py_set AWS_REGION "$REGION";            py_set S3_BUCKET "$S3_BUCKET"
+[ -n "$EC" ]           && py_set WEKA_EC_SCHEME "$EC"
+[ -n "$CAP" ]          && py_set WEKA_CAPACITY_TB "$CAP"
+[ -n "$BACKENDS" ]     && py_set WEKA_BACKEND_COUNT "$BACKENDS"
+[ -n "$CLIENT_CORES" ] && py_set WEKA_CLIENT_CORES "$CLIENT_CORES"
+[ "$BOUND_NICS" -ge 1 ] && py_set WEKA_CLIENT_NICS "$BOUND_NICS"
+[ -n "$FS_TRANSPORT" ] && py_set FS_TRANSPORT "$FS_TRANSPORT"
 chown $U:$U "$ENV_SH"
 
 step "6.5 cuFile/GDS wiring (weka leg: compat mode — D-10 mechanical half)"

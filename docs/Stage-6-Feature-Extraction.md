@@ -87,8 +87,13 @@ before Lustre exists. Two ways out, and the choice must be made deliberately:
 straightforward; the server side is only partly under our control on managed storage. **Record what was
 actually achieved** and state the residual uncertainty rather than labelling a cell cold on faith.
 
-*Tracked in the open-items memory (the 6.B corpus-sizing item); must be resolved before the first 6.B.1
-generation run.*
+**RESOLVED (ratified 2026-08-16, route (a)): the 6.B production-scale corpus is 3.0 TiB — one identical
+definition on both legs.** *Why 3.0 TiB:* it must exceed the client page cache (768 GiB) plus the larger of
+the two server-side caches — WEKA's confirmed 1536 GiB backend RAM against FSx's ~721 GiB at
+PERSISTENT-1000 × 26.4 TiB (both fetched, not recalled) — so the floor is 2304 GiB and 3.0 TiB carries
+~30% margin. The per-`(N_files, file_size, dtype)` grid inside that envelope is still fixed at substage
+entry against the measured 6.A Tier 2 file-size distribution (the tile-count open item). "Cold" remains
+verified per cell, never asserted (**D13**).
 
 ---
 

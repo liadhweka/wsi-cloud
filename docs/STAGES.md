@@ -525,6 +525,31 @@ timeline — instead of repeats. Estimated cost ≈ 4–6 h per leg (~4–6%); t
 *Procedure:* `RUNBOOK.md` "Run-to-run variance". Band computation and rep-grouping live in the shared
 aggregation helper (**tracker D-4**).
 
+**D20 — WEKA leg backend configuration: 8 × i8ge.6xlarge, both NVMe per host (16 × 6.82 TiB = 120 TB raw),
+5+2 EC + 1 hot-spare failure domain, 67.46 TB usable.** *Why this sizing:* the Stage-0 client-capability
+probes measured the 4-FE-core client sustaining 11.6 GB/s reads — above the previous backends' sustained
+aggregate — so the backends had to move up or every ceiling cell would measure the backend fabric and its
+burst-credit state rather than the filesystem (**D7**: neither side may be the constraint). i8ge.6xlarge
+serves 37.5 Gbps sustained each (AWS API), 300 Gbps aggregate — above both the client's 200 Gbps line rate
+and its measured capability. *Why both drives per host:* the one-drive-per-host cost variant (halves the
+raw-capacity software metering) was examined and not adopted at apply; the raw basis for
+`SOFTWARE_USD_PER_HR` is therefore 120 TB, with the usable-basis alternative recorded beside it in env.sh
+pending the metering-basis answer from WEKA Sales. The backend AMI is **recorded, never pinned**
+(`WEKA_BACKEND_AMI`; backends are `MAY_DIFFER` and absent on Leg B). *Sources:* `weka status`/`weka fs` on
+the live cluster; `describe-instances`/`describe-instance-types` (fetched at spin-up).
+
+**D21 — Per-cell verdict semantics: what refuses, what marks INCOMPLETE, what warns.** Ratified split:
+**refuse** a leg start when the environment contract exists unverified (no sha-matched `contract-verified`
+marker — `run-leg.sh` guard 6); **INCOMPLETE** for a stage ≥ 1 cell with no declared cache regime (**D13**:
+an unlabelled read number gets quoted as whichever regime flatters it) and for a kvikIO cell without its
+recorded GPU-direct-vs-bounced split (**D8**: a config flag is not proof of path); **warn only** for missing
+cost inputs, because cost is re-derivable arithmetic from measured wallclock plus a dated price — visible
+and repairable, unlike a regime or path proof, which cannot be reconstructed after the cell. *Why refusal
+lives at the leg entry point and INCOMPLETE at the cell:* the leg-level condition invalidates every cell
+after it identically, while the per-cell conditions are isolated failures the sweep should survive and
+report. Implementation: `record-run.sh`, `run-leg.sh`, `env-contract.py` (tracker **D-30** carries the
+remaining per-driver declarations).
+
 ---
 
 ## Naming convention

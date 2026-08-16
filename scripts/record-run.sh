@@ -249,10 +249,23 @@ else
 fi
 if [[ -n "${RECORD_CACHE_STATE:-}" ]]; then
   CACHE_JSON=$(jq -n --arg c "$RECORD_CACHE_STATE" '$c')
+  CACHE_UNDECLARED=0
 else
-  log "WARN: RECORD_CACHE_STATE unset -- cache_state recorded as null. Read cells must"
-  log "      declare their cache regime (D13); drivers set it per cell."
   CACHE_JSON=null
+  # D-30 (ratified 2026-08-16): a measured cell with no declared cache regime is
+  # INCOMPLETE, not OK — an unlabelled read number gets quoted as whichever regime
+  # flatters it, invisibly (D13). Write cells declare "na-write-cell"; regimes that
+  # are deliberately not an axis declare an "na-*" value (NOT_APPLICABLE to the
+  # reconciler). Stage 0 stays exempt: infra proofs measure the recorder, not storage.
+  if [[ "$STAGE" == "0" ]]; then
+    log "WARN: RECORD_CACHE_STATE unset -- cache_state recorded as null (stage 0: allowed)."
+    CACHE_UNDECLARED=0
+  else
+    log "WARN: RECORD_CACHE_STATE unset on a stage-$STAGE cell -- this cell will be marked"
+    log "      INCOMPLETE (D-30/D13): every measured cell declares its cache regime, write"
+    log "      cells included ('na-write-cell'). Drivers set it per cell."
+    CACHE_UNDECLARED=1
+  fi
 fi
 
 cat > "$RUN_DIR/metadata.json" <<EOF
@@ -508,6 +521,28 @@ EOF
   esac
   log "verifying recordings (required set for fs=$FS)..."
   INCOMPLETE=0
+  # D-30 (ratified 2026-08-16): the two per-cell requirements that now decide the
+  # verdict rather than warn. Missing COST INPUTS deliberately stay warn-only —
+  # cost is re-derivable arithmetic from wallclock + a dated price, so the cell's
+  # measurement is intact; a missing cache regime or path proof is not repairable.
+  if (( ${CACHE_UNDECLARED:-0} )); then
+    log "  WARN: cache_state undeclared on a measured cell -> INCOMPLETE (D-30/D13)"
+    INCOMPLETE=1
+  fi
+  # A kvikIO cell without cuFile's own GPU-direct-vs-bounced accounting is
+  # incomplete: a configuration flag is not proof of the path taken (D8). Drivers
+  # that run kvikIO cells export RECORD_KVIKIO_CELL=1; the reader emits a
+  # "path_accounting" block into its per-cell JSON in this run dir.
+  if [[ "${RECORD_KVIKIO_CELL:-0}" == "1" ]]; then
+    if grep -rlsq '"path_accounting"' "$RUN_DIR" --include='*.json'; then
+      log "  OK:   path_accounting present (kvikIO cell, D8 proof recorded)"
+    else
+      log "  WARN: kvikIO cell has NO recorded path_accounting split -> INCOMPLETE (D-30/D8):"
+      log "        which path the reads took is unproven, and a silent fallback looks"
+      log "        identical in the throughput data."
+      INCOMPLETE=1
+    fi
+  fi
   for f in $REQUIRED_STREAMS; do
     path="$RUN_DIR/raw/$f"
     if [[ ! -s "$path" ]]; then

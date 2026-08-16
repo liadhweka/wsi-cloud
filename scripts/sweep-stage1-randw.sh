@@ -36,6 +36,7 @@ for bs in "${BLOCK_SIZES[@]}"; do
     log ""
     log "=== [cell $i/$TOTAL] $name ==="
 
+    RECORD_CACHE_STATE="na-write-cell" \
     "$REPO/scripts/record-run.sh" \
       --run-name "$name" --stage "1.0c" --note "$note" \
       -- fio \

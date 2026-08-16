@@ -142,7 +142,7 @@ workload was measured — a large unexplained change means something other than 
 
 ---
 
-## ⚠️ Open methodology item — sub-second cells vs. 1 Hz recorders
+## Sub-second cells vs. 1 Hz recorders — DECIDED: raise the poll rate for short cells
 
 **The issue.** At high concurrency, cells complete in well under a second. The 1 Hz filesystem-side
 recorders then capture only 1–3 samples, and any sustained-mean metric is ill-defined with that few
@@ -155,21 +155,20 @@ evidence on **both** legs. If both legs lose filesystem-side time-series at high
 comparison there rests on app-level alone — acceptable, but it must be a stated choice rather than a
 discovery made during analysis.
 
-**Options, with a recommendation:**
-1. **Raise the recorder poll rate for short cells** (e.g. 10 Hz) — keeps single-pass methodology intact
-   and yields ~3–30 samples. *Recommended.* Cost: more rows; verify the higher rate does not itself
-   perturb the measurement.
-2. **Pad cells by looping the dataset to fill ≥30 s** — gives clean time series but changes the unit of
-   work away from "one pass, as an operator would run it," and **makes cache state vary inside a single
-   cell**: from pass 2 on, the corpus is warm whichever arm the cell belongs to, so the cell has no one
-   cache regime it can be labelled with and its number belongs to neither arm. **The warm arm is not a
-   licence for this** — a warm arm is a whole cell whose regime is warm, established before it runs and
-   recorded as achieved, which is a measurement; a cell that warms partway through is an unlabelled average
-   of both regimes, which **D13** and `RUNBOOK.md`'s pre-cell canary both forbid.
-3. **Accept app-level-only for sub-second cells**, documented — simplest, weakest evidence.
+**The decision (ratified 2026-08-16): raise the recorder poll rate for short cells (~10 Hz), applied
+identically on both legs.** *Why this option:* it keeps the single-pass methodology intact and yields
+~3–30 samples where 1 Hz yields 1–3. The alternatives were rejected on methodology grounds: padding cells
+by looping the dataset changes the unit of work away from "one pass, as an operator would run it," and
+**makes cache state vary inside a single cell** — from pass 2 on, the corpus is warm whichever arm the cell
+belongs to, so the cell has no one regime it can be labelled with, which **D13** and `RUNBOOK.md`'s pre-cell
+canary both forbid (a warm *arm* is a whole cell whose regime is established before it runs; a cell that
+warms partway through is an unlabelled average). Accepting app-level-only was the weakest evidence and would
+concede the filesystem-side view on exactly the axis where the two metadata architectures differ most.
 
-**Resolve before the first Stage 2 cell**, and record the choice here. Whatever is chosen must be applied
-**identically on both legs**. Tracked in the open-items memory (the sub-second-cells item).
+**Verification requirement:** the higher rate must be shown not to perturb the measurement itself — the
+recorded `_sample_interval_s` block and a same-config 1 Hz-vs-10 Hz comparison on a cheap cell are the
+evidence. **Implementation is tracker `D-34`** (`record-run.sh`'s recorder set) and must land before the
+first Stage 2/3 cell.
 
 ---
 
@@ -286,8 +285,12 @@ Both are byte-verified held-constant inputs, identical in both legs (**D6**).
   stated, and cache state is recorded as achieved in both arms.
 - **Single-pass per cell, not padded with loops.** *Why:* matches how a real cataloging job runs and keeps
   the unit of work identical across legs. **Known tradeoff:** sub-second high-concurrency cells
-  under-sample the 1 Hz filesystem-side recorders — see the open methodology item above, to be resolved
-  before the first cell and applied identically to both legs.
+  under-sample the 1 Hz filesystem-side recorders — resolved by the short-cell poll-rate decision below.
+- **Short cells get a raised filesystem-side recorder poll rate (~10 Hz), identical on both legs;
+  implementation is tracker `D-34` and gates the first Stage 2 cell.** *Why:* the full rationale, the
+  rejected alternatives (looping pads violate D13; app-level-only concedes the filesystem-side view where
+  the metadata architectures differ most), and the perturbation-verification requirement are in the
+  "sub-second cells" section above.
 - **Output to a separate `cataloging/2.0/…` directory, not co-located with the slides.** *Why:* the
   canonical dataset directory is treated as read-only and immutable so that both legs read byte-identical
   inputs; sidecar output dirs are cleanly removable per cell.

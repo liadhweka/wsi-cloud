@@ -344,7 +344,15 @@ tail -f <run-dir>/raw/*.csv      # live telemetry (per-filesystem file names)
 ## What to do if a run fails
 
 A run is marked `INCOMPLETE` in `INDEX.md` if the benchmark returned non-zero, **or** any required recording
-stream produced fewer than two lines (header plus at least one data row).
+stream produced fewer than two lines (header plus at least one data row), **or** — the ratified verdict
+semantics (`STAGES.md` **D21**) — a stage ≥ 1 cell declared no `RECORD_CACHE_STATE` (write cells declare
+`na-write-cell`; a deliberate non-axis declares an `na-*` value; stage 0 is exempt), **or** a cell declared
+`RECORD_KVIKIO_CELL=1` and recorded no `path_accounting` split (**D8**: a configuration flag is not proof of
+path). **Missing cost inputs warn but do not flip the verdict** — cost is re-derivable arithmetic from the
+measured wallclock plus a dated price, while a missing cache regime or path proof cannot be repaired after
+the fact. Separately, `run-leg.sh` **refuses to start a leg** whose environment contract exists but has no
+matching `contract-verified` marker (written by `env-contract.py verify` on PASS, sha-bound to the contract
+file).
 
 1. **`<run-dir>/cmd.log`** — what did the benchmark say?
 2. **`<run-dir>/raw/*.err`** — recorder-side errors; each recorder writes its own.
