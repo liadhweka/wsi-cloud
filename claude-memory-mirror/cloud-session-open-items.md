@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-16T02:45:22.434Z
+  modified: 2026-08-16T03:56:08.583Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -28,16 +28,17 @@ These change what the numbers mean, so resolving them after cells have run means
    ~10 Hz, identically on both legs; Stage-2 register). Remaining: the implementation (tracker `D-34`,
    `record-run.sh`'s recorder set) plus its does-the-rate-perturb verification — must land before the first
    Stage 2/3 cell.** Detail: `docs/Stage-2-Cataloging.md`.
-2. **Does WEKA-on-AWS do true GDS?** Decides whether the GPU-direct matrix is 2×2+1 or a full 2×3. Resolve
-   **empirically** — `gdscheck -p` plus a recorded canary cell — not from documentation, which disagrees with
-   the transport analysis. Detail: `docs/STAGES.md` **D8**.
-3. **Consistency relation — WEKA derivation + evaluator BUILT (2026-08-15: `wsi_agg_helper.py check`,
-   relation (D+P)/D writes / 1.0 reads from `WEKA_EC_SCHEME`; probe anchors 1.455 write / 1.034 read).
-   Remaining: (a) POST-SWITCH BAND CALIBRATION — repeat the two probe-shaped cells ≥3× on the new cluster,
-   write `runs/.leg-state/weka/canary-bands.json` (the evaluator exits non-zero as UNCALIBRATED until then,
-   by design); (b) wire the check into the chain (D-7 canary-abort + prove-recording's pending assertion);
-   (c) the Lustre relation from the actual stripe layout on Leg B (the helper refuses until built).**
-   Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md` (the evaluator + calibration procedure).
+2. **(resolved 2026-08-16 — WEKA-on-AWS does NOT do true GDS; cuFile path = compat/bounce, strict-GDS open
+   refused. Evidence + consequences recorded in `docs/Stage-4-Patching.md` § GPU-direct design; determination
+   run dirs `…-d8gds-*`. No mode-controlled paired cell on Leg A.)** Delete this entry once the Stage-4/5/6
+   drivers' best-available-mode settings are confirmed against it at their gates.
+3. **Consistency relation — WEKA bands CALIBRATED on the 6xlarge cluster (2026-08-16:
+   `calibrate-canary-bands.sh`, 12 cells; anchors reproduce — write 1.456 vs 1.455, read 1.042 vs 1.034;
+   4K derived separately: read 1.424, write 1.372 → smallbs_widening 1.366; `check` PASSES end-to-end).
+   Remaining: (a) wire the check into the chain (D-7 canary-abort + prove-recording's pending assertion) —
+   until then, run `wsi_agg_helper.py check` after every sweep by hand; (b) mixed-cell widening needs mixed
+   calibration cells before 1.6 (B.3); (c) the Lustre relation from the actual stripe layout on Leg B (the
+   helper refuses until built).** Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md`.
 4. **Determine the Lustre LND actually in use** (kernel TCP vs the EFA provider). This decides which client
    counters are primary versus diagnostic — get it wrong and every Lustre number cites a bypassed source.
 5. **Cache-clearing mechanism per filesystem.** How you reach a cold state differs per side and includes a
@@ -46,23 +47,14 @@ These change what the numbers mean, so resolving them after cells have run means
    `vm.drop_caches=3`, not `1` — dentries and inodes are the caches that matter for a metadata workload, and a
    warm dentry cache serves `open()` client-side on both legs alike.** What is still open is the *server-side*
    half, per filesystem. Detail: `docs/STAGES.md` **D13**, `docs/RUNBOOK.md` (what each step clears).
-6b. **nvidia-fs I/O counters — enablement DONE (Leg-A instance, 2026-08-15: enabled live, persisted in
-    `/etc/modprobe.d/nvidia-fs-stats.conf`, and the bootstrap now enables them at build). What remains is the
-    D-6 canary half:** the pre-cell canary must require them **enabled and non-zero on a known-good read**
-    before any cuFile cell counts — a present-but-all-zero split reads as "no GPU-direct traffic" rather than
-    "accounting was off" and would corrupt the **D8** determination. `Active Shadow-Buffer (MiB)` is the
-    compat-mode bounce signal. Stats format on this stack: `NVFS statistics(ver: 4.0)`, driver 2.29.4.
-6c. **GDS stack version skew — functional half VERIFIED (2026-08-15): a kvikIO 26.04 GPU read off the mount
-    through the preloaded system libcufile 1.14.1 against nvidia-fs 2.29.4 completed cleanly (64 MiB into
-    GPU memory, no ABI issue).** Remaining half is D-6's accounting verification, with a nuance the sanity
-    check exposed: **path accounting has THREE layers.** kvikio's own `compat_mode` (defaulted to AUTO=2
-    here) can serve reads via kvikio's POSIX path **without ever entering cuFile** — nvidia-fs counters and
-    Active Shadow-Buffer stayed 0 through a successful read. So per-cell path proof must record which layer
-    served the I/O: kvikio-compat cells are "posix-by-construction" (no cuFile evidence exists or is
-    needed); only kvikio-compat=off cells engage cuFile, where CUFILE_STATS + shadow-buffer + nvidia-fs
-    decide GDS-vs-bounced. Enabled stats format captured for the D-6 parser: `Reads: n=.. ok=.. err=..
-    readMiB=..` + `Bandwidth(MiB/s)=..` lines (NVFS ver 4.0). The recorded D8 Phase-0 cell still runs
-    post-switch in Phase 0, with modes forced explicitly, never AUTO.
+6b. **nvidia-fs accounting — enabled, persisted, and now VERIFIED UNDER LOAD on the rebuilt cluster
+    (2026-08-16: the D8 determination cells exercised all three layers — shadow-buffer signal live on the
+    cuFile-bounce read, nvidia-fs zero on the kvikio-posix read, `unknown-accounting-off` never fired).
+    What remains of the D-6 canary half:** wire the pre-cuFile-cell requirement into the mechanical pre-cell
+    canary (with D-7) — on THIS leg the known-good signature is *bounce accounting non-zero* (gds stays 0
+    by determination); nvidia-fs read bytes non-zero is a Leg-B-only expectation. Stats format:
+    `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
+    Remaining D-6 engineering: Stage-5/6 worker wiring + the nvidia-fs block parser (tracker **D-6**).
 8. **Confirm real per-slide tile counts from the actual 3.0 coords** before sizing the 6.B.1 file-size grid or
    committing 6.A Tier 2 wallclock — both currently rest on magnification arithmetic, not measurement.
 9. **Counter-semantics check for cross-leg `ops/s`.** Until counter semantics are verified equivalent and that

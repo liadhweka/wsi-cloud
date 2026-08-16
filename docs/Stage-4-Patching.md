@@ -77,6 +77,19 @@ Which yields three separable readings:
 cell shows WEKA supporting true GDS, row 1 of the table fills in and the design becomes a full 2×2 with
 nothing wasted — which is why it is built so that either answer is usable, rather than around one answer.
 
+**The Leg-A answer (measured, Phase-0 determination cells 2026-08-16): WEKA over DPDK/ENA does NOT do true
+GDS — the WEKA leg's cuFile path is compat/bounce.** Evidence, from cuFile's own accounting, never a flag
+(run dirs `2026-08-16-0353*-weka-s0-d8gds-*`): with kvikio compat OFF and `allow_compat_mode=true`, a 1 GiB
+read completed with `gds_bytes=0`, every byte bounced, Active Shadow-Buffer live; with
+`allow_compat_mode=false` (strict GDS) the cuFile layer **refused the open outright**; with kvikio compat
+ON the read ran on kvikio's POSIX layer with nvidia-fs at zero — the three layers separate exactly as the
+accounting model says. `gdscheck -p` reports platform/driver GDS support — it is the *filesystem transport*
+that refuses, which is why the per-cell byte split is the evidence and gdscheck alone is not.
+*Consequences:* the WEKA column of the matrix runs POSIX (4.B) + cuFile-compat (4.C); the "GDS if
+achievable" cell is recorded not-achievable; **no mode-controlled paired cell exists on Leg A** (5.A/6.A run
+best-available = compat), per the composition rule in `STAGES.md`. Every 4.C cell still records its split —
+the determination says what to expect, not what happened in any given cell.
+
 **Plus the plain-POSIX cells (4.B) on both filesystems**, because cuFile-compat stacks a bounce buffer and
 the cuFile layer on top of POSIX and may be **slower than each filesystem's own native path**. Without
 4.B, we would understate whichever side falls back.

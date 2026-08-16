@@ -65,7 +65,10 @@ def kvikio_resolved_compat_mode():
             v = kvikio.defaults.get("compat_mode")
         except Exception:
             v = kvikio.defaults.compat_mode()
-        return str(v)
+        # kvikio 26.04 returns a CompatMode IntEnum whose str() is the bare int
+        # ("0"/"1"/"2") — record the NAME (OFF/ON/AUTO), which is what a reader
+        # of the path_accounting block needs; fall back to str() on older types.
+        return str(getattr(v, "name", v))
     except Exception as e:  # noqa: BLE001 — record the failure, never guess
         return f"unresolvable ({e.__class__.__name__})"
 

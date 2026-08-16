@@ -1,0 +1,1 @@
+fio --name=calib-seqr-bs4m-jobs16-rep1 --directory=/mnt/weka/benchmarks/fio-canary-calib --filename_format=calib.\$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --time_based --group_reporting --output-format=json+ --status-interval=1 --rw=read --bs=4M --runtime=480 

@@ -1,0 +1,23 @@
+{
+  "cell": "d8-phase0-determination",
+  "file": "/mnt/weka/benchmarks/gds-phase0/testfile.bin",
+  "file_bytes": 1073741824,
+  "bytes_read": 1073741824,
+  "elapsed_s": 0.173,
+  "gib_per_s": 5.776,
+  "read_error": null,
+  "cufile_env_path_json": "/home/ec2-user/cufile-config/cufile.json",
+  "ld_preload": "/usr/local/cuda/targets/x86_64-linux/lib/libcufile.so.1.14.1",
+  "path_accounting": {
+    "kvikio_compat_mode_requested": "on",
+    "kvikio_compat_mode_resolved": "ON",
+    "nvfs_available": true,
+    "nvfs_stats_enabled": true,
+    "app_bytes_read": 1073741824,
+    "shadow_buffer_mib_seen": 0,
+    "basis": "gds_bytes = nvidia-fs readMiB delta (layer 3, true GPU-direct only); bounced_or_posix_bytes = app - gds (cuFile bounce or kvikio posix; the kvikio compat fields say which layer)",
+    "gds_bytes": 0,
+    "bounced_or_posix_bytes": 1073741824,
+    "gds_engaged": "none"
+  }
+}

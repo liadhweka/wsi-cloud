@@ -1,0 +1,47 @@
+{
+  "run_name": "d8gds-kvoff-cufilecompat",
+  "stage": "0",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-16T03:51:34Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-path-determination",
+  "rep": null,
+  "command": [
+    "env",
+    "LD_PRELOAD=/usr/local/cuda/targets/x86_64-linux/lib/libcufile.so.1.14.1",
+    "CUFILE_ENV_PATH_JSON=/home/ec2-user/cufile-config/cufile.json",
+    "KVIKIO_COMPAT_MODE=OFF",
+    "CUDA_VISIBLE_DEVICES=0",
+    "PYTHONPATH=/home/ec2-user/wsi-cloud/scripts",
+    "bash",
+    "-c",
+    "\"/usr/local/cuda/gds/tools/gdscheck\" -p; \"/data/local-nvme/conda-envs/wsi-cucim-2604/bin/python\" \"/home/ec2-user/wsi-cloud/scripts/probe-gds-phase0.py\"                --file \"/mnt/weka/benchmarks/gds-phase0/testfile.bin\" --kvikio-compat \"off\"                --summary-json \"/home/ec2-user/wsi-cloud/runs/2026-08-16-035131-weka-s0-d8gds-kvoff-cufilecompat/gds-phase0-summary.json\""
+  ],
+  "note": "D8 Phase-0 GDS determination cell: A: kvikio compat OFF + cufile allow_compat_mode=true (the standing config) — cuFile engaged, bounce permitted. Modes FORCED, never AUTO (three-layer path accounting); gdscheck -p captured in cmd.log; verdict = the recorded path_accounting split, not any config flag. Reads are backend-RAM-resident by construction — the PATH is the question, not the rate.",
+  "wallclock_s": 1,
+  "started_utc": "2026-08-16T03:51:36Z",
+  "ended_utc": "2026-08-16T03:51:37Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 13.699,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

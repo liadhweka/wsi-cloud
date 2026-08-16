@@ -1,2 +1,3 @@
 stage,workload,bs,jobs,bs_bytes,run_dir,run_start_utc,run_end_utc,duration_s,fio_write_bw_kib,fio_write_iops,fio_write_p99_ns,fio_write_lat_mean_ns,fio_read_bw_kib,fio_read_iops,fio_read_p99_ns,fio_read_lat_mean_ns,rdma_xmit_bytes_sustained,rdma_xmit_dev,rdma_rcv_bytes_sustained,rdma_rcv_dev,weka_stats_rows,status
-s0,proof,1m,4,1048576,2026-08-15-175902-weka-s0-proof-bs1m-jobs4,2026-08-15T17:59:06Z,2026-08-15T17:59:24Z,18.0,3446844.470115,3366.005747,6389760,3257757.724493,3422528.993103,3342.301149,4079616,1520913.601315,0.0,,0.0,,532,OK
+s0,proof,1m,4,1048576,2026-08-15-175902-weka-s0-proof-bs1m-jobs4,,,,3446844.470115,3366.005747,6389760,3257757.724493,3422528.993103,3342.301149,4079616,1520913.601315,0.0,,0.0,,532,OK
+s0,proof,1m,4,1048576,2026-08-16-024624-weka-s0-proof-bs1m-jobs4,2026-08-16T02:46:29Z,2026-08-16T02:46:47Z,18.0,3983430.62069,3890.068966,4227072,2537834.982635,3961114.482759,3868.275862,3031040,1581712.222512,0.0,,0.0,,1444,OK

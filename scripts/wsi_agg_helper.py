@@ -31,6 +31,9 @@ What lives here
 CLI:
   wsi_agg_helper.py check <run-dir>     post-cell consistency canary verdict
   wsi_agg_helper.py cache <run-dir>     cache-state reconciliation verdict
+  wsi_agg_helper.py calibrate <run-dir>...  compute + write the leg's canary
+                                        bands from the calibration cells
+                                        (calibrate-canary-bands.sh drives them)
   wsi_agg_helper.py selftest            unit checks (no environment needed)
 
 Stdlib only.
@@ -354,6 +357,88 @@ def _cli_check(run_dir):
     return 0 if verdicts and not bad else 1
 
 
+def _cli_calibrate(run_dirs):
+    """Compute and write the leg's canary bands from calibration cells (D-5).
+
+    Input: >=3 large-block write cells and >=3 large-block read cells (the
+    probe-shaped calibration cells), plus optional small-bs cells (run name
+    contains 'bs4k') that set smallbs_widening — the Stage-1 register requires
+    the small-block band to be DERIVED at the block size under test, never
+    inherited from the large-block cells.
+
+    lo/hi are multipliers on the expected center (write (D+P)/D, read 1.0):
+    min/max of the observed normalized ratios across the repeats, +/-5% margin.
+    Refuses (exit non-zero) on fewer than 3 cells for either direction — a band
+    from fewer repeats is a guess wearing a measurement's clothes.
+    mixed_widening is deliberately NOT written here: it needs mixed calibration
+    cells (open-items memory B.3), and a guessed widening can mask a real
+    inconsistency. Until it exists, mixed cells widen by 1.0 and a FAIL there
+    is a judgement to record, not a band to bend.
+    """
+    import os
+    MARGIN = 1.05
+    leg = None
+    repo_root = None
+    ec = os.environ.get("WEKA_EC_SCHEME")
+    norms = {"read": [], "write": []}      # large-bs normalized ratios
+    small_norms = []                       # small-bs normalized ratios (both dirs)
+    cells = []
+    for rd in run_dirs:
+        rd = Path(rd)
+        meta = json.loads((rd / "metadata.json").read_text())
+        fs = meta["fs"]
+        leg = leg or fs
+        repo_root = repo_root or rd.parent.parent
+        results = json.loads((rd / "results.json").read_text())
+        cl = (results.get("sources", {}).get("weka_stats_client", {}) or {}).get("metrics", {})
+        m = lambda k: (cl.get(k) or {}).get("active_window_mean") or 0.0
+        small = "bs4k" in rd.name
+        pairs = (("read", m("Read_client_sum"), m("L6 Recv_client_sum")),
+                 ("write", m("Write_client_sum"), m("L6 Sent_client_sum")))
+        for direction, app, wire in pairs:
+            if app < 50e6:   # idle direction on a single-direction probe cell
+                continue
+            if not wire:
+                print(f"calibrate: REFUSING — {rd.name} has app traffic but no wire series "
+                      f"({direction}); a calibration cell with a dead Primary source calibrates nothing",
+                      file=sys.stderr)
+                return 1
+            n = (wire / app) / expected_relation(fs, direction, ec)
+            (small_norms if small else norms[direction]).append(n)
+            cells.append({"run_dir": rd.name, "direction": direction,
+                          "ratio": round(wire / app, 4), "normalized": round(n, 4),
+                          "small_bs": small})
+    for direction in ("read", "write"):
+        if len(norms[direction]) < 3:
+            print(f"calibrate: REFUSING — only {len(norms[direction])} large-bs {direction} cells; "
+                  "the procedure requires >=3 repeats per direction (D-5)", file=sys.stderr)
+            return 1
+    bands = {}
+    for direction in ("read", "write"):
+        v = norms[direction]
+        bands[direction] = {"lo": round(min(v) / MARGIN, 4), "hi": round(max(v) * MARGIN, 4)}
+    out = {"bands": {**bands, "smallbs_bytes": 65536}}
+    if small_norms:
+        lo_all = min(bands[d]["lo"] for d in ("read", "write"))
+        hi_all = max(bands[d]["hi"] for d in ("read", "write"))
+        w = max([1.0] + [max(n / hi_all, lo_all / n) for n in small_norms]) * MARGIN
+        out["bands"]["smallbs_widening"] = round(w, 4)
+    else:
+        print("calibrate: WARNING — no small-bs cells supplied; small-block cells will be "
+              "judged at the LARGE-block band, which the Stage-1 register forbids. "
+              "Supply bs4k calibration cells.", file=sys.stderr)
+    out["calibrated_utc"] = __import__("datetime").datetime.now(
+        __import__("datetime").timezone.utc).isoformat()
+    out["ec_scheme"] = ec
+    out["cells"] = cells
+    p = Path(repo_root) / "runs" / ".leg-state" / leg / "canary-bands.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(out, indent=2) + "\n")
+    print(json.dumps(out, indent=2))
+    print(f"calibrate: wrote {p}")
+    return 0
+
+
 def _selftest():
     assert parse_ec_scheme("5+2") == (5, 2)
     assert abs(expected_relation("weka", "write", "5+2") - 1.4) < 1e-9
@@ -396,6 +481,8 @@ def main():
         return _selftest()
     if cmd == "check" and len(sys.argv) == 3:
         return _cli_check(sys.argv[2])
+    if cmd == "calibrate" and len(sys.argv) >= 3:
+        return _cli_calibrate(sys.argv[2:])
     if cmd == "cache" and len(sys.argv) == 3:
         print(json.dumps(reconcile_cache_state(sys.argv[2]), indent=2))
         return 0

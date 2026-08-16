@@ -1,0 +1,23 @@
+{
+  "cell": "d8-phase0-determination",
+  "file": "/mnt/weka/benchmarks/gds-phase0/testfile.bin",
+  "file_bytes": 1073741824,
+  "bytes_read": 0,
+  "elapsed_s": 0.323,
+  "gib_per_s": null,
+  "read_error": "RuntimeError: cuFile error at: /tmp/conda-bld-output/bld/rattler-build_libkvikio/work/cpp/src/file_handle.cpp:188: Operation not permitted",
+  "cufile_env_path_json": "/home/ec2-user/cufile-config/cufile-strict-nogds-probe.json",
+  "ld_preload": "/usr/local/cuda/targets/x86_64-linux/lib/libcufile.so.1.14.1",
+  "path_accounting": {
+    "kvikio_compat_mode_requested": "off",
+    "kvikio_compat_mode_resolved": "OFF",
+    "nvfs_available": true,
+    "nvfs_stats_enabled": true,
+    "app_bytes_read": 0,
+    "shadow_buffer_mib_seen": 1,
+    "basis": "gds_bytes = nvidia-fs readMiB delta (layer 3, true GPU-direct only); bounced_or_posix_bytes = app - gds (cuFile bounce or kvikio posix; the kvikio compat fields say which layer)",
+    "gds_bytes": 0,
+    "bounced_or_posix_bytes": 0,
+    "gds_engaged": "no-reads"
+  }
+}
