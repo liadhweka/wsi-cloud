@@ -340,16 +340,31 @@ def _cli_check(run_dir):
     def m(k):
         return (cl.get(k) or {}).get("active_window_mean")
 
+    # Block size, from the run-dir name segment every 1.0 cell carries
+    # (-bs4k- / -bs1M- ...): without it the calibrated small-bs widening never
+    # applies and every small-block cell false-FAILs against the large-block
+    # band. A name without a bs segment gets None (no widening), correctly.
+    bs_bytes = None
+    mb = re.search(r"-bs(\d+)([kKmM])", run_dir.name)
+    if mb:
+        bs_bytes = int(mb.group(1)) * (1024 if mb.group(2).lower() == "k" else 1024**2)
+
     verdicts = []
     app_r, wire_r = m("Read_client_sum"), m("L6 Recv_client_sum")
     app_w, wire_w = m("Write_client_sum"), m("L6 Sent_client_sum")
-    if app_r and app_r > 0:
+    # A direction is evaluated (and counts as "mixed" for the other) only above
+    # a materiality floor — metadata dribble on an idle direction is not a
+    # mixed workload, and evaluating it would ratio noise against noise.
+    MATERIAL = 10e6   # low enough that a 4K jobs=1 cell still gets a verdict
+    r_live, w_live = bool(app_r and app_r > MATERIAL), bool(app_w and app_w > MATERIAL)
+    if r_live:
         verdicts.append(consistency_verdict(app_r, wire_r, fs=fs, direction="read",
-                                            ec_scheme=ec, bands=bands))
-    if app_w and app_w > 0:
+                                            ec_scheme=ec, bands=bands, bs_bytes=bs_bytes,
+                                            mixed=w_live))
+    if w_live:
         verdicts.append(consistency_verdict(app_w, wire_w, fs=fs, direction="write",
-                                            ec_scheme=ec, bands=bands,
-                                            mixed=bool(app_r and app_r > 0)))
+                                            ec_scheme=ec, bands=bands, bs_bytes=bs_bytes,
+                                            mixed=r_live))
     print(json.dumps({"run_dir": str(run_dir), "verdicts": verdicts}, indent=2))
     bad = [v for v in verdicts if v["verdict"] not in ("PASS",)]
     # UNCALIBRATED and FAIL both exit non-zero: an unevaluable canary must be

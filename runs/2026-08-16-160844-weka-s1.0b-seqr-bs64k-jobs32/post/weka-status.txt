@@ -1,0 +1,21 @@
+WekaIO v5.1.27 (CLI build 5.1.27)
+
+             cluster: wsi-cluster-liad (4f6d6c60-8aef-4f54-ae02-724e9d26e5cd)
+      leader process: 80 (container 4, uptime 14 hours)
+leadership processes: 80, 280, 40, 0, 120
+     deployment mode: dedicated
+              status: OK (16 backend containers UP, 16 drives UP)
+          protection: 5+2 (fully protected)
+           hot spare: 1 failure domain(s) (8.76 TiB)
+       drive storage: 61.37 TiB total
+               cloud: connected
+             license: Unlicensed
+
+           io status: STARTED 14 hours ago (72 io-nodes UP, 1512 buckets UP)
+          link layer: Ethernet
+             clients: 1 connected
+               reads: 0 B/s (0 IO/s)
+              writes: 0 B/s (0 IO/s)
+          operations: 0 ops/s
+              alerts: 3 active alerts, use `weka alerts` to list them
+

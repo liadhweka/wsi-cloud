@@ -1,0 +1,1 @@
+fio --name=seqr-bs64k-jobs32 --filename=/mnt/weka/benchmarks/stage1-read-corpus/seq-corpus.bin --rw=read --bs=64k --numjobs=32 --iodepth=1 --ioengine=libaio --direct=1 --offset=0G --offset_increment=96G --size=96G --runtime=600 --ramp_time=60 --group_reporting --output-format=json+ --status-interval=1 

@@ -1,0 +1,18 @@
+{
+  "run_name": "seqr-bs1M-jobs8",
+  "stage": "1.0b",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-16T16:25:04Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [1,2,3,4,49,50,51,52],
+  "cores_available": 80,
+  "cache_state": "cold",
+  "rep": null,
+  "command": ["fio","--name=seqr-bs1M-jobs8","--filename=/mnt/weka/benchmarks/stage1-read-corpus/seq-corpus.bin","--rw=read","--bs=1M","--numjobs=8","--iodepth=1","--ioengine=libaio","--direct=1","--offset=384G","--offset_increment=336G","--size=336G","--runtime=600","--ramp_time=60","--group_reporting","--output-format=json+","--status-interval=1"],
+  "note": "Stage 1.0b cell 35/36: sequential read, bs=1M jobs=8 iodepth=1 libaio --direct=1. COLD BY CONSTRUCTION (D13 route 1): pre-staged 3072 GiB scan corpus (>= ~2x the larger server cache; cyclic-scan LRU self-eviction), single pass per cell (no time_based; stops at min(slice, 600s)), per-cell offset rotation (slot 2, offset 384 GiB), fixed de-ordered cell order. Per-job disjoint slice 336 GiB. Evidence cell: the sweep's warm reference. Server-side residual recorded, not asserted."
+}

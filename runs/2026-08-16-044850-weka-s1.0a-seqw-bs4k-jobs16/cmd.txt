@@ -1,0 +1,1 @@
+fio --name=seqw-bs4k-jobs16 --directory=/mnt/weka/benchmarks/fio-scratch --rw=write --bs=4k --size=4G --numjobs=16 --iodepth=1 --ioengine=libaio --direct=1 --runtime=600 --ramp_time=60 --time_based --group_reporting --unlink=1 --output-format=json+ --status-interval=1 

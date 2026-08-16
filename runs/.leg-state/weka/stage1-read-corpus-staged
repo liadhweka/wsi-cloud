@@ -1,0 +1,5 @@
+staged_utc=2026-08-16T11:29:17Z
+seq_corpus_gib=3072
+randr_region_gib=256
+randr_regions=26
+corpus_dir=/mnt/weka/benchmarks/stage1-read-corpus

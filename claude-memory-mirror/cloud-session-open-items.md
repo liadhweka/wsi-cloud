@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-16T03:56:08.583Z
+  modified: 2026-08-16T16:55:22.312Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -177,6 +177,12 @@ These change what the numbers mean, so resolving them after cells have run means
 10. **UNI2-h results stay internal-only** — don't strip the tags in refactors; filter those rows before
    anything leaves the building. More important here than in an internal study, since a competitive comparison
    is likelier to be externalised. Detail: `[[uni2h-conditional-use-status]]`.
+10b. **Root-volume space is a live hazard for the rest of the leg (ENOSPC aborted 1.0b's last two cells
+    2026-08-16).** The 48 GB root volume holds the repo + accumulating `runs/*/raw`; the fix in force: raw
+    payloads relocate to `/data/local-nvme/runs-raw-overflow/` (symlinked back, S3 authoritative) after each
+    step's verified sync — the session chain does it; durable fix + rebuild sizing is tracker **D-35**.
+    Watch `df /` before any long step; HF cache now lives on scratch via symlink (re-point it if a rebuild
+    recreates `~/.cache/huggingface`). Driver resume-skip gap is **D-36** — before Leg B.
 11. **sync-to-s3 first-run verification DONE (2026-08-15, ahead of the first teardown):** `--self-test`
    built (was D-23), PASSED against the real bucket (mirror probe deleted on local delete; archive probe
    survived), UNVERIFIED banner removed, and `teardown-prep.sh` now runs the self-test mechanically before

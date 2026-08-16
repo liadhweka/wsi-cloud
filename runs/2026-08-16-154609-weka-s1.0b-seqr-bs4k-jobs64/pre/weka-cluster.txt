@@ -1,0 +1,18 @@
+CONTAINER ID  HOSTNAME                                       CONTAINER  IPS         STATUS  REQUESTED ACTION  RELEASE  FAILURE DOMAIN    CORES     MEMORY  UPTIME     LAST FAILURE  REQUESTED ACTION FAILURE
+0             ip-10-0-1-190.ap-northeast-2.compute.internal  drives0    10.0.1.190  UP      NONE              5.1.27   836b9a9ad0bacb74      2    3.14 GB  14:16:42h
+1             ip-10-0-1-190.ap-northeast-2.compute.internal  compute0   10.0.1.190  UP      NONE              5.1.27   836b9a9ad0bacb74      7  136.50 GB  14:16:36h
+2             ip-10-0-1-211.ap-northeast-2.compute.internal  drives0    10.0.1.211  UP      NONE              5.1.27   332d4ae64f0c283e      2    3.14 GB  14:16:46h
+3             ip-10-0-1-211.ap-northeast-2.compute.internal  compute0   10.0.1.211  UP      NONE              5.1.27   332d4ae64f0c283e      7  136.50 GB  14:16:39h
+4             ip-10-0-1-197.ap-northeast-2.compute.internal  drives0    10.0.1.197  UP      NONE              5.1.27   df73855afdbd7a20      2    3.14 GB  14:16:47h
+5             ip-10-0-1-197.ap-northeast-2.compute.internal  compute0   10.0.1.197  UP      NONE              5.1.27   df73855afdbd7a20      7  136.50 GB  14:16:39h
+6             ip-10-0-1-212.ap-northeast-2.compute.internal  drives0    10.0.1.212  UP      NONE              5.1.27   d6062c250dd4e2b0      2    3.14 GB  14:16:42h
+7             ip-10-0-1-212.ap-northeast-2.compute.internal  compute0   10.0.1.212  UP      NONE              5.1.27   d6062c250dd4e2b0      7  136.50 GB  14:16:36h
+8             ip-10-0-1-186.ap-northeast-2.compute.internal  drives0    10.0.1.186  UP      NONE              5.1.27   f7fe620d53319357      2    3.14 GB  14:16:51h
+9             ip-10-0-1-186.ap-northeast-2.compute.internal  compute0   10.0.1.186  UP      NONE              5.1.27   f7fe620d53319357      7  136.50 GB  14:16:45h
+10            ip-10-0-1-183.ap-northeast-2.compute.internal  drives0    10.0.1.183  UP      NONE              5.1.27   b6c8a52fb27beaf6      2    3.14 GB  14:16:42h
+11            ip-10-0-1-183.ap-northeast-2.compute.internal  compute0   10.0.1.183  UP      NONE              5.1.27   b6c8a52fb27beaf6      7  136.50 GB  14:16:36h
+12            ip-10-0-1-222.ap-northeast-2.compute.internal  drives0    10.0.1.222  UP      NONE              5.1.27   c42218d00c2a0f6c      2    3.14 GB  14:16:44h
+13            ip-10-0-1-222.ap-northeast-2.compute.internal  compute0   10.0.1.222  UP      NONE              5.1.27   c42218d00c2a0f6c      7  136.50 GB  14:16:36h
+14            ip-10-0-1-157.ap-northeast-2.compute.internal  drives0    10.0.1.157  UP      NONE              5.1.27   1b3b364240cc83f8      2    3.14 GB  14:16:50h
+15            ip-10-0-1-157.ap-northeast-2.compute.internal  compute0   10.0.1.157  UP      NONE              5.1.27   1b3b364240cc83f8      7  136.50 GB  14:16:43h
+16            ip-10-0-1-21.ap-northeast-2.compute.internal   client     10.0.1.21   UP      NONE              5.1.27                         4    5.92 GB  14:11:35h

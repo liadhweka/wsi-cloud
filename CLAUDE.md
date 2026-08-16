@@ -125,7 +125,8 @@ idempotent; pin versions that affect numbers.
 issues to debug; (3) soft issues that may reshape *future*-step methodology (flag in the summary, don't block
 agreed work); (4) anything else needing my attention — surprising results, external steps I must take, sudo or
 destructive operations. Otherwise proceed; long sweeps are background work, with no routine "still running"
-pings.
+pings. **Wait on background work via its completion notification, never by blocking polls** — the
+notification fires the moment the process exits, so polling both burns attention and can lag the finish.
 
 **Unattended overnight chains are the normal mode**, which makes the tee'd log the primary forensic record of
 what happened while nobody was watching — and means **a trigger that fires at 3am must be mechanical.** The

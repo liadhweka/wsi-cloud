@@ -1,0 +1,48 @@
+{
+  "run_name": "read-corpus-prep",
+  "stage": "1.0",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-16T10:40:26Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-write-cell",
+  "rep": null,
+  "command": [
+    "bash",
+    "-c",
+    "    set -euo pipefail",
+    "    echo '== phase 1: seq corpus =='",
+    "    fio --name=stage-seq --filename='/mnt/weka/benchmarks/stage1-read-corpus/seq-corpus.bin'         --rw=write --bs=1M --ioengine=libaio --iodepth=4 --direct=1         --numjobs=8 --offset_increment=384G --size=384G         --group_reporting --output-format=json+ --status-interval=1",
+    "    echo '== phase 2: randr one-touch regions =='",
+    "    fio --name=stage-regions --directory='/mnt/weka/benchmarks/stage1-read-corpus'         --filename_format='region-$jobnum.bin'         --rw=write --bs=1M --ioengine=libaio --iodepth=4 --direct=1         --numjobs=26 --size=256G         --group_reporting --output-format=json+ --status-interval=1",
+    "    echo '== phase 3: eviction pass (full seq-corpus read) =='",
+    "    fio --name=evict --filename='/mnt/weka/benchmarks/stage1-read-corpus/seq-corpus.bin'         --rw=read --bs=1M --ioengine=libaio --iodepth=4 --direct=1         --numjobs=8 --offset_increment=384G --size=384G         --group_reporting --output-format=json+ --status-interval=1",
+    "  "
+  ],
+  "note": "Stage-1.0 read-corpora staging (not a comparison cell; a real sustained-write + sustained-read workload). Phase 1: seq-corpus.bin 3072 GiB (8 parallel writers). Phase 2: 26 one-touch regions x 256 GiB for 1.0d. Phase 3: eviction pass — full sequential read of the seq corpus, so the staging writes' tail leaves server RAM before any cell runs. Sizes are env parameters derived from the provisioned server-side caches (D13).",
+  "wallclock_s": 2896,
+  "started_utc": "2026-08-16T10:40:28Z",
+  "ended_utc": "2026-08-16T11:28:44Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 13.699,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}
