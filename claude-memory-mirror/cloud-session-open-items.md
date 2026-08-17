@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-17T07:29:13.140Z
+  modified: 2026-08-17T18:43:48.068Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -143,6 +143,12 @@ These change what the numbers mean, so resolving them after cells have run means
     calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
 ## B. Watch during benchmarking
 
+-1. **CLOSEOUT GATE — before launching ANY next phase, run
+    `scripts/verify-substage-closeout.sh --all-completed` (or per new substage) and get exit 0.** It
+    mechanically asserts the full cadence: fresh aggregate CSV, the roadmap `**Leg <X> results` row, canary,
+    INDEX, S3. Redundant with CLAUDE.md + RUNBOOK on purpose (owner's instruction after the 2026-08-17
+    Stage-3 miss): this is the one discipline that failed as prose. Extend the checker's substage table in
+    the same edit that adds a new substage — unknown substages refuse.
 0. **D18 repeats are per-leg discoveries — do not miss them.** Immediately after each Tier-1 identifies the
    knee / pinned-peak cell, re-invoke that exact target with `REP=2` then `REP=3` (same env). The canary pair
    is wired into `run-leg.sh` (`C0`–`C8`); the knee repeats are NOT wireable in advance and exist only if run.

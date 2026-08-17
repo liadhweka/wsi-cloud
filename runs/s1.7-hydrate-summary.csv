@@ -1,0 +1,5 @@
+mcr,run_dir,wallclock_s,fs_write_active_mean_gib_s,fs_write_naive_mean_gib_s,corpus_gib_per_s_over_wallclock,fs,cache_state,status
+4,2026-08-16-221441-weka-s1.7-hydrate-mcr4,5729,0.312,0.312,0.312,weka,na-write-cell,OK
+16,2026-08-16-235124-weka-s1.7-hydrate-mcr16,3913,0.453,0.452,0.457,weka,na-write-cell,OK
+64,2026-08-17-005732-weka-s1.7-hydrate-mcr64,5215,0.342,0.341,0.343,weka,na-write-cell,OK
+256,2026-08-17-022535-weka-s1.7-hydrate-mcr256,5433,0.331,0.331,0.329,weka,na-write-cell,OK

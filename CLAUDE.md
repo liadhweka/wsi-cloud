@@ -150,6 +150,13 @@ failed run dir, never delete it (this covers data, not prose: superseded documen
 git holds it); (7) verify the new state is actually clean. Not a licence to scope-creep — but never leave a
 half-clean state.
 
+**Substage closeout is a mechanical gate, not a habit.** After a substage completes:
+`scripts/verify-substage-closeout.sh <substage>` must exit 0 (aggregate fresh · roadmap results row written
+· canary run · INDEX OK · raw in S3) **before the next phase launches**. Born of a real miss (Stage 3's
+results block, 2026-08-17): prose in three docs called this non-negotiable and it was still skipped once —
+so the check is code, and the prose is just its rationale. Extend the checker's table in the same edit that
+adds a new substage.
+
 **Git: Claude commits and pushes autonomously** (`git add -A && git commit && git push`), at its own
 cadence — the working policy is a commit per coherent work block, always preceded by `./backup.sh`, with a
 message that summarizes the block. Keep commits reviewable: batch at checkpoints, not mid-edit. **Never

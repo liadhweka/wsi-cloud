@@ -212,6 +212,25 @@ a human retype — so `record-run.sh` suffixes `-rep<N>` and aggregation groups 
 driver's ledger or it measures its first run's cache — that repeat path goes through the driver's own
 mechanics, not this generic runner.
 
+### `verify-substage-closeout.sh` — the mechanical substage-closeout gate ⭐ NEW
+**What.** For one substage (or `--all-completed`): every cell OK in INDEX · aggregate CSV present **and
+newer than the newest cell** · the roadmap's `**Leg <X> results` row present inside that substage's section
+· consistency canary on every cell (NO_DATA fatal; judgements counted) · raw verifiably in S3
+(size-checked dry-run). Exit 0 = closed; anything else names what's missing. **Gates every next-phase
+launch** (RUNBOOK § Substage closeout; CLAUDE.md carries the rule).
+**Why.** The closeout lived as non-negotiable prose in three documents and was still skipped once (Stage 3,
+2026-08-17) — the project's own lesson applied to itself: a trigger must be mechanical.
+**Caveats.** The substage table inside the script is the registry — **extend it in the same edit that adds a
+new substage** (unknown → refusal, not skip). The roadmap check keys on the `**Leg <X> results` row-prefix
+convention. Rep cells are audited (INDEX/canary/S3) but excluded from grid CSVs until the D-4 helper's rep
+grouping lands — `aggregate-sweep.py`'s name regex skips `-repN` dirs, so the grids stay single-shot.
+
+### `aggregate-stage1-hydrate.py` — the 1.7 aggregate the closeout gate found missing ⭐ NEW
+**What.** Rolls the hydration cells into `s1.7-hydrate-summary.csv`: per cell mcr, wallclock, fs-side write
+(active-window + naive means), corpus-GiB/s-over-wallclock, INDEX verdict. Self-locates; no args.
+**Why.** The roadmap promised the aggregate; no script produced it — the same class of miss as the Stage-3
+results block, found by the closeout gate's first full audit.
+
 ### `parse-results.py` — raw CSVs → `results.json`
 **What.** Reads a run dir's `raw/` time series and writes aggregate statistics.
 **Why.** Independent of the wrapper, so a parser fix or a new derived metric never requires re-running the

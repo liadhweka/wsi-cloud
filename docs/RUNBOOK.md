@@ -309,6 +309,22 @@ primary forensic record of what happened while nobody was watching.
 
 ---
 
+## Substage closeout — mechanical, gates the next phase
+
+**A completed substage is closed only when `scripts/verify-substage-closeout.sh <substage>` exits 0**, which
+asserts with named failures: every cell OK in `INDEX.md` (forensically renamed dirs excluded) · the
+substage's aggregate CSV exists and is **newer than its newest cell** · the stage roadmap carries a
+**`**Leg <X> results` row inside that substage's section** (the numbers-into-the-roadmap cadence, checked
+mechanically — that row prefix is the convention) · the consistency canary runs on every cell with no
+NO_DATA · every cell's raw telemetry verifiably in S3. **No next phase launches until the previous phase's
+substages are closeout-clean.** *Why a script:* the closeout lived as prose called "non-negotiable" across
+three documents and still got skipped (Stage 3, 2026-08-17) — a trigger must be mechanical. Within an
+unattended chain, steps get the mechanical half (canary + INDEX + S3) between steps; the full closeout —
+which includes the human-authored results row — gates the next launch. **Extend the checker's table in the
+same edit that adds a new substage**; an unknown substage is a refusal, not a skip.
+
+---
+
 ## How to re-parse / re-aggregate without re-running
 
 **Re-parse one run** — the parser is independent of the wrapper, so a parser fix or a new derived metric does
