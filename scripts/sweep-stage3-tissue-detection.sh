@@ -169,6 +169,7 @@ for ds_entry in "${DATASETS[@]}"; do
     chunkroot=$(build_chunks "$manifest" "$dataset" "$n")
     log "  chunks:      $chunkroot/chunk{0..$((n-1))}"
 
+    RECORD_CACHE_STATE="na-compute-leaning-unmanaged" \
     "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
       --stage 3.0 \

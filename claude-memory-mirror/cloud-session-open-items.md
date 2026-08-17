@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-17T05:27:01.563Z
+  modified: 2026-08-17T05:47:15.772Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -84,15 +84,16 @@ These change what the numbers mean, so resolving them after cells have run means
       judgment against CPU cost and is unmade. Verified on the build machine: measured latencies fell
       **below** the floor, so at 10 ms this cell is sampling poll phase, not visibility — decide the interval
       before 7.4.b runs, or its headline number means nothing.
-13d. **Stage 3–7 sweep drivers must declare `RECORD_CACHE_STATE` per cell (kvikIO cells also
-    `RECORD_KVIKIO_CELL=1`) before their stages run** — the D21 verdict semantics (ratified 2026-08-16,
-    implemented in `record-run.sh`) now mark an undeclared stage≥1 cell INCOMPLETE, so an undeclared driver
-    aborts the unattended chain at its first cell. Regimes follow each roadmap's cache-discipline row;
-    propose the per-stage regime labels at the baseline greenlight rather than inventing them at 3am. The
-    driver list is tracker **D-30**'s remainder. Stage-1/2/stability drivers are done.
-14. **Decide the cuCIM tile-cache policy.** Every cuCIM path sets a 512 MiB per-process cache that is not
-    swept, not recorded, and absent from the cold/warm discussion — yet sits in front of the filesystem on
-    every cuCIM cell. Record it per cell or make it swept, and apply the same choice to both legs.
+13d. **Stage 4–7 sweep drivers must declare `RECORD_CACHE_STATE` per cell (kvikIO cells also
+    `RECORD_KVIKIO_CELL=1`) before their stages run** — blanket ratification 2026-08-17: methodology-faithful
+    labels per each roadmap's cache-discipline row, `na-*` where a stage deliberately defines no axis. Done:
+    Stage-1/2/stability, and **3.0 (`na-compute-leaning-unmanaged`, Stage-3 register)**. Remaining, to wire
+    during the pre-Stage-4 gate pass (labels need each reader's achieved-evidence emission read first, not
+    invented): 4.A, 4.C sweep, 5, 6.A, 6.B-mil, 6.C, 7 — tracker **D-30**'s list. Wire item 14's cuCIM
+    cache-size recording in the same pass.
+14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Remaining:
+    implementation — record the configured size into every cuCIM cell's metadata/note (wire during the
+    pre-Stage-4 driver pass, with the cache declarations of 13d).**
 15. **Re-derive `CHUNK_SIZE` for 6.A Tier 2 from this leg's provisioned capacity.** Both Tier-2 orchestrators
     default to 200, sized against a different environment. **This decides whether Tier 2 fits on disk at all**
     — too large and the conversion fails mid-cohort after hours; too small and it wastes wallclock. Use the

@@ -231,6 +231,11 @@ Byte-verified held-constant inputs, identical in both legs (**D6**).
   `Stage-2-Cataloging.md`, applied identically to both legs.
 - **Output to a separate `tissue-detection/3.0/…` directory.** *Why:* the canonical dataset directory stays
   read-only so both legs read byte-identical inputs; per-cell output dirs are cleanly removable.
+- **3.0 cells declare `RECORD_CACHE_STATE=na-compute-leaning-unmanaged`** (the D21 verdict rule requires
+  every measured cell to declare). *Why `na-*`:* this stage defines no cache axis — its I/O is bounded by
+  design (headers + thumbnails) and its measured quantities are compute-side and completeness, so a cache
+  regime is deliberately not an axis here; `na-*` maps to NOT_APPLICABLE in the D13 reconciler rather than
+  claiming a cold or warm state nothing establishes.
 - **Coord equivalence between legs is a fail-loud data-integrity gate.** *Why:* completeness and per-slide
   tile counts are storage-independent, so any cross-leg divergence proves the legs did not process
   identical inputs — which would invalidate every downstream comparison. Cheap to check, and it catches a

@@ -288,6 +288,12 @@ One entry per live Stage 4 decision. Cross-stage decisions live in `STAGES.md`.
   storage-bound or pipeline-bound.
 - **4.A.2 (WebDataset) is deferred.** *Why:* it varies output format within Strategy A rather than
   addressing the A-vs-B-vs-C contrast, and it does not discriminate between the two filesystems.
+- **The cuCIM per-process tile cache is RECORDED per cell, not swept (ratified 2026-08-17).** Every cuCIM
+  path carries a per-process tile cache (512 MiB by default on this stack) that sits in front of the
+  filesystem. *Why record-not-sweep:* it is a fixed production-default library layer, identical on both legs
+  by construction, and sweeping it would multiply the grid to answer a library-configuration question rather
+  than a filesystem one. The configured size is recorded into every cuCIM cell's metadata/note so a reader
+  can see the layer; any change to it would be a workload-shape change requiring both legs to match.
 - **Cold-vs-warm is characterised per filesystem in 4.B, not assumed to cross over at the same worker
   count.** *Why:* the two filesystems cache differently, so the working-set-vs-cache crossover is itself a
   per-filesystem property; assuming a shared threshold would mislabel cells on one side.
