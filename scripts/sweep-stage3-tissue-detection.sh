@@ -65,10 +65,19 @@ if [[ ! -f "$EXTRACTOR_SCRIPT" ]]; then
   log "  Clone via: git clone https://github.com/mahmoodlab/CLAM ${CLAM_DIR:-${PROJECT_HOME:-$HOME}/wsi-tools/CLAM}"
   exit 2
 fi
-if ! python3 -c "import openslide, cv2, h5py, numpy, pandas, matplotlib" 2>/dev/null; then
-  log "FATAL: Stage 3 Python deps missing for the interpreter this driver uses."
-  log "  On AL2023 there is no apt/system-lib route; cv2 + matplotlib are in no pinned"
-  log "  env either. The dependency home is an OPEN DECISION — resolve it before Stage 3."
+# The dependency home is DECIDED (2026-08-17, Stage-3 register): CLAM runs on the
+# MAIN pinned env, whose pip layer now carries matplotlib + its leaf deps — the
+# regenerated pip-freeze spec makes every rebuild (and Leg B) inherit it via the
+# bootstrap. Bare `python3` was PATH-resolved (miniforge base) and wrong on every
+# build; the interpreter is built per the NAMING convention, like every other driver.
+: "${CONDA_ENVS_DIR:?CONDA_ENVS_DIR is unset -- source env.sh}"
+: "${CONDA_ENV_MAIN:?CONDA_ENV_MAIN is unset -- source env.sh}"
+PY="$CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python3"
+[[ -x "$PY" ]] || { log "FATAL: $PY missing or not executable — env not built on this instance"; exit 2; }
+if ! "$PY" -c "import openslide, cv2, h5py, numpy, pandas, matplotlib" 2>/dev/null; then
+  log "FATAL: Stage 3 Python deps missing from the MAIN env's pip layer."
+  log "  Rebuild the env from scripts/env-specs/ (the regenerated pip-freeze carries"
+  log "  matplotlib + leaf deps), or install them --no-deps so no pinned package moves."
   exit 2
 fi
 
@@ -154,7 +163,7 @@ for ds_entry in "${DATASETS[@]}"; do
     name="tissue-${dataset}-n${n}"
     cell_save="$TISSUE_OUT/${dataset}/n${n}"
 
-    note="Stage 3.0 cell $i/$TOTAL: CLAM tissue detection on $dataset ($count slides) at concurrency n=$n, 20× tiling ($PATCH_ARGS; CAM16 native level 1, BRCA 512px@40× resized to 256px@20× by downstream readers). Single-pass full dataset, --seg --patch (NO --stitch — visualization not needed downstream, also makes the workload more purely compute-bound for the 'Stage 3 is compute-stress' narrative). N parallel python3 create_patches_fp.py instances each consuming a round-robin chunk of the manifest, all writing to $cell_save. HDF5 tile coords + per-slide tissue mask JPEG."
+    note="Stage 3.0 cell $i/$TOTAL: CLAM tissue detection on $dataset ($count slides) at concurrency n=$n, 20× tiling ($PATCH_ARGS; CAM16 native level 1, BRCA 512px@40× resized to 256px@20× by downstream readers). Single-pass full dataset, --seg --patch (NO --stitch — visualization not needed downstream, also makes the workload more purely compute-bound for the 'Stage 3 is compute-stress' narrative). N parallel create_patches_fp.py instances (main-env interpreter) each consuming a round-robin chunk of the manifest, all writing to $cell_save. HDF5 tile coords + per-slide tissue mask JPEG."
 
     log "=== [cell $i/$TOTAL] $name ==="
     log "  dataset:     $dataset ($count slides)"
@@ -184,7 +193,7 @@ for ds_entry in "${DATASETS[@]}"; do
         for i in \$(seq 0 $((n-1))); do
           (
             cd $CLAM
-            python3 create_patches_fp.py \\
+            $PY create_patches_fp.py \\
               --source $chunkroot/chunk\$i \\
               --save_dir $cell_save \\
               --seg --patch \\

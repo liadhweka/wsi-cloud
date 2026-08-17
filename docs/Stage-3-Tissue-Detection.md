@@ -231,6 +231,13 @@ Byte-verified held-constant inputs, identical in both legs (**D6**).
   `Stage-2-Cataloging.md`, applied identically to both legs.
 - **Output to a separate `tissue-detection/3.0/…` directory.** *Why:* the canonical dataset directory stays
   read-only so both legs read byte-identical inputs; per-cell output dirs are cleanly removable.
+- **CLAM's dependency home is the MAIN pinned env (`wsi-cucim-2604`), whose pip layer carries matplotlib +
+  its leaf deps (installed `--no-deps`, so no pinned package moved; pip-freeze spec regenerated so every
+  rebuild and Leg B inherit it through the bootstrap).** *Why the main env:* it already carried every other
+  CLAM dep (openslide, cv2, h5py, numpy, pandas), and a second env would put a held-constant input in two
+  places. The driver builds its interpreter per the NAMING convention
+  (`$CONDA_ENVS_DIR/$CONDA_ENV_MAIN/bin/python3`) — bare `python3` resolved to whatever led PATH and was
+  wrong on every build.
 - **3.0 cells declare `RECORD_CACHE_STATE=na-compute-leaning-unmanaged`** (the D21 verdict rule requires
   every measured cell to declare). *Why `na-*`:* this stage defines no cache axis — its I/O is bounded by
   design (headers + thumbnails) and its measured quantities are compute-side and completeness, so a cache

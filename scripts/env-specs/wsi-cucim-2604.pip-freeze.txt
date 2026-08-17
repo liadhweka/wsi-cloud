@@ -9,8 +9,10 @@ click @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_clic
 cucim @ file:///opt/conda/conda-bld/work/python/cucim
 cuda-pathfinder @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_cuda-pathfinder_1777330272/work/cuda_pathfinder
 cupy @ file:///home/conda/feedstock_root/build_artifacts/cupy-split_1771602274203/work
+cycler==0.12.1
 exceptiongroup @ file:///home/conda/feedstock_root/build_artifacts/exceptiongroup_1763918002538/work
 filelock @ file:///home/conda/feedstock_root/build_artifacts/filelock_1776621385265/work
+fonttools==4.63.0
 fsspec @ file:///home/conda/feedstock_root/build_artifacts/fsspec_1777547723461/work
 gmpy2 @ file:///home/conda/feedstock_root/build_artifacts/gmpy2_1773244933613/work
 h11 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_h11_1767729720/work
@@ -26,10 +28,12 @@ idna @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_idna_
 imagecodecs @ file:///home/conda/feedstock_root/build_artifacts/imagecodecs_1777731204338/work
 imageio @ file:///home/conda/feedstock_root/build_artifacts/imageio_1738273805233/work
 Jinja2 @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_jinja2_1764517220/work
+kiwisolver==1.5.0
 kvikio @ file:///tmp/conda-bld-output/bld/rattler-build_kvikio/work/python/kvikio
 lazy-loader @ file:///home/conda/feedstock_root/build_artifacts/lazy-loader_1772817235966/work
 markdown-it-py @ file:///home/conda/feedstock_root/build_artifacts/markdown-it-py_1778169583724/work
 MarkupSafe @ file:///home/conda/feedstock_root/build_artifacts/markupsafe_1772444934960/work
+matplotlib==3.11.1
 mdurl @ file:///home/conda/feedstock_root/build_artifacts/mdurl_1733255585584/work
 monai @ file:///home/conda/feedstock_root/build_artifacts/monai_1769585314056/work
 mpmath @ file:///home/conda/feedstock_root/build_artifacts/mpmath_1733302684489/work
@@ -44,6 +48,7 @@ pillow @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pil
 pybind11 @ file:///D:/bld/bld/rattler-build_pybind11_1755953378/work
 pybind11-global @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_pybind11-global_1755953338/work
 Pygments @ file:///home/conda/feedstock_root/build_artifacts/pygments_1774796700044/work
+pyparsing==3.3.2
 PySocks @ file:///home/conda/feedstock_root/build_artifacts/pysocks_1733217236728/work
 python-dateutil @ file:///home/conda/feedstock_root/build_artifacts/bld/rattler-build_python-dateutil_1751104122/work
 PyYAML @ file:///home/conda/feedstock_root/build_artifacts/pyyaml_1770223234623/work
