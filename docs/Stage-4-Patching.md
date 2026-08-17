@@ -288,6 +288,9 @@ One entry per live Stage 4 decision. Cross-stage decisions live in `STAGES.md`.
   storage-bound or pipeline-bound.
 - **4.A.2 (WebDataset) is deferred.** *Why:* it varies output format within Strategy A rather than
   addressing the A-vs-B-vs-C contrast, and it does not discriminate between the two filesystems.
+- **4.A cells declare `RECORD_CACHE_STATE=na-mixed-rw-unmanaged`** (D21 rule; blanket ratification
+  2026-08-17). *Why `na-*`:* 4.A defines no cache axis — it is a one-shot write-plus-compute extraction
+  whose subject is the pre-extract strategy's cost, and no regime is constructed or asserted for its reads.
 - **The cuCIM per-process tile cache is RECORDED per cell, not swept (ratified 2026-08-17).** Every cuCIM
   path carries a per-process tile cache (512 MiB by default on this stack) that sits in front of the
   filesystem. *Why record-not-sweep:* it is a fixed production-default library layer, identical on both legs

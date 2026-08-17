@@ -202,7 +202,7 @@ for ds_entry in "${DATASETS[@]}"; do
     name="tilesread-${dataset}-cucim-N${N}-nw${NW}-bs${BS}${sort_tag}$([[ "$arm" == cold ]] && echo "-coldref")"
     latency_csv="$LATENCY_DIR/${name}.csv"
     summary_json="$LATENCY_DIR/${name}.summary.json"
-    note="Stage 4.B $TIER cell $i/$TOTAL: random tile reads. Backend=cucim CPU batched$([ -n "$sort_tag" ] && echo " (with --sort-batches optimization)"). Dataset=$dataset. N_processes=$N, num_workers=$NW (cuCIM C++ thread pool), batch_size=$BS, prefetch_factor=2. LRU(8) slide handle cache per worker. seed=42. runtime=${RUNTIME}s + ${RAMP}s ramp. Cache arm=$arm$([[ "$arm" == cold ]] && echo ' (COLD REFERENCE CELL at an expected crossover point: vm.drop_caches=3 with recorded acknowledgment, run after its warm twin; server-side residual stated)'). Cell order fixed and de-ordered in N (D13)."
+    note="Stage 4.B $TIER cell $i/$TOTAL: random tile reads. Backend=cucim CPU batched$([ -n "$sort_tag" ] && echo " (with --sort-batches optimization)"). Dataset=$dataset. N_processes=$N, num_workers=$NW (cuCIM C++ thread pool), batch_size=$BS, prefetch_factor=2. cuCIM per-process tile cache: 512 MiB (library default; recorded-not-swept per the Stage-4 register — identical on both legs). LRU(8) slide handle cache per worker. seed=42. runtime=${RUNTIME}s + ${RAMP}s ramp. Cache arm=$arm$([[ "$arm" == cold ]] && echo ' (COLD REFERENCE CELL at an expected crossover point: vm.drop_caches=3 with recorded acknowledgment, run after its warm twin; server-side residual stated)'). Cell order fixed and de-ordered in N (D13)."
     log "=== [cell $i/$TOTAL] $name (arm=$arm) ==="
 
     export RECORD_RUN_DIR="$REPO/runs/$(date -u +%Y-%m-%d-%H%M%S)-${LEG:?LEG is unset}-s4.B-${name}"

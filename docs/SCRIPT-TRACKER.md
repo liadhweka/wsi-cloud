@@ -189,6 +189,29 @@ non-zero only when it cannot determine (mode mismatch, accounting off). Test fil
 backend-RAM-resident by construction — the PATH is the question, not the rate. Cells declare
 `RECORD_KVIKIO_CELL=1`, so the D-30 wrapper check enforces the recorded split.
 
+### `fingerprint.py` — cross-leg artifact fingerprints: capture + compare (was `D-24`) ⭐ NEW
+**What.** `capture <class>` computes a storage-independent fingerprint into
+`runs/.leg-state/<leg>/fingerprints/<class>.json` (git-tracked, so Leg B compares against Leg A's committed
+capture); `compare <a> <b>` diffs two captures and **exits non-zero on any mismatch** — the fail-loud gate
+of the RUNBOOK's integrity table. Classes per register **D19**: `dataset-bytes` (sorted relpath/size/md5
+list → one SHA-256; md5s re-emitted from the hydration verifier's own basis, never re-hashed — hours of
+re-hashing to restate a recorded verification), `coords-3.0` (per-slide count + SHA-256 of the raw coords
+*array contents*, dtype recorded — the array, not the HDF5 container). `rawtiff-4d` / `features-6a` refuse
+until their artifacts first exist — a format designed against imagined output gets rewritten (D-24).
+**Caveats.** Run with the MAIN env's interpreter (h5py). Refuses on any missing dataset file rather than
+fingerprinting a partial corpus. `leg`/`basis` fields are excluded from compare (expected to differ /
+descriptive).
+
+### `rerun-cell.sh` — the D18 repeat runner ⭐ NEW
+**What.** `rerun-cell.sh <run-dir> <rep>` re-invokes a recorded cell's exact command as `REP=<rep>` with the
+original name, stage, note (annotated) and cache declaration — all from the run dir's `metadata.json`, never
+a human retype — so `record-run.sh` suffixes `-rep<N>` and aggregation groups reps to median + spread.
+**Why.** Knee/pinned-peak cells are per-leg discoveries, so the repeats cannot be pre-wired into
+`run-leg.sh`; hand-retyping a cell's command is the transcription risk the recorded command exists to remove.
+**Caveats.** **Refuses 1.0d cells**: a one-touch repeat must claim a fresh reserve region via the randr
+driver's ledger or it measures its first run's cache — that repeat path goes through the driver's own
+mechanics, not this generic runner.
+
 ### `parse-results.py` — raw CSVs → `results.json`
 **What.** Reads a run dir's `raw/` time series and writes aggregate statistics.
 **Why.** Independent of the wrapper, so a parser fix or a new derived metric never requires re-running the

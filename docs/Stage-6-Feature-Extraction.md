@@ -384,9 +384,12 @@ past cache and is the largest single footprint in the project after raw-TIFF.
 
 - **Corpus sizing versus two caches** — the cold-cache problem above. Unresolved corpus sizing would
   invalidate 6.B.2's cold cells on one or both legs. *(Open-items memory: the 6.B corpus-sizing item.)*
-- **Tile-count assumptions** — the per-slide tile counts that drive feature file sizes and Tier 2 wallclock
-  come from magnification arithmetic, not measurement. **Confirm from the real 3.0 coords** before sizing
-  the 6.B.1 grid or committing Tier 2 wallclock. *(Open-items memory: the real-tile-count item.)*
+- **Tile counts — MEASURED from the real 3.0 coords (Leg A, n64; fingerprint `coords-3.0.json`):** BRCA
+  1131 slides / **12,186,434 tiles** (mean 10,775, median 10,342, p10 2,475, p90 19,489, max 67,268);
+  CAM16 399 / 4,610,687 (mean 11,556, max 55,852 — the wider tail the Tier-3 straggler warning assumes).
+  Inside the 8–15K/slide assumption band, so the ~40–65 MB feature-file bracket holds (1536-dim fp32 lands
+  ≈66 MB at the mean) and the 6.B.3 real corpus stays far under host RAM. Tier-2 scale: ×3 models
+  ≈ 36.6M tile-forwards per leg.
 - **Chunk size for Tier 2** — it decides whether the chunked conversion fits on the provisioned capacity at
   all, so it is re-derived per leg's capacity and then held **identical on both legs**, since chunk size
   changes the write/delete cadence the filesystem sees. *(Open-items memory: the `CHUNK_SIZE` item.)*

@@ -117,6 +117,7 @@ for n in "${CONCURRENCIES[@]}"; do
     rm -rf "$cell_save"
     mkdir -p "$cell_save"
 
+    RECORD_CACHE_STATE="na-mixed-rw-unmanaged" \
     "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
       --stage 4.A \

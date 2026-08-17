@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-17T05:47:15.772Z
+  modified: 2026-08-17T07:29:13.140Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -55,8 +55,9 @@ These change what the numbers mean, so resolving them after cells have run means
     by determination); nvidia-fs read bytes non-zero is a Leg-B-only expectation. Stats format:
     `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
     Remaining D-6 engineering: Stage-5/6 worker wiring + the nvidia-fs block parser (tracker **D-6**).
-8. **Confirm real per-slide tile counts from the actual 3.0 coords** before sizing the 6.B.1 file-size grid or
-   committing 6.A Tier 2 wallclock — both currently rest on magnification arithmetic, not measurement.
+8. **(resolved 2026-08-17 — tile counts measured from the real coords; numbers in
+   `docs/Stage-6-Feature-Extraction.md` § Risks and the `coords-3.0` fingerprint. Delete on next hygiene
+   pass once 6.B.1's grid is actually sized from them.)**
 9. **Counter-semantics check for cross-leg `ops/s`.** Until counter semantics are verified equivalent and that
    verification recorded, app-level metrics are the cross-leg-comparable ones and filesystem-reported ops/s
    is within-leg only. Detail: `docs/Stage-2-Cataloging.md`.

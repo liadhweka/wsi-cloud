@@ -1,0 +1,8 @@
+{
+  "basis": "TCGA md5s from the GDC manifest, per-file-verified against local bytes by the 1.7 hydration verifier; CAM16 size-only (manifest carries multipart ETags; the S3->S3 staging copy was checksummed by S3 end-to-end)",
+  "class": "dataset-bytes",
+  "file_count": 2498,
+  "leg": "weka",
+  "list_sha256": "5d613d643e2b40408788d7e0a0e04352719a2808668305f784b9b286a023da05",
+  "total_bytes": 1921267299907
+}
