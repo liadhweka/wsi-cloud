@@ -121,6 +121,11 @@ AskUserQuestion picker, which forces one click per decision and blocks discussio
 **Dependability defaults:** tee long output to a dated log; checkpoint anything over ~10 minutes; keep scripts
 idempotent; pin versions that affect numbers.
 
+**Don't ask for ratification of the obvious.** If a standing rule in this file already decides something —
+or the answer is one no senior engineer would debate — decide and proceed, noting it. A stale "ask me first"
+note in a tracker or doc does not outrank a standing rule here; that is a rule-6 conflict to resolve toward
+the rule, not a reason to block. Reserve asks for genuine judgment calls.
+
 **Pause only for these four triggers:** (1) open decisions or un-pre-decided methodology forks; (2) actual
 issues to debug; (3) soft issues that may reshape *future*-step methodology (flag in the summary, don't block
 agreed work); (4) anything else needing my attention — surprising results, external steps I must take, sudo or
