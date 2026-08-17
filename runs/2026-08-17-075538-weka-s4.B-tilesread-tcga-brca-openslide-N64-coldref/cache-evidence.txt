@@ -1,0 +1,5 @@
+action=vm.drop_caches=3 (client page cache + dentries + inodes)
+timestamp=2026-08-17T07:56:58Z
+rc=0
+vm.drop_caches = 3
+server_side=not clearable from the client; residual uncertainty stated, not hidden (D13)

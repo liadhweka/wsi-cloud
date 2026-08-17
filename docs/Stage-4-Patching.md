@@ -144,7 +144,8 @@ mismatched-block denominator makes a mid-block workload look artificially high o
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs — needs 3.0 coords |
+| **Status** | ✅ Leg A (weka, 6/6 cells OK; canary judgements report-only per the mixed-rw shape) · ⏳ Leg B |
+| **Leg A results (`s4.A-patches-summary.csv`)** | 50-slide subsets. BRCA: n=1 4664 s → n=8 686 s (6.8×) → n=64 249 s (2.8× more — the knee sits between 8 and 64). CAM16: 1429 → 213 → 81 s; peak **7,716 tiles/s** (CAM16 n=64, 621k tiles → 11.3 GiB HDF5 written). *Caveat:* JPEG-encode CPU dominates at high n; filesystem-side rates sat far below the 1.0a write ceiling throughout — the strategy's cost is compute-shaped on this leg. |
 | **Tool** | `openslide-python` + `h5py`. Reads the 20× tile coords produced by 3.0 |
 | **Source → Target** | `$FS_MOUNT/data/<dataset>/<slide-id>.svs` + `$FS_MOUNT/tissue-detection/3.0/<dataset>/n64/patches/<slide-id>.h5` → `$FS_MOUNT/patches/4.A/<dataset>/n<N>/<slide-id>.h5` |
 | **Methodology** | **2-D sweep:** datasets ∈ {TCGA-BRCA, CAMELYON16} × concurrency ∈ {1, 8, 64} = **6 cells per leg**, **concurrency outer descending** (n=64 first) so the cheap cells validate the methodology before the long-pole n=1 cell. **50-slide random subset per dataset (seed=42)**, manifests in `../scripts/manifests/<dataset>-stage4a-subset.tsv`. Per slide: open the SVS, read the 20× coords, read each patch honouring the coord contract (BRCA 512 px @ 40× resized to 256 px @ 20×; CAM16 256 px @ 20× native), JPEG-encode at q=85, append to a vlen-bytes HDF5 with coords + metadata attrs. Concurrency via `multiprocessing.Pool(processes=N)`. Single-pass per cell. |
@@ -167,7 +168,8 @@ mismatched-block denominator makes a mid-block workload look artificially high o
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs — needs 3.0 coords + Phase 0 ceilings |
+| **Status** | ✅ Leg A (weka, 26/26 cells OK incl. coldrefs; 12 canary judgements report-only — no calibrated bs class for this workload shape) · ⏳ Leg B |
+| **Leg A results (`s4.B-tilesread-summary.csv`; D18 reps recorded for the BRCA peaks)** | BRCA peaks: **cuCIM 22,047 tiles/s** (N=64, nw=16, bs=4; reps 21,922/22,799 → 4.0% spread) vs **OpenSlide 12,895 tiles/s** (N=256; reps 12,196/13,577 → 10.7% spread — the oversubscribed cell is the noisy one) → cuCIM/OpenSlide ≈ **1.7×** at each backend's own peak. CAM16 peak 26,528 tiles/s (cuCIM N=64). *Caveats:* peak cells ran at ~87% slide-handle/coord-pool cache-hit with fs-side reads ~1.7–2.0 GiB/s — the crossover discipline's coldref rows are the cold contrast and stay distinct in the CSV; decode CPU, not storage, shapes the top of both curves on this leg (app-available-core saturation in the recorded `sar` set). |
 | **Tool** | **OpenSlide** per-tile CPU reader with `multiprocessing.Pool` (represents MONAI / Slideflow / CLAM / Trident) **and cuCIM batched CPU** (`CuImage.read_region(locations_list, batch_size, num_workers, prefetch_factor, device='cpu')` — the documented production API). Per `docs.rapids.ai/api/cucim/stable` and `github.com/rapidsai/cucim` |
 | **Source → Target** | `$FS_MOUNT/data/<dataset>/…` → host RAM. No persistent output — reads consumed in place |
 | **Methodology** | **Tiered CPU-only sweep**, 2 datasets × 2 backends. **Tier 1:** OpenSlide N ∈ {1,4,16,64,256} and cuCIM N ∈ {1,4,16,64} at locked (batch_size, num_workers). **Tier 2** (adaptive from Tier 1 knees): 2-D cuCIM (N × num_workers), batch_size sensitivity, OpenSlide N fine-grain. **Tier 3** (conditional): push past Tier 1's max toward each filesystem's read ceiling. Each cell time-based (~60 s + 10 s ramp); workers draw random (slide, x, y) from that dataset's 20× coord pool; LRU(8) slide-handle cache per worker; seed=42. |
