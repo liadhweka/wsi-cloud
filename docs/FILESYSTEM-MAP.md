@@ -226,6 +226,7 @@ else that is durable lives in the docs, not in memory.
 | Project rules | `../CLAUDE.md` |
 | Stage map, plan, decision register | `STAGES.md` |
 | Run + record a cell, canaries, recovery | `RUNBOOK.md` |
+| **Close a completed substage (mandatory gate)** | `../scripts/verify-substage-closeout.sh` — `RUNBOOK.md` § Substage closeout |
 | Per-script reference | `SCRIPT-TRACKER.md` |
 | Findings | `RESULTS.md` |
 | Names, paths and variables | `NAMING-AND-VARIABLES.md` · `../env.example.sh` |

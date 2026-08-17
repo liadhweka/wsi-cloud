@@ -146,7 +146,9 @@ environments attributes an environment difference to the filesystem, the one err
 avoid), the 1.7 re-hydration with byte-verification (`scripts/sweep-stage1-hydrate.sh`; `run-leg.sh` aborts
 rather than skips without its marker), the scripted Stage-0 recording proof before wallclock is spent
 (`scripts/prove-recording.sh`), and `run-leg.sh --leg $LEG`, which **resumes** from the git-tracked
-markers in `runs/.leg-state/$LEG/`.
+markers in `runs/.leg-state/$LEG/`. **Every completed substage then closes through
+`scripts/verify-substage-closeout.sh` (exit 0 gates the next phase — `RUNBOOK.md` § Substage closeout),**
+as non-negotiable as the recording wrapper.
 
 > ⚠ **If the marker directory is empty on a mid-leg rebuild, stop** — the previous teardown never committed
 > them, and running on would silently redo hours of sweeps into duplicate run dirs.

@@ -154,6 +154,11 @@ Then, in dependency order:
 | 12 | **1.5 / 1.6** bulk local→fs copy + mixed concurrent ingest+read | Self-contained; placed late because they perturb the filesystem |
 | 13 | **1.8** *(Lustre leg only)* FSx-native S3 import | Single-filesystem capability cell — excluded from the head-to-head; see Stage 1 |
 
+**Every completed substage closes through the mechanical closeout gate** —
+`../scripts/verify-substage-closeout.sh <substage>` must exit 0 (aggregate fresh, roadmap results row,
+canary, INDEX, S3) **before the next phase launches**. As non-negotiable as the recording wrapper itself;
+rule and rationale in `../CLAUDE.md`, procedure in `RUNBOOK.md` § Substage closeout.
+
 **Wallclock is not estimated here.** Estimates from a different environment would be fiction, and an estimate
 is a prediction. Each roadmap records actual durations as cells land, and the running total is maintained in
 `../runs/INDEX.md`.
