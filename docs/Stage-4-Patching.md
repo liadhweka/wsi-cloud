@@ -290,6 +290,10 @@ One entry per live Stage 4 decision. Cross-stage decisions live in `STAGES.md`.
   storage-bound or pipeline-bound.
 - **4.A.2 (WebDataset) is deferred.** *Why:* it varies output format within Strategy A rather than
   addressing the A-vs-B-vs-C contrast, and it does not discriminate between the two filesystems.
+- **4.D runs as one recorded cell per dataset (was tracker D-15; owner's nod 2026-08-17), declaring
+  `na-mixed-rw-unmanaged`.** *Why per dataset:* the BRCA full cohort and the CAM16 subset differ by ~20× in
+  scale, and one cell each gives the long pole and the subset their own telemetry windows, cost inputs, and
+  INDEX verdicts. The zero/partial-resolution fail-loud closes the silent-cohort-shrink hole.
 - **4.A cells declare `RECORD_CACHE_STATE=na-mixed-rw-unmanaged`** (D21 rule; blanket ratification
   2026-08-17). *Why `na-*`:* 4.A defines no cache axis — it is a one-shot write-plus-compute extraction
   whose subject is the pre-extract strategy's cost, and no regime is constructed or asserted for its reads.

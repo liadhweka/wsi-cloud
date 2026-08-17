@@ -46,9 +46,18 @@
 #     because output was already present must be visible, not indistinguishable
 #     from a run that did the work.
 #
+# RECORDING (was tracker D-15, ratified 2026-08-17): the conversion runs as ONE
+# record-run.sh cell PER DATASET — the BRCA full cohort and the CAM16 subset are
+# different scales, and separate cells give each its own telemetry window, cost
+# inputs, and INDEX verdict. The script re-invokes itself with --inner for the
+# wrapped work, so the recorded command is explicit in cmd.txt rather than an
+# exported-function opaque blob. Cache declaration: na-mixed-rw-unmanaged (the
+# 4.A convention — sustained read+write with no constructed regime).
+#
 # Usage:
 #   ./scripts/convert-stage4c-rawtiff.sh           # convert 1073 BRCA + 50 CAM16
 #   PARALLEL=8 ./scripts/convert-stage4c-rawtiff.sh  # override parallelism
+#   (internal) --inner <dataset> <work_tsv> <run_dir>
 
 set -uo pipefail
 
@@ -104,9 +113,8 @@ fi
 set -m  # job control on
 trap 'echo "[$(date -u +%FT%TZ)] got SIGTERM, killing process group"; kill -TERM 0; wait; exit 143' TERM INT
 
-# Build the work list: lines of "dataset\tslide_id\tsrc_path\tdst_path"
-WORK_TSV=$(mktemp)
-trap 'rm -f "$WORK_TSV"' EXIT
+# Work lists are "dataset\tslide_id\tsrc_path\tdst_path" lines — built per
+# dataset in the outer path; the inner invocation receives its list's path.
 
 # Comment-aware manifest parsing, NOT a fixed tail count: the full-cohort
 # manifest carries a longer comment header AND commented excluded-slide IDs at
@@ -139,13 +147,34 @@ build_cam_work() {
   done
 }
 
-build_brca_work > "$WORK_TSV"
-build_cam_work >> "$WORK_TSV"
+# ── Outer/inner split (D-15). Inner: run one dataset's conversion under the
+# recording wrapper. Outer (default): build + verify the work lists, then one
+# recorded cell per dataset.
+INNER_MODE=0
+if [ "${1:-}" = "--inner" ]; then
+  INNER_MODE=1; INNER_DS="$2"; WORK_TSV="$3"; INNER_RUN_DIR="$4"
+else
+  WORK_BRCA=$(mktemp); WORK_CAM=$(mktemp)
+  trap 'rm -f "$WORK_BRCA" "$WORK_CAM"' EXIT
+  build_brca_work > "$WORK_BRCA"
+  build_cam_work  > "$WORK_CAM"
 
-n_total=$(wc -l < "$WORK_TSV")
-echo "[$(date -u +%FT%TZ)] Stage 4.C convert (TRUE 20× raw-TIFF): $n_total slides queued, $PARALLEL parallel"
-echo "[$(date -u +%FT%TZ)] Log: $LOG_TSV"
-echo ""
+  # Fail loud on resolution holes (the D-15 second half): zero slides means the
+  # manifest or the mount is wrong, and ANY unresolved id silently shrinks the
+  # cohort — which the cross-leg gates would only catch after the wallclock.
+  for pair in "brca:$WORK_BRCA:$BRCA_MANIFEST" "cam16:$WORK_CAM:$CAM_MANIFEST"; do
+    ds=${pair%%:*}; rest=${pair#*:}; wf=${rest%%:*}; mf=${rest#*:}
+    want=$(manifest_ids "$mf" | wc -l); have=$(wc -l < "$wf")
+    if [ "$have" -eq 0 ] || [ "$have" -ne "$want" ]; then
+      echo "FATAL: $ds resolved $have/$want manifest slides to sources — refusing: an unresolved id" >&2
+      echo "       silently shrinks the cohort (see [warn] lines above for which ids)." >&2
+      exit 2
+    fi
+  done
+  echo "[$(date -u +%FT%TZ)] Stage 4.D convert (TRUE 20x raw-TIFF): brca=$(wc -l < "$WORK_BRCA") + cam16=$(wc -l < "$WORK_CAM") slides, $PARALLEL parallel"
+  echo "[$(date -u +%FT%TZ)] Log: $LOG_TSV"
+  echo ""
+fi
 
 # Per-slide worker: convert if dst doesn't exist; append result row to log.
 #
@@ -213,22 +242,61 @@ convert_one() {
 export -f convert_one
 export CONDA_ENV PYTHON CONVERTER LOG_TSV
 
-# Process in parallel via xargs. Use null-delimited input for safety.
-awk -F'\t' 'BEGIN{ORS="\0"} {print $1"\t"$2"\t"$3"\t"$4}' "$WORK_TSV" | \
-  xargs -0 -P "$PARALLEL" -n 1 -I {} bash -c '
-    IFS=$'"'"'\t'"'"' read -r ds sid src dst <<< "{}"
-    convert_one "$ds" "$sid" "$src" "$dst"
-  '
-
-# Summary
-n_ok=$(tail -n +2 "$LOG_TSV" | awk -F'\t' '$7=="OK"' | wc -l)
-n_skip=$(tail -n +2 "$LOG_TSV" | awk -F'\t' '$7=="SKIP-EXISTS"' | wc -l)
-n_fail=$(tail -n +2 "$LOG_TSV" | awk -F'\t' '$7=="FAIL"' | wc -l)
-echo ""
-echo "[$(date -u +%FT%TZ)] DONE: OK=$n_ok SKIP=$n_skip FAIL=$n_fail (of $n_total queued)"
-if [ "$n_fail" -gt 0 ]; then
-  echo "FAILED slides:"
-  tail -n +2 "$LOG_TSV" | awk -F'\t' '$7=="FAIL" {print "  "$2"/"$3}'
-  exit 1
+if [ "$INNER_MODE" -eq 1 ]; then
+  # ── INNER: convert one dataset's work list inside the recording wrapper. ──
+  # Per-invocation rows go to the run dir's conversion-log.tsv (the global
+  # LOG_TSV keeps its append-only continuity, but THIS cell's verdict counts
+  # only THIS invocation — the old summary counted historical rows).
+  RUN_TSV="$INNER_RUN_DIR/conversion-log.tsv"
+  printf "timestamp\tdataset\tslide_id\tsrc_size\tdst_size\twallclock_s\tstatus\n" > "$RUN_TSV"
+  GLOBAL_TSV="$LOG_TSV"
+  # Workers write rows to THIS invocation's TSV only (single log per cell — no
+  # cross-worker tail race against the global file); the global append-only log
+  # gets this cell's rows folded in once, by one writer, after the pool drains.
+  export LOG_TSV="$RUN_TSV"
+  awk -F'\t' 'BEGIN{ORS="\0"} {print $1"\t"$2"\t"$3"\t"$4}' "$WORK_TSV" | \
+    xargs -0 -P "$PARALLEL" -n 1 -I {} bash -c '
+      IFS=$'"'"'\t'"'"' read -r ds sid src dst <<< "{}"
+      convert_one "$ds" "$sid" "$src" "$dst"
+    '
+  tail -n +2 "$RUN_TSV" >> "$GLOBAL_TSV"
+  n_ok=$(tail -n +2 "$RUN_TSV" | awk -F'\t' '$7=="OK"' | wc -l)
+  n_skip=$(tail -n +2 "$RUN_TSV" | awk -F'\t' '$7=="SKIP-EXISTS"' | wc -l)
+  n_fail=$(tail -n +2 "$RUN_TSV" | awk -F'\t' '$7=="FAIL"' | wc -l)
+  n_bytes=$(tail -n +2 "$RUN_TSV" | awk -F'\t' '$7=="OK"{s+=$5} END{print s+0}')
+  echo ""
+  echo "=== summary ==="
+  echo "dataset:            $INNER_DS"
+  echo "slides_queued:      $(wc -l < "$WORK_TSV")"
+  echo "converted_ok:       $n_ok"
+  echo "skipped_existing:   $n_skip"
+  echo "failed:             $n_fail"
+  echo "bytes_written_ok:   $n_bytes"
+  if [ "$n_fail" -gt 0 ]; then
+    echo "FAILED slides (an mpp-guard rejection here means the manifest and the cohort disagree — investigate, don't proceed):"
+    tail -n +2 "$RUN_TSV" | awk -F'\t' '$7=="FAIL" {print "  "$2"/"$3}'
+    exit 1
+  fi
+  exit 0
 fi
-exit 0
+
+# ── OUTER: one recorded cell per dataset (D-15). ──
+overall_rc=0
+for pair in "brca:$WORK_BRCA" "cam16:$WORK_CAM"; do
+  ds=${pair%%:*}; wf=${pair#*:}
+  n=$(wc -l < "$wf")
+  ts=$(date -u +%Y-%m-%d-%H%M%S)
+  run_dir="$REPO/runs/${ts}-${LEG:?LEG is unset -- source env.sh}-s4.D-rawtiff-${ds}-par${PARALLEL}"
+  note="Stage 4.D: TRUE 20x raw-TIFF conversion of $ds ($n slides, PARALLEL=$PARALLEL — workload shape, must match on both legs). Sustained large-read (canonical source) + large-write (single-level 256px-tiled uncompressed 20x TIFF, D4) via convert-rawtiff-20x.py; per-dataset read params per the coord contract (CAM16 native L1@256; BRCA 512@40x resized to 256). Fail-loud mpp guard; write-to-.partial-then-rename; idempotent skip on existing non-empty output (SKIP-EXISTS is a distinct status — verify cleanup before regenerating, RUNBOOK silent-skip hazard). Artifact RETAINED at rest (Stage-4 register). Per-invocation log: conversion-log.tsv in this run dir."
+  if ! RECORD_RUN_DIR="$run_dir" RECORD_CACHE_STATE="na-mixed-rw-unmanaged" \
+       "$REPO/scripts/record-run.sh" \
+         --stage 4.D --run-name "rawtiff-${ds}-par${PARALLEL}" --note "$note" \
+         -- "$REPO/scripts/convert-stage4c-rawtiff.sh" --inner "$ds" "$wf" "$run_dir"; then
+    echo "[$(date -u +%FT%TZ)] FATAL: $ds conversion cell failed — not continuing to the next dataset:" >&2
+    echo "       downstream stages consume this artifact, and a partial cohort read as complete is the" >&2
+    echo "       silent-skip hazard the RUNBOOK warns about." >&2
+    overall_rc=1
+    break
+  fi
+done
+exit $overall_rc
