@@ -362,6 +362,10 @@ if [ ! -f "$UH/.claude/settings.json" ]; then
   "autoCompactEnabled": false,
   "switchModelsOnFlag": false,
   "fileCheckpointingEnabled": false,
+  "statusLine": {
+    "type": "command",
+    "command": "jq -r '\"[\\(.model.display_name)|\\(.effort.level // \"-\")] ctx \\(.context_window.used_percentage // 0)%\" + (if (.rate_limits.five_hour.used_percentage // 0) > 75 then \" ⚠ 5-hr RATE LIMIT ABOVE 75%\" else \"\" end) + (if (.rate_limits.seven_day.used_percentage // 0) > 75 then \" ⚠ 7-day RATE LIMIT ABOVE 75%\" else \"\" end)'"
+  },
   "model": "claude-fable-5[1m]"
 }
 CCFG
