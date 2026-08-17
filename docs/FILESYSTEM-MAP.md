@@ -148,6 +148,8 @@ Everything below is **created per leg** on `$FS_MOUNT`, using the identical layo
 | `fpsync-source/` | Locally-staged corpus — the fast source for the 1.5 bulk-copy sweep |
 | `staging/` | Download landing zone before pushing to S3 |
 | `runs/` | Overflow for in-flight telemetry before its S3 sync |
+| `runs-raw-overflow/` | **Where completed runs' `raw/` payloads live** — relocated after each step's verified S3 sync, symlinked back from each run dir (`<run>-raw`), because the 48 GB root volume cannot hold a leg's accumulated telemetry (tracker D-35). S3 stays authoritative; the symlinks keep parsers and re-syncs working unchanged |
+| `hf-cache/` | The HuggingFace model cache, symlinked from `~/.cache/huggingface` — moved off the root volume for the same reason. A rebuild that recreates `~/.cache/huggingface` must re-point it |
 
 **It dies with the instance**, including between legs. The RAID is built by the instance bootstrap on every
 build; **1.4** records the smoke `fio` that proves it out-runs the filesystem write ceiling (or 1.5 measures

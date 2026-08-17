@@ -58,6 +58,12 @@ cheap now and expensive later.
 6. **Local NVMe is ephemeral — it dies with the instance.** The 2× 1900 GB instance store is fast scratch
    only (conda envs, staging, in-flight telemetry); nothing that matters may live there at teardown.
 
+6b. ⚠ **Size the root EBS volume ≥100 GB.** A 48 GB root filled mid-leg: per-cell raw telemetry accumulates
+    locally between S3 syncs, the WEKA client's traces grow tens of GB under sustained load, and the HF model
+    cache defaults onto it — and a full root volume aborts a running sweep (it did). The interim mitigations
+    (telemetry relocation to scratch, trace-retention cap, cache symlink — tracker D-35) work, but sizing the
+    volume properly removes the failure mode instead of managing it.
+
 ---
 
 ## C. S3 durable store + IAM
