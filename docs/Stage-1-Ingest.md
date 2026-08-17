@@ -188,7 +188,7 @@ below.
 | | |
 |---|---|
 | **Status** | ✅ Leg A (weka, 22/22 cells OK, canary PASS on all) · ⏳ Leg B |
-| **Leg A results (peak over jobs per bs; `s1.0d-randr-summary.csv`)** | 4k: **625k IOPS** (2.39 GiB/s, p99 1.2 ms) at jobs=64 · 16k: 276k IOPS (4.22 GiB/s) at jobs=8 · 64k: 55k IOPS (3.36 GiB/s) at jobs=2. *Caveats:* 16k/64k peaks land at LOW job counts — higher-jobs cells ran slower under the one-touch construction (smaller disjoint per-job slices); recorded as the curve shape, not explained. All cells cold by construction (one-touch regions, ledger-tracked); the warm reference re-read served at a distinguishably higher rate per its run dir. |
+| **Leg A results (peak over jobs per bs; `s1.0d-randr-summary.csv`)** | 4k: **625k IOPS** (2.39 GiB/s, p99 1.2 ms) at jobs=64 · 16k: 276k IOPS (4.22 GiB/s) at jobs=8 · 64k: 55k IOPS (3.36 GiB/s) at jobs=2. **D18 reps (fresh ledger-claimed reserve regions 21–24):** peak 628k/625k/627k (0.5% spread); knee (jobs=32) 607k/622k/618k (2.4%). *Caveats:* 16k/64k peaks land at LOW job counts — higher-jobs cells ran slower under the one-touch construction (smaller disjoint per-job slices); recorded as the curve shape, not explained. All cells cold by construction (one-touch regions, ledger-tracked); the warm reference re-read served at a distinguishably higher rate per its run dir. |
 | **Tool** | `fio` |
 | **Source → Target** | filesystem → host RAM |
 | **Methodology** | Same grid as 1.0c (3 bs × 7 jobs = 21 cells), iodepth=8, `--rw=randread`, **plus one cold reference cell = 22**. As in 1.0b, reads run against a corpus **staged ahead of the timed window and left in place across cells**; the cache-discipline row below sets its sizing and the cell ordering. |
