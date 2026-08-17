@@ -1,0 +1,1 @@
+fio --name=randr-bs16k-jobs8 --filename=/mnt/weka/benchmarks/stage1-read-corpus/region-6.bin --rw=randread --bs=16k --numjobs=8 --iodepth=8 --ioengine=libaio --direct=1 --offset_increment=32G --size=32G --runtime=600 --ramp_time=60 --group_reporting --output-format=json+ --status-interval=1 

@@ -1,0 +1,1 @@
+fio --name=seqr-warmref-bs1M-jobs4 --filename=/mnt/weka/benchmarks/stage1-read-corpus/seq-corpus.bin --rw=read --bs=1M --numjobs=4 --iodepth=1 --ioengine=libaio --direct=1 --offset=0 --offset_increment=16G --size=16G --loops=2 --group_reporting --output-format=json+ --status-interval=1 

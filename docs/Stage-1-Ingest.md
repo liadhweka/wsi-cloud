@@ -142,7 +142,8 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs — anchor first |
+| **Status** | ✅ Leg A (weka, 35/35 cells OK, canary PASS on all) · ⏳ Leg B |
+| **Leg A results (app-level fio, peak over jobs per bs; per-cell data in the run dirs / `s1.0a-seqw-summary.csv`)** | 4k: 1.08 GiB/s (282k IOPS) · 64k: **8.48 GiB/s** · 256k: 4.91 GiB/s · 1M: 5.39 GiB/s · 4M: 5.64 GiB/s — every peak at jobs=64 (grid top). *Caveats:* the 64k > large-block non-monotonicity is recorded, not explained — but note the paired wire measurement: at 64k the client wire/app ratio measured ≈1.04 versus ≈1.46 at 1M/4M (see 1.0c's caveat), i.e. the EC amplification visible on the client wire is block-size-dependent; the two observations are mutually consistent and no mechanism was verified. Large-block writes track the calibration probes (~5.2–5.6 GiB/s app, wire ×1.456 per the 5+2 relation). Cells are single-shot (D18 knee/peak repeats still to run). |
 | **Tool** | `fio` (version recorded at run time) |
 | **Source → Target** | host RAM → filesystem scratch (`$FS_MOUNT/benchmarks/fio-scratch/`) |
 | **Methodology** | 5 block sizes (4K, 64K, 256K, 1M, 4M) × 7 concurrency levels (1–64 jobs) = **35 cells**. Each cell: steady state + ramp, libaio + `--direct=1` + `--unlink=1`, iodepth=1 (sequential-bandwidth recipe). |
@@ -156,7 +157,8 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs — anchor first |
+| **Status** | ✅ Leg A (weka, 36/36 cells OK, canary PASS on all) · ⏳ Leg B |
+| **Leg A results (app-level fio, peak over jobs per bs; `s1.0b-seqr-summary.csv`)** | 4k: 1.29 GiB/s (339k IOPS) · 64k: 8.92 GiB/s · 256k: 10.71 GiB/s · **1M/4M: ~11.0 GiB/s** — the large-block plateau matches the measured 4-FE-core client capability (~94 Gbps), far below the 200 Gbps line rate, so the ceiling is the client's realistic-production FE config, not the network or the backends (**D10 trigger does not fire**). Warm-reference evidence: first-half 3.99 GiB/s vs second-half 6.21 GiB/s (×1.56) at jobs=4 — the server cache serves at a distinguishable rate, so the grid's cold labels rest on a measurement. *Data-validity note (attaches to two cells):* `seqr-bs1M-jobs8` and the warmref lost their first recordings to the 2026-08-16 root-volume ENOSPC and were re-run ~30 min later under the identical construction (originals renamed `-FAILED-enospc*`; the scan corpus's cold construction is history-independent). |
 | **Tool** | `fio` |
 | **Source → Target** | filesystem → host RAM |
 | **Methodology** | Same grid as 1.0a (5 bs × 7 jobs = 35 cells), `--rw=read`, iodepth=1, **plus one cold reference cell = 36**. Reads run against a corpus **staged ahead of the timed window and left in place across cells**; the cache-discipline row below sets its sizing and the cell ordering, and both are part of the methodology rather than a refinement of it. |
@@ -171,7 +173,8 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 21/21 cells OK, canary PASS on all) · ⏳ Leg B |
+| **Leg A results (peak over jobs per bs; `s1.0c-randw-summary.csv`)** | 4k: **519k IOPS** (1.98 GiB/s, p99 1.9 ms) at jobs=64 · 16k: 347k IOPS (5.29 GiB/s) at jobs=32 · 64k: 147k IOPS (8.98 GiB/s) at jobs=64. *Caveat — a measured per-bs wire-relation shift, flagged for the writeup and the Leg-B comparison:* write wire/app measured **1.364 at 4k jobs=64** and **1.044 at 64k jobs=64**, versus ≈1.46 at 1M/4M — the client-wire EC amplification is block-size-dependent on this leg. All cells PASS the calibrated bands (the small-bs widening applied, named in each verdict); the per-bs relation itself is recorded as data. Candidate explanations (client-vs-backend EC fan-out path by write size; the documented high-op-rate counter under-report, this file's engineering notes) were **not** discriminated between — no mechanism claim. |
 | **Tool** | `fio` |
 | **Source → Target** | host RAM → filesystem |
 | **Methodology** | 3 block sizes (4K, 16K, 64K) × 7 concurrency = **21 cells**. iodepth=8 (IOPS recipe), `--rw=randwrite`. Same runtime/ramp as 1.0a/b. |
@@ -184,7 +187,8 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 22/22 cells OK, canary PASS on all) · ⏳ Leg B |
+| **Leg A results (peak over jobs per bs; `s1.0d-randr-summary.csv`)** | 4k: **625k IOPS** (2.39 GiB/s, p99 1.2 ms) at jobs=64 · 16k: 276k IOPS (4.22 GiB/s) at jobs=8 · 64k: 55k IOPS (3.36 GiB/s) at jobs=2. *Caveats:* 16k/64k peaks land at LOW job counts — higher-jobs cells ran slower under the one-touch construction (smaller disjoint per-job slices); recorded as the curve shape, not explained. All cells cold by construction (one-touch regions, ledger-tracked); the warm reference re-read served at a distinguishably higher rate per its run dir. |
 | **Tool** | `fio` |
 | **Source → Target** | filesystem → host RAM |
 | **Methodology** | Same grid as 1.0c (3 bs × 7 jobs = 21 cells), iodepth=8, `--rw=randread`, **plus one cold reference cell = 22**. As in 1.0b, reads run against a corpus **staged ahead of the timed window and left in place across cells**; the cache-discipline row below sets its sizing and the cell ordering. |
@@ -242,7 +246,8 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 4/4 cells OK, canary PASS, **final pass byte-verified: TCGA 1133 files md5+size, CAM16 1365 files size; `hydration-complete` written**) · ⏳ Leg B |
+| **Leg A results (full 1.79 TiB hydration per cell; fs-side write active-window mean)** | mcr=4: 5729 s (0.31 GiB/s) · **mcr=16: 3913 s (0.45 GiB/s)** · mcr=64: 5215 s (0.34 GiB/s) · mcr=256: 5433 s (0.33 GiB/s). *Caveat, load-bearing for cross-leg reading:* the cell is **S3-fetch-bound, not filesystem-bound** — the write rates sit far below the 1.0a write ceiling at every concurrency, and raising `max_concurrent_requests` past 16 made the `aws s3 sync` side slower, not the storage. Identical tool/flags/grid run on both legs, so the comparison holds; but this cell characterises the ingest *pipeline*, with the filesystem holding easy headroom on this leg. |
 | **Tool** | `aws s3 sync` / `aws s3 cp` (version recorded at run time) |
 | **Source → Target** | `s3://<bucket>/datasets/{tcga-brca,camelyon16}/` (same region) → `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
 | **Methodology** | `max_concurrent_requests ∈ {4, 16, 64, 256}` = **4 cells**, each a **full hydration of both prefixes** with the target wiped before it — same-region S3 transfer is free, so the grid costs only wallclock and the write workload is the measurement. The **final cell's data is kept** and byte-verified: TCGA per-file md5 + count + size against the manifest; CAMELYON16 count + per-file size (its manifest carries multipart ETags, not md5s — the staging copy into our bucket was checksummed end-to-end by S3, and that basis is recorded in the verification report). A clean verify is what writes the `hydration-complete` marker; any mismatch blocks it and fails loud. **Identical tool, identical flags, identical concurrency grid on both filesystems.** |

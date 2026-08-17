@@ -1,0 +1,7 @@
+hydration verification — leg=weka, 2026-08-17T03:57:13Z
+basis: TCGA per-file md5 + count + size; CAMELYON16 count + per-file size
+       (CAM16 manifest carries multipart ETags, not md5s; its S3->S3 staging copy was checksummed by S3)
+tcga file count: local=1133 manifest=1133
+tcga: all 1133 files present, size + md5 verified
+camelyon16 file count: local=1365 manifest=1365
+camelyon16: all 1365 files present, sizes verified

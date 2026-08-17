@@ -1,0 +1,3 @@
+TYPE              SEVERITY  START TIME  COUNT  TITLE                                DESCRIPTION                                                      HOW TO HANDLE
+NoClusterLicense  WARNING   20:44:36h       1  No license assigned                  No license is assigned to the cluster.                           Obtain and install a license from `get.weka.io`.
+SystemDefinedTLS  WARNING   20:44:36h       1  TLS certificate is not user-defined  The system uses an auto-generated self-signed TLS certificate..  Replace the auto-generated self-signed certificate with a user-defined certificate by running the `weka security tls set` command.

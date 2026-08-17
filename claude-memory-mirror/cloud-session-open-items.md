@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-16T16:55:22.312Z
+  modified: 2026-08-17T05:27:01.563Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -132,13 +132,13 @@ These change what the numbers mean, so resolving them after cells have run means
     re-evidenced on the REBUILT 6xlarge cluster 2026-08-16** — 4 FRONTENDs NETWORK=DPDK on this host from
     the client's own report, 4 NICs igb_uio-bound, bootstrap evidence line; run-leg.sh refusal verified);
     **Tier 1** recording adapters, consistency relation, worker-correctness bugs, the 1.7 driver, and the
-    Stage-1.0 cache regime — all before hydration and the baseline, because those produce kept numbers;
-    **Tier 2** the rest, before the main sweep. Reported at the baseline greenlight *and* before the leg
-    starts. **What is still open is closing the rows**, not the ordering. **Row-1 status (2026-08-15): its
-    closure criterion is met** — the Stage-0 cell `2026-08-15-171240-weka-s0-smoke-recording-proof` records
-    the WEKA-leg primaries and INDEX.md says OK, with client-summed FS-side vs fio app-level agreeing within
-    ~5%. The D-4 remainder (shared aggregation helper; Lustre half) stays open in the tracker and must land
-    before the first sweep's numbers are read.
+    Stage-1.0 cache regime — **ALL CLOSED and exercised in anger (2026-08-17): the Stage-1.0 baseline +
+    1.7 hydration ran, 118 cells, every canary PASS, hydration byte-verified, markers written. STATE:
+    STOPPED at the baseline greenlight gate — nothing past 1.7 runs without the human's word.** Next steps
+    on greenlight: 3.0 → 4.D → … per run-leg order; **before 3.0 runs, its driver needs its
+    RECORD_CACHE_STATE declaration (memory 13d / tracker D-30)**. **Tier 2** rows (cuCIM tile-cache policy
+    item 14 before Stage 4; CHUNK_SIZE item 15 before 6.A Tier 2; D-34 poll rate before 2.0; mixed-band
+    calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
 ## B. Watch during benchmarking
 
 0. **D18 repeats are per-leg discoveries — do not miss them.** Immediately after each Tier-1 identifies the
