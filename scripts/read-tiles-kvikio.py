@@ -328,6 +328,11 @@ def mode_faithful(args):
         "warm_cache_requested": bool(args.warm_cache),
         "n_page_cache_discards_attempted": n_discard_attempted,
         "n_page_cache_discards_failed": n_discard_failed,
+        # The D13 reconciler's field (wsi_agg_helper.py cache): null = not
+        # attempted (warm cell); false = any discard FAILED, which CONTRADICTS
+        # a cold declaration rather than footnoting it.
+        "client_page_cache_discarded": (None if args.warm_cache or n_discard_attempted == 0
+                                        else n_discard_failed == 0),
         # Client page cache only. Neither filesystem's server-side cache is
         # addressed by this discard and the per-filesystem cold mechanism is still
         # open (A.5 / D13), so the end-to-end cold state is stated as unknown
@@ -617,6 +622,11 @@ def mode_random(args):
         "warm_cache_requested": bool(args.warm_cache),
         "n_page_cache_discards_attempted": n_discard_attempted,
         "n_page_cache_discards_failed": n_discard_failed,
+        # The D13 reconciler's field (wsi_agg_helper.py cache): null = not
+        # attempted (warm cell); false = any discard FAILED, which CONTRADICTS
+        # a cold declaration rather than footnoting it.
+        "client_page_cache_discarded": (None if args.warm_cache or n_discard_attempted == 0
+                                        else n_discard_failed == 0),
         # Client page cache only; server-side cache and the per-filesystem cold
         # mechanism are open (A.5 / D13). Stated, not left to omission.
         "cache_state_achieved": "unknown",

@@ -109,7 +109,16 @@ run_cell() {
   # NOT include "s4.C-" in $run_name (would produce s4.C-s4.C-... double-prefix).
   local run_name="${mode}-${dataset}-nb${n_buffer}-nt${num_threads}-${compat}gds${extra}"
 
-  local note="Stage 4.C ${mode} mode on fs=${LEG}. dataset=${dataset} compat_mode=${compat} n_buffer=${n_buffer} num_threads=${num_threads}. LD_PRELOAD=${LD_PRELOAD}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}, single GPU=${CUDA_VISIBLE_DEVICES}. 4096-byte aligned reads via NVIDIA's _get_aligned_read_props. Cold cache via cucim discard_page_cache between slides (faithful) / on first LRU fill (random). Reader: $READER. Extra: $*"
+  # D13/D-30: declared regime per cell. Default cells construct a client-cold
+  # entry state (faithful: discard per slide before its read; random: pool-wide
+  # discard before the timed window) with the achieved result recorded by the
+  # reader (client_page_cache_discarded in reader-summary.json — the reconciler's
+  # field). A --warm-cache cell declares warm. Client-side only; the server-side
+  # residual is unmanaged and stated in the note.
+  local cstate=cold
+  case " $* " in *" --warm-cache "*) cstate=warm;; esac
+
+  local note="Stage 4.C ${mode} mode on fs=${LEG}. dataset=${dataset} compat_mode=${compat} n_buffer=${n_buffer} num_threads=${num_threads}. LD_PRELOAD=${LD_PRELOAD}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}, single GPU=${CUDA_VISIBLE_DEVICES}. 4096-byte aligned reads via NVIDIA's _get_aligned_read_props. Cache regime=${cstate}: client-cold at read/window entry via cucim discard_page_cache (faithful: per slide before its read; random: whole pool before the timed window — within-window re-draws may self-warm and the discard counters keep that legible), achieved result recorded in reader-summary.json; CLIENT-SIDE ONLY — the server-side residual is unmanaged and recorded, not asserted (D13). Reader: $READER. Extra: $*"
 
   # Per-cell summary file inside the run dir is written via the --summary-json
   # arg below; we point it inside the run dir after record-run.sh creates it.
@@ -141,6 +150,7 @@ run_cell() {
 
   RECORD_RUN_DIR="$run_dir" \
   RECORD_KVIKIO_CELL=1 \
+  RECORD_CACHE_STATE="$cstate" \
   "$RECORD" \
     --run-name "$run_name" \
     --stage 4.C \

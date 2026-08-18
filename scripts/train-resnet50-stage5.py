@@ -170,6 +170,9 @@ class KvikIOReader:
         self.rng = random.Random(seed)
         self.n_buffer = n_buffer
         self.level = level
+        # D-6/D8: aligned bytes actually pread through cuFile by THIS rank —
+        # the app side of the GPU-direct-vs-bounced split.
+        self.bytes_read = 0
         # 20×: raw-TIFF is 20×/256-tiled (Option B); CLAM coords are level-0 (40×)
         # px stepping by footprint_level0 (512). coord→tile = coord // footprint.
         self.footprint_level0 = footprint_level0
@@ -280,6 +283,7 @@ class KvikIOReader:
         # Drain
         for f in futures:
             f.get()
+        self.bytes_read += int(rounded_bcs.sum())
 
         # Extract tile data from each slot into a contiguous [B, H, W, 3] tensor.
         # tile_bytes is uniform per backend instance; alignment offset varies per tile.
@@ -544,6 +548,17 @@ def worker(local_rank, world_size, args, master_port):
         print(f"[trainer] reader ready: {len(slide_ids)} slides in manifest, "
               f"{len(reader.coord_pool)} in pool", flush=True)
 
+    # D-6/D8: cuFile path accounting on the kvikIO backend. nvidia-fs deltas are
+    # DEVICE-GLOBAL, so one snapshot window on rank 0 covers every rank's traffic
+    # — the per-cell split is cell-global by construction, with app bytes summed
+    # across ranks below. Constructed after the reader init so kvikio's resolved
+    # compat mode is readable. The wrapper's 1 Hz nvidia-fs timeline remains the
+    # cell-level authority; this is the reader-side record the D-30 verdict needs.
+    acct = None
+    if args.backend == "kvikio" and rank == 0:
+        from wsi_cufile_accounting import PathAccounting
+        acct = PathAccounting(requested_compat_mode=args.compat_mode)
+
     # Build model
     model = resnet50(weights=None)
     # Replace 1000-class head with 2-class binary head (matches synthetic label).
@@ -689,6 +704,15 @@ def worker(local_rank, world_size, args, master_port):
         global_samples = float(steady_samples)
         global_steps = float(steady_steps)
 
+    # D-6: sum the per-rank cuFile app bytes (collective — every rank participates).
+    rank_bytes = float(getattr(reader, "bytes_read", 0))
+    if world_size > 1:
+        b = torch.tensor([rank_bytes], device=device)
+        dist.all_reduce(b, op=dist.ReduceOp.SUM)
+        total_read_bytes = float(b.item())
+    else:
+        total_read_bytes = rank_bytes
+
     steady_window_s = float(args.runtime)
     # The cross-rank step counts are roughly equal (DDP barriers on each backward),
     # so "global_steps / world_size" approximates the per-rank step count.
@@ -710,6 +734,14 @@ def worker(local_rank, world_size, args, master_port):
             "samples_per_sec_per_rank": samples_per_sec_aggregate / max(world_size, 1),
             "training_steps_csv": args.training_steps_csv,
         }
+        if acct is not None:
+            pa = acct.finish(int(total_read_bytes))
+            pa["scope"] = ("cell-global: nvidia-fs deltas are device-global, so rank 0's snapshot "
+                           "window covers all ranks; app_bytes_read = aligned cuFile bytes summed "
+                           "across ranks. The wrapper's 1 Hz nvidia-fs timeline is the cell-level "
+                           "authority (D-6).")
+            summary["path_accounting"] = pa
+            summary["reader_bytes_read_aligned_total"] = int(total_read_bytes)
         print(f"=== summary ===", flush=True)
         print(json.dumps(summary, indent=2), flush=True)
         if args.summary_json:

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-18T16:16:22.841Z
+  modified: 2026-08-18T16:32:19.544Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -54,7 +54,8 @@ These change what the numbers mean, so resolving them after cells have run means
     canary (with D-7) — on THIS leg the known-good signature is *bounce accounting non-zero* (gds stays 0
     by determination); nvidia-fs read bytes non-zero is a Leg-B-only expectation. Stats format:
     `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
-    Remaining D-6 engineering: Stage-5/6 worker wiring + the nvidia-fs block parser (tracker **D-6**).
+    Remaining D-6 engineering: Stage-6 extractor wiring (Stage-5 trainer DONE 2026-08-18) + the nvidia-fs
+    block parser (tracker **D-6**).
 8. **(resolved 2026-08-17 — tile counts measured from the real coords; numbers in
    `docs/Stage-6-Feature-Extraction.md` § Risks and the `coords-3.0` fingerprint. Delete on next hygiene
    pass once 6.B.1's grid is actually sized from them.)**
@@ -88,13 +89,14 @@ These change what the numbers mean, so resolving them after cells have run means
 13d. **Stage 4–7 sweep drivers must declare `RECORD_CACHE_STATE` per cell (kvikIO cells also
     `RECORD_KVIKIO_CELL=1`) before their stages run** — blanket ratification 2026-08-17: methodology-faithful
     labels per each roadmap's cache-discipline row, `na-*` where a stage deliberately defines no axis. Done:
-    Stage-1/2/stability, and **3.0 (`na-compute-leaning-unmanaged`, Stage-3 register)**. Remaining, to wire
-    during the pre-Stage-4 gate pass (labels need each reader's achieved-evidence emission read first, not
-    invented): 4.A, 4.C sweep, 5, 6.A, 6.B-mil, 6.C, 7 — tracker **D-30**'s list. Wire item 14's cuCIM
-    cache-size recording in the same pass.
-14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Remaining:
-    implementation — record the configured size into every cuCIM cell's metadata/note (wire during the
-    pre-Stage-4 driver pass, with the cache declarations of 13d).**
+    Stage-1/2/stability, 3.0, 4.A/4.D (`na-mixed-rw-unmanaged`), **4.C (`cold` — client-cold at read/window
+    entry; the reader now emits `client_page_cache_discarded` for the reconciler)**, and **5 (`warm` —
+    steady-state by construction, note-worded)**. Remaining at each stage's gate (read the reader's
+    achieved-evidence emission first, don't invent labels): 6.A, 6.B-mil/stress, 6.C, 7 — tracker **D-30**'s
+    list. Item 14's cuCIM cache-size line: 4.B and 5.B carry it; wire 6.A's at its gate.
+14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Implementation:
+    4.B and 5.B cell notes carry the configured size (512 MiB library default). Remaining: the 6.A cuCIM
+    cells' notes, at the 6.A gate — then delete this item.**
 15. **Re-derive `CHUNK_SIZE` for 6.A Tier 2 from this leg's provisioned capacity.** Both Tier-2 orchestrators
     default to 200, sized against a different environment. **This decides whether Tier 2 fits on disk at all**
     — too large and the conversion fails mid-cohort after hours; too small and it wastes wallclock. Use the

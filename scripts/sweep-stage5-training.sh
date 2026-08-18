@@ -132,12 +132,20 @@ run_cell() {
   # is recorded as <n/a> rather than as a value the cell did not actually use.
   local preload=""
   local compat_mode=""
+  local kvikio_cell=0
+  local cucim_cache_note=""
   if [ "$backend" = "kvikio" ]; then
     preload="$LIBCUFILE_SYSTEM"
     compat_mode="$CUFILE_COMPAT_MODE"
+    kvikio_cell=1
+  elif [ "$backend" = "cucim_batched_cpu" ]; then
+    # Item 14 (Stage-4 register): the cuCIM per-process tile cache is RECORDED
+    # per cell, never swept — a fixed production-default library layer,
+    # identical on both legs by construction.
+    cucim_cache_note=" cuCIM per-process tile cache: 512 MiB (library default on this stack; recorded-not-swept per the Stage-4 register — identical on both legs)."
   fi
 
-  local note="Stage ${substage} cell on fs=${LEG}: backend=${backend} N_gpus=${n_gpus} gpus=${gpu_csv} batch_per_rank=256 effective_batch=$((256 * n_gpus)) ramp=${ramp}s steady=${runtime}s cufile_compat_mode=${compat_mode:-<n/a>} (REQUESTED, not proven — the per-cell cuFile path accounting settles which path ran). WHY this cell: see Stage-5-Training.md § 5.A/5.B — ResNet-50 is the storage-stressing choice (small fast model = more demand per unit of compute). DDP self-launched via mp.spawn with an explicit loopback master. GPU set=${gpu_csv} (⏳ D-8: NUMA-aware ordering to be re-derived on this instance). LD_PRELOAD=${preload:-<unset>}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}. Per-training-step CSV at training-steps.csv is the PRIMARY headline source; nvidia-smi is also PRIMARY from Stage 4 onward. Trainer: $TRAINER."
+  local note="Stage ${substage} cell on fs=${LEG}: backend=${backend} N_gpus=${n_gpus} gpus=${gpu_csv} batch_per_rank=256 effective_batch=$((256 * n_gpus)) ramp=${ramp}s steady=${runtime}s cufile_compat_mode=${compat_mode:-<n/a>} (REQUESTED, not proven — the per-cell cuFile path accounting settles which path ran). Cache regime=warm: steady-state by construction (D13) — the cell is long enough for its own working set to warm and production training is warm; the cold read ceilings live in Stage 1.0/4.B/4.C, and the achieved state is recorded, never asserted.${cucim_cache_note} WHY this cell: see Stage-5-Training.md § 5.A/5.B — ResNet-50 is the storage-stressing choice (small fast model = more demand per unit of compute). DDP self-launched via mp.spawn with an explicit loopback master. GPU set=${gpu_csv} (⏳ D-8: NUMA-aware ordering to be re-derived on this instance). LD_PRELOAD=${preload:-<unset>}, CUFILE_ENV_PATH_JSON=${CUFILE_ENV_PATH_JSON}. Per-training-step CSV at training-steps.csv is the PRIMARY headline source; nvidia-smi is also PRIMARY from Stage 4 onward. Trainer: $TRAINER."
 
   local trainer_args=(
     --backend "$backend"
@@ -166,6 +174,8 @@ run_cell() {
   CUDA_VISIBLE_DEVICES="$gpu_csv" \
   LD_PRELOAD="$preload" \
   RECORD_RUN_DIR="$run_dir" \
+  RECORD_CACHE_STATE=warm \
+  RECORD_KVIKIO_CELL="$kvikio_cell" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage "$substage" \
