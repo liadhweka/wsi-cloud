@@ -223,7 +223,7 @@ tier2_concurrent() {
   # Virchow2 kvikIO warm-cache; per-process bs scales DOWN with N per Q8.
   # Each cell: 5 min ramp + 25 min steady = 30 min.
   # Tier 7.2 uses the FULL BRCA manifest
-  # (1073 slides — the uniform 40×-base cohort, STAGES.md D5; not the 1131-slide
+  # (the uniform 40×-base cohort, STAGES.md D5; not the 1131-slide
   # pre-mpp-filter set, which is a different file in the same dir) rather than
   # the 50-slide subset used by 7.1. Reason: at
   # N=64 with the 50-slide subset, modulo partition leaves 14 of 64 procs

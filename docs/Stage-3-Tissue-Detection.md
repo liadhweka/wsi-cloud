@@ -110,7 +110,7 @@ in `SCRIPT-TRACKER.md`.
   40×). *Why it matters:* a true-20×-base slide read with the 40× args mis-tiles to **10×** (reads 512 px @
   20× → resize 256 = a 10× field of view) and halves its coord density. The 50-slide subsets used by Stage 4
   are 100% 40×-base by true mpp, so the BRCA args are correct for every subset slide; the full-BRCA set is
-  handled by the uniform 1073-slide cohort (**D5**).
+  handled by the uniform 1064-slide cohort (**D5**).
 
 **Both legs consume the same coord definition.** The coords are regenerated per leg (they are written to the
 filesystem under test, and generating them is itself the measured workload), and **a coord-equivalence check

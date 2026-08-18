@@ -1,0 +1,1 @@
+/home/ec2-user/wsi-cloud/scripts/convert-stage4c-rawtiff.sh --inner brca /tmp/tmp.qDJ7KcPxN2 /home/ec2-user/wsi-cloud/runs/2026-08-17-191632-weka-s4.D-rawtiff-brca-par4 

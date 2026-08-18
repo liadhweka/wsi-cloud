@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-17T18:43:48.068Z
+  modified: 2026-08-18T16:16:22.841Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -162,6 +162,10 @@ These change what the numbers mean, so resolving them after cells have run means
    any cross-leg divergence proves the legs did not process identical inputs. **Fail loud; invalidates
    downstream comparison.** Detail: `docs/Stage-3-Tissue-Detection.md`.
 3. **Mixed-workload canary bands** must be wider than single-direction bands **and** re-derived per filesystem.
+   Live evidence from the 4.D mixed-rw cells (report-only judgements, 2026-08-18): write direction PASSes the
+   EC relation dead-centre (1.482 / 1.459) while the read direction lands at **1.219 (BRCA) / 1.743 (CAM16)**
+   against the single-direction read band [0.99, 1.09] — the widening the mixed calibration must cover, and
+   it grows as the read share shrinks. Calibrate before 1.6.
 4. **Delete any stale raw-TIFF before re-converting.** The 4.D driver skips existing non-empty output, so a
    stale artifact at the wrong magnification is silently kept and read as current. Its byte counts and
    tile-grid dimensions must also match between legs.

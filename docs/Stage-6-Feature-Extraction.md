@@ -148,20 +148,20 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 | **Sweep driver** | `../scripts/sweep-stage6a-extract.sh` · **Aggregator** `../scripts/aggregate-stage6a-extract.py` |
 | **Recorded per cell** | tiles/sec per (model × backend × N), scaling efficiency, kvikIO/cuCIM ratio per N, filesystem-side read mean/peak and **% of the block-size-matched ceiling**, GPU utilisation — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
 
-#### 6.A Tier 2 — Production scale (full 1073-slide cohort)
+#### 6.A Tier 2 — Production scale (full 1064-slide cohort)
 
 | | |
 |---|---|
 | **Status** | ⏳ both legs — the long pole of the stage |
 | **Goal** | The production-scale number: features extracted from the full cohort, all GPUs, per model, per filesystem |
-| **Dataset** | The **uniform 1073-slide cohort** (`../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv`) per **D5**, with the fail-loud mpp guard as defence in depth |
+| **Dataset** | The **uniform 1064-slide cohort** (`../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv`) per **D5**, with the fail-loud mpp guard as defence in depth |
 | **Pre-cell prep — chunked raw-TIFF conversion** | The kvikIO path needs raw-TIFF resident, and the full cohort's raw-TIFF does not fit at once. So: convert a chunk → extract → delete the chunk → advance. The cuCIM path skips this (reads canonical SVS) |
 | **Conversion sharing** | The multi-model orchestrator converts **once per chunk**, then extracts for each model in turn before deleting the chunk. *Why:* a per-model orchestrator would convert the cohort three times, and conversion is a large fraction of per-chunk wallclock — so sharing it is not a micro-optimisation but a structural one |
 | **Cell count** | **3 cuCIM (per model) + 1 multi-model kvikIO (three models sharing the chunked conversion) = 4 cells per leg** |
-| **Methodology** | Same DDP and reader logic as Tier 1, across all 1073 cohort slides at the full GPU count. Per-slide `.pt` to `$FS_MOUNT/features/6.A/<model>/brca_full/`. Cleanup-before-cell as in Tier 1 |
+| **Methodology** | Same DDP and reader logic as Tier 1, across all 1064 cohort slides at the full GPU count. Per-slide `.pt` to `$FS_MOUNT/features/6.A/<model>/brca_full/`. Cleanup-before-cell as in Tier 1 |
 | **Why this exists** | Subset numbers invite "does this hold at my dataset's scale?" The full-cohort cells answer it directly, on both filesystems, for all three models and both data paths |
 | **⚠ Capacity + hygiene** | Chunked conversion means transient raw-TIFF plus permanent features on the filesystem under test. **Confirm headroom per leg first.** Existing non-empty output is skipped rather than rebuilt, so a leftover chunk from an aborted run would be silently reused — **verify chunk cleanup between runs** |
-| **Output-count gate** | 1073 slides × 3 models = **3219 `.pt` files per leg**; verify the count and a zero-failure/zero-leaked-chunk condition before accepting the cell |
+| **Output-count gate** | 1064 slides × 3 models = **3192 `.pt` files per leg**; verify the count and a zero-failure/zero-leaked-chunk condition before accepting the cell |
 | **Recorded per cell** | per-model steady-state tiles/sec (both backends), kvikIO/cuCIM ratio at production scale, filesystem-side read sustained and % of the matched ceiling, per-chunk convert-vs-extract split — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
 | **Cross-leg integrity check** | Feature file **count, per-slide tile count, and tensor shape** are storage-independent and must match between legs. A divergence means the legs did not process equivalent inputs — **fail loud**, as with the Stage 3 coord gate |
 
@@ -219,10 +219,10 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 | **Goal** | The Phase-2 workload in its production training context: what storage sees when a real MIL classifier consumes real feature files at realistic worker counts |
 | **Step** | Train a gated-attention MIL classifier (Tanh × Sigmoid → softmax → weighted-sum slide feature → linear classifier) over per-slide feature bags — `../scripts/train-mil-stage6b.py` |
 | **⚠ Architecture — `batch_size=1` + `collate_MIL`, non-negotiable** | Canonical CLAM trains **one slide per forward step** and never builds a padded `[B, max_N, D]` batch tensor. Verified against `mahmoodlab/CLAM`: `get_split_loader` always sets `batch_size=1, collate_fn=collate_MIL`; the model forward takes a 2-D `[N, D]` bag. **The padded design OOMs** — the batch tensor inflates to the largest-bag slide in each batch and WSI bag-size distributions are wide. **The storage-concurrency axis is `num_workers`, not `batch_size`**: `num_workers=32` means 32 slides read concurrently regardless of batch size. (Magnification-independent) |
-| **Source** | Real features from 6.A Tier 2 on the same leg (1073 `.pt` per model, ~40–65 MB each at 20×) |
+| **Source** | Real features from 6.A Tier 2 on the same leg (1064 `.pt` per model, ~40–65 MB each at 20×) |
 | **Grid** | **3 models × `num_workers ∈ {4, 16, 32}` = 9 cells per leg.** UNI2-h cells tagged `[PENDING-APPROVAL-DO-NOT-EXTERNALIZE]` |
 | **Methodology** | Canonical CLAM `bs=1`; each DataLoader worker prefetches one slide via `torch.load`. Time-bounded cells with ramp plus steady state. Per-step CSV including `n_tiles_in_step`, since per-step work varies with bag size |
-| **⚠ The regime is set by corpus size against host RAM — size the expectation, record what was achieved** | The full-cohort feature corpus at 20× is roughly 1073 × ~50 MB ≈ **~55 GB**, which fits inside the instance's RAM. After the first pass this workload is therefore expected to run largely **memory-served on both legs** — an arithmetic consequence of corpus size against client RAM, identical on both sides, not a property of either filesystem. That is what production looks like at this corpus size, and it means **B.3's storage signal lives in the cold first pass and the low-`num_workers` cells**. Size that expectation up front, then **record the cache state achieved per cell** (**D13**) rather than asserting the regime. The corpus deliberately sized past cache is 6.B.1's |
+| **⚠ The regime is set by corpus size against host RAM — size the expectation, record what was achieved** | The full-cohort feature corpus at 20× is roughly 1064 × ~50 MB ≈ **~53 GB**, which fits inside the instance's RAM. After the first pass this workload is therefore expected to run largely **memory-served on both legs** — an arithmetic consequence of corpus size against client RAM, identical on both sides, not a property of either filesystem. That is what production looks like at this corpus size, and it means **B.3's storage signal lives in the cold first pass and the low-`num_workers` cells**. Size that expectation up front, then **record the cache state achieved per cell** (**D13**) rather than asserting the regime. The corpus deliberately sized past cache is 6.B.1's |
 | **Why this exists** | B.2 alone invites the "synthetic, not real" objection. B.3 answers it with a real classifier over real foundation-model features, so the two together cover controlled scale *and* production fidelity |
 | **Recorded per cell** | slides/sec and tiles/sec per model per `num_workers`, saturation knee, per-step phase split, cold-pass filesystem-side read, the cache-served regime boundary — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
 
@@ -372,7 +372,7 @@ never on cuCIM cells; the ABI clash segfaults cuCIM's first read.
 | TCGA-BRCA 20× raw-TIFF (full cohort, chunked + transient) | generated per chunk in Tier 2 | 6.A Tier 2 kvikIO |
 | CAMELYON16 20× raw-TIFF (subset) | 4.D per leg | 6.A Tier 3 |
 | 20× CLAM coords | 3.0 per leg | 6.A, 6.D |
-| 1073-slide cohort manifest | `../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv` | 6.A Tier 2, 6.B.3, 6.D |
+| 1064-slide cohort manifest | `../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv` | 6.A Tier 2, 6.B.3, 6.D |
 | 50-slide subset manifests | `../scripts/manifests/` | 6.A Tier 1, Tier 3 |
 | **Synthetic feature corpora** | 6.B.1 per leg | 6.B.2 |
 | **Real 6.A features** | 6.A per leg | 6.B.3, 6.D, and Stage 7.3 |
@@ -388,8 +388,8 @@ past cache and is the largest single footprint in the project after raw-TIFF.
   1131 slides / **12,186,434 tiles** (mean 10,775, median 10,342, p10 2,475, p90 19,489, max 67,268);
   CAM16 399 / 4,610,687 (mean 11,556, max 55,852 — the wider tail the Tier-3 straggler warning assumes).
   Inside the 8–15K/slide assumption band, so the ~40–65 MB feature-file bracket holds (1536-dim fp32 lands
-  ≈66 MB at the mean) and the 6.B.3 real corpus stays far under host RAM. Tier-2 scale: ×3 models
-  ≈ 36.6M tile-forwards per leg.
+  ≈66 MB at the mean) and the 6.B.3 real corpus stays far under host RAM. Tier-2 scale: the 1064-slide
+  cohort carries 11,753,865 tiles (from the same fingerprint), ×3 models ≈ 35.3M tile-forwards per leg.
 - **Chunk size for Tier 2** — it decides whether the chunked conversion fits on the provisioned capacity at
   all, so it is re-derived per leg's capacity and then held **identical on both legs**, since chunk size
   changes the write/delete cadence the filesystem sees. *(Open-items memory: the `CHUNK_SIZE` item.)*
@@ -416,7 +416,7 @@ live in `STAGES.md`.
   Licensing: Virchow2 and GigaPath are Apache-2.0; UNI2-h is CC-BY-NC-ND, so its cells stay internal-only.
 - **GigaPath's tile encoder only; LongNet aggregator out of scope.** *Why:* different architecture,
   different I/O profile, and not needed for the storage question.
-- **Dataset scale: 50-slide subset (Tier 1) + full 1073-slide cohort (Tier 2) + CAMELYON16 subset
+- **Dataset scale: 50-slide subset (Tier 1) + full 1064-slide cohort (Tier 2) + CAMELYON16 subset
   (Tier 3).** *Why:* the subset preserves cross-stage comparability with Stages 4 and 5; the full cohort
   answers the production-scale question; the cross-dataset tier closes the non-TCGA objection.
 - **Synthetic corpus for 6.B.2, real features for 6.B.3, both required.** *Why:* the differentiating I/O

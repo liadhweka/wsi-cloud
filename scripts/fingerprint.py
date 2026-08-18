@@ -18,7 +18,12 @@ Classes (definitions ratified in STAGES.md D19):
                  contents (dtype recorded; the array, not the HDF5 container,
                  whose bytes can differ while the coordinates are identical).
                  Catches a missing slide and a shifted grid alike.
-  rawtiff-4d     per slide: output byte count + tile-grid dimensions.
+  rawtiff-4d     per slide: output byte count + tile-grid dimensions (plus
+                 image + tile dims, which the grid derives from — a tile-size
+                 drift is a converter-version change worth failing on).
+                 Slides enumerated from the D5 cohort + CAM16 subset manifests;
+                 a missing artifact refuses rather than fingerprinting a
+                 partial cohort.
   features-6a    per (model, dataset): file count, per-slide tile count,
                  tensor shape + dtype — deliberately never tensor values.
 
@@ -111,14 +116,64 @@ def capture_coords(fs_mount):
     return out
 
 
+def _manifest_ids(path):
+    # Comment-aware, matching the converter: the cohort manifest carries a
+    # comment header AND commented excluded-slide IDs at its tail.
+    for line in Path(path).read_text().splitlines():
+        s = line.strip()
+        if s and not s.startswith("#") and s != "slide_id":
+            yield s
+
+
+def capture_rawtiff(fs_mount):
+    import tifffile
+    out = {"class": "rawtiff-4d", "datasets": {}}
+    specs = [
+        ("tcga-brca", REPO / "scripts" / "manifests" / "tcga-brca-full40x-stage4a-format.tsv",
+         Path(fs_mount) / "data" / "tcga-brca-rawtiff"),
+        ("camelyon16", REPO / "scripts" / "manifests" / "camelyon16-stage4a-subset.tsv",
+         Path(fs_mount) / "data" / "camelyon16-rawtiff"),
+    ]
+    for ds, manifest, root in specs:
+        slides = {}
+        for sid in _manifest_ids(manifest):
+            p = root / f"{sid}.tiff"
+            if not p.is_file() or p.stat().st_size == 0:
+                sys.exit(f"fingerprint: MISSING/empty raw-TIFF {p} — refuse to fingerprint a partial artifact")
+            with tifffile.TiffFile(p) as t:
+                pg = t.pages[0]
+                w, h = int(pg.imagewidth), int(pg.imagelength)
+                tw, th = int(pg.tilewidth), int(pg.tilelength)
+            slides[sid] = {
+                "bytes": p.stat().st_size,
+                "width": w, "height": h,
+                "tile_w": tw, "tile_h": th,
+                "grid_x": -(-w // tw), "grid_y": -(-h // th),
+            }
+        if not slides:
+            sys.exit(f"fingerprint: no manifest ids for {ds} — nothing to fingerprint")
+        out["datasets"][ds] = {
+            "basis": "per-slide output byte count + tile-grid dimensions (D19: pixel content follows "
+                     "from source bytes + converter commit; count + grid catch every truncation or "
+                     "mis-magnification failure mode at a fraction of the read cost)",
+            "slide_count": len(slides),
+            "total_bytes": sum(s["bytes"] for s in slides.values()),
+            "aggregate_sha256": sha(sorted(
+                (k, v["bytes"], v["grid_x"], v["grid_y"]) for k, v in slides.items())),
+            "slides": slides,
+        }
+    return out
+
+
 def capture(cls):
     fs_mount, leg = env("FS_MOUNT"), env("LEG")
-    fn = {"dataset-bytes": capture_dataset_bytes, "coords-3.0": capture_coords}.get(cls)
+    fn = {"dataset-bytes": capture_dataset_bytes, "coords-3.0": capture_coords,
+          "rawtiff-4d": capture_rawtiff}.get(cls)
     if fn is None:
-        # rawtiff-4d / features-6a: built when their artifacts first exist — a
-        # fingerprint format designed against imagined output gets rewritten (D-24).
+        # features-6a: built when its artifact first exists — a fingerprint
+        # format designed against imagined output gets rewritten (D-24).
         sys.exit(f"fingerprint: class {cls!r} not implemented yet — build it against the real artifact "
-                 "when 4.D / 6.A first produce output (D-24)")
+                 "when 6.A first produces output (D-24)")
     data = fn(fs_mount)
     data["leg"] = leg
     out = REPO / "runs" / ".leg-state" / leg / "fingerprints" / f"{cls}.json"

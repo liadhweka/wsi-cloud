@@ -98,7 +98,7 @@ The magnification contract is filesystem-independent and identical in both legs.
 - Coords step by a **level-0 footprint of 512 px for both** datasets → the coord→raw-TIFF-tile divisor is 512
   (not the raw tile width 256). Tiles are a **uniform 256 px @ 20×** across all three foundation models
   (Virchow2's native 224 is reached by the model's own resize).
-- **Full-BRCA cohort = 1073 slides** (`../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv`) — the uniform 40×-base
+- **Full-BRCA cohort = 1064 slides** (`../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv`) — the uniform 40×-base
   set, with a fail-loud mpp guard in `convert-rawtiff-20x.py` that refuses any stray off-mag slide (**D5**).
 
 ---
@@ -223,7 +223,7 @@ scaling sweep. DDP N-range follows the instance's GPU count (**D10**).
 
 ## Stage 6 — Feature extraction & MIL
 - **6.A** foundation-model extraction (Virchow2 / GigaPath / UNI2-h `[PENDING-APPROVAL]`); Tier 1 (50-slide
-  scaling) → Tier 3 (CAMELYON16 cross-dataset) → Tier 2 (full-BRCA 1073-slide cohort).
+  scaling) → Tier 3 (CAMELYON16 cross-dataset) → Tier 2 (full-BRCA 1064-slide cohort).
 - **6.B** small-file / metadata stress: **B.3** canonical-CLAM `bs=1` MIL on real features → **B.1**
   synthetic-corpus generation → **B.2** file-IO stress.
 - **6.C** concurrent multi-workload (QoS + endurance).
@@ -279,20 +279,24 @@ level-1 is ~4× larger, ~4× slower to produce, and **not what a 20× GPU-direct
 *Storage-comparison consequence:* the raw-TIFF footprint is a provisioning input on **both** filesystems and,
 on FSx, capacity is simultaneously a performance knob — so this decision feeds **D7**.
 
-**D5 — Full-BRCA cohort: uniform 1073-slide 40×-base set.**
+**D5 — Full-BRCA cohort: uniform 1064-slide 40×-base set.**
 `../scripts/manifests/tcga-brca-full40x-stage4a-format.tsv`, plus a fail-loud mpp guard
-(`0.4 ≤ eff_mpp ≤ 0.65`). *Why + sources — a ground-truth mpp scan of the BRCA set:* the
-`openslide.objective-power` tag is **unreliable** (slides labelled 20× that are mpp≈0.25, i.e. true 40×), so we
-key on **mpp, not the tag**. **None** of the set has a native 20× pyramid level. The per-dataset 20× read
-mis-tiles a true-20× slide to **10×** (reads 512 px @ 20× → resize 256 = a 10× FOV) and halves its coord
-density — so excluding the off-mag minority preserves the footprint-512 contract and removes a magnification
-confound, while leaving a cohort far larger than a storage benchmark needs. The guard refuses any stray off-mag
-slide as defence in depth.
+(`0.4 ≤ eff_mpp ≤ 0.65`). *Why + sources — a ground-truth mpp scan of the BRCA set, confirmed under load by
+the guard:* the `openslide.objective-power` tag is **unreliable in both directions** (slides tagged 20× that
+are mpp≈0.25, i.e. true 40× — and slides tagged 40× that are mpp 0.116–0.164, i.e. 60–80×-class sampling), so
+we key on **mpp, not the tag**: cohort membership is **`0.2 ≤ mpp ≤ 0.325`**, exactly the band where the fixed
+512 px @ L0 → 256 read yields true 20× (eff_mpp = 2 × mpp inside the guard band). **None** of the set has a
+native 20× pyramid level. The per-dataset 20× read mis-tiles a coarser slide toward **10×** and a finer one
+toward **29–43×** — off-contract either way — so excluding the off-mag minority preserves the footprint-512
+contract and removes a magnification confound, while leaving a cohort far larger than a storage benchmark
+needs. The guard refuses any stray off-mag slide as defence in depth, and **it is the arbiter of membership:
+a guard refusal on a manifest slide means the manifest is wrong, not the guard.**
 
 *The three counts, and why they differ* — they are cited across the roadmaps and must not be conflated:
 **1133** slides downloaded from GDC → **1131** with non-empty CLAM coords (the two zero-tissue DX2 slides
-documented in `Stage-3-Tissue-Detection.md` produce none) → **1073** kept by the mpp filter (51 true-20× and 7
-unknown-mpp excluded). The manifest header records the same derivation, and it is authoritative.
+documented in `Stage-3-Tissue-Detection.md` produce none) → **1064** kept by the mpp filter (51 true-20×,
+7 unknown-mpp, and 9 finer-than-40× excluded). The manifest header records the same derivation, and it is
+authoritative.
 
 **D6 — Two sequential legs, with a machine-enforced environment contract.** Leg A = WEKA, Leg B = FSx for
 Lustre, then the synthesis. *Why sequential:* the two are provisioned separately and the instance is rebuilt

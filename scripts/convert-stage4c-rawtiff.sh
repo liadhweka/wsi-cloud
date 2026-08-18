@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Stage 4.D — convert the FULL BRCA cohort (1073 slides) + the 50-slide
+# Stage 4.D — convert the FULL BRCA cohort (the D5 manifest) + the 50-slide
 # CAMELYON16 subset to uncompressed 20x raw TIFF on ${FS_MOUNT}, RETAINED at
 # rest (ratified 2026-08-15, was tracker D-28).
 #
 # WHY the full BRCA cohort rather than the 50-slide subset:
-#   - Stage 7.2 (the SLA cell) walks the 1073-slide cohort through the
+#   - Stage 7.2 (the SLA cell) walks the full D5 cohort through the
 #     kvikIO/raw-TIFF backend with DISJOINT per-process slide chunks — its N=64
 #     cell is arithmetically impossible on a 50-slide artifact — and 7.5's
 #     inference workload shares the same configuration. The artifact must
@@ -55,7 +55,7 @@
 # 4.A convention — sustained read+write with no constructed regime).
 #
 # Usage:
-#   ./scripts/convert-stage4c-rawtiff.sh           # convert 1073 BRCA + 50 CAM16
+#   ./scripts/convert-stage4c-rawtiff.sh           # convert the D5 BRCA cohort + 50 CAM16
 #   PARALLEL=8 ./scripts/convert-stage4c-rawtiff.sh  # override parallelism
 #   (internal) --inner <dataset> <work_tsv> <run_dir>
 
@@ -77,7 +77,7 @@ CONVERTER="$REPO/scripts/convert-rawtiff-20x.py"
 # params are set in convert_one (CAM16 native level 1 @ 256; BRCA 512@40× → 256).
 PARALLEL="${PARALLEL:-4}"
 
-# Full-cohort BRCA (D-28, ratified): the uniform 1073-slide 40x-base cohort
+# Full-cohort BRCA (D-28, ratified): the uniform 40x-base cohort (count per the manifest header)
 # (STAGES.md D5). CAM16 stays the 50-slide subset — only 4.C, 6.A Tier 3 and
 # 7.6 read CAM16 raw-TIFF, all subset-scoped.
 BRCA_MANIFEST="$REPO/scripts/manifests/tcga-brca-full40x-stage4a-format.tsv"

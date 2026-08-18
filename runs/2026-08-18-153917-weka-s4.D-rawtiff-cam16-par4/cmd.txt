@@ -1,0 +1,1 @@
+/home/ec2-user/wsi-cloud/scripts/convert-stage4c-rawtiff.sh --inner cam16 /tmp/tmp.0jKdwU4yqE /home/ec2-user/wsi-cloud/runs/2026-08-18-153917-weka-s4.D-rawtiff-cam16-par4 

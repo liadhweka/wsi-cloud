@@ -1,0 +1,43 @@
+{
+  "run_name": "rawtiff-brca-par4",
+  "stage": "4.D",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-17T19:16:35Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-mixed-rw-unmanaged",
+  "rep": null,
+  "command": [
+    "/home/ec2-user/wsi-cloud/scripts/convert-stage4c-rawtiff.sh",
+    "--inner",
+    "brca",
+    "/tmp/tmp.qDJ7KcPxN2",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-17-191632-weka-s4.D-rawtiff-brca-par4"
+  ],
+  "note": "Stage 4.D: TRUE 20x raw-TIFF conversion of brca (1073 slides, PARALLEL=4 — workload shape, must match on both legs). Sustained large-read (canonical source) + large-write (single-level 256px-tiled uncompressed 20x TIFF, D4) via convert-rawtiff-20x.py; per-dataset read params per the coord contract (CAM16 native L1@256; BRCA 512@40x resized to 256). Fail-loud mpp guard; write-to-.partial-then-rename; idempotent skip on existing non-empty output (SKIP-EXISTS is a distinct status — verify cleanup before regenerating, RUNBOOK silent-skip hazard). Artifact RETAINED at rest (Stage-4 register). Per-invocation log: conversion-log.tsv in this run dir.",
+  "wallclock_s": 56590,
+  "started_utc": "2026-08-17T19:16:37Z",
+  "ended_utc": "2026-08-18T10:59:47Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 13.699,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

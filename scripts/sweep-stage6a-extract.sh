@@ -393,7 +393,7 @@ run_tier2_kvikio_chunked() {
 
   local approval_tag=""
   [ "$model" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
-  local note="${approval_tag}Stage 6.A Tier 2 cell: model=${model} backend=kvikio N=${n_gpus} dataset=brca_full (the 1073-slide uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Each chunk: SVS→raw-TIFF conversion → extraction → raw-TIFF cleanup. Per-chunk timing in per-chunk-summary.csv. Outer record-run captures a continuous filesystem-side time series across all chunks (the source differs per leg — see docs/RUNBOOK.md). Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
+  local note="${approval_tag}Stage 6.A Tier 2 cell: model=${model} backend=kvikio N=${n_gpus} dataset=brca_full (the uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Each chunk: SVS→raw-TIFF conversion → extraction → raw-TIFF cleanup. Per-chunk timing in per-chunk-summary.csv. Outer record-run captures a continuous filesystem-side time series across all chunks (the source differs per leg — see docs/RUNBOOK.md). Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
 
   echo ""
   echo "=========================================="
@@ -463,7 +463,7 @@ run_tier2_kvikio_chunked_multimodel() {
   if [[ ",$models_csv," == *",uni2-h,"* ]]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   fi
-  local note="${approval_tag}Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=$models_csv backend=kvikio N=${n_gpus} dataset=brca_full (the 1073-slide uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL, not a micro-optimisation: full-cohort raw-TIFF does not fit at once and conversion is a large share of per-chunk wallclock. Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
+  local note="${approval_tag}Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=$models_csv backend=kvikio N=${n_gpus} dataset=brca_full (the uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL, not a micro-optimisation: full-cohort raw-TIFF does not fit at once and conversion is a large share of per-chunk wallclock. Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
 
   echo ""
   echo "=========================================="
