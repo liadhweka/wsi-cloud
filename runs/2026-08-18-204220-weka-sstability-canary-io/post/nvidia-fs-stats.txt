@@ -1,0 +1,23 @@
+GDS Version: 1.18.0.62 
+NVFS statistics(ver: 4.0)
+NVFS Driver(version: 2.29.4)
+Mellanox PeerDirect Supported: False
+IO stats: Enabled, peer IO stats: Enabled
+Logging level: info
+
+Active Shadow-Buffer (MiB): 0
+Active Process: 0
+Batches				: n=0 ok=0 err=0 Avg-Submit-Latency(usec)=0
+Reads				: n=0 ok=0 err=0 readMiB=0 io_state_err=0
+Reads				: Bandwidth(MiB/s)=0 Avg-Latency(usec)=0
+Sparse Reads		        : n=0 io=0 holes=0 pages=0 
+Writes				: n=0 ok=0 err=0 writeMiB=0 io_state_err=0 pg-cache=0 pg-cache-fail=0 pg-cache-eio=0
+Writes				: Bandwidth(MiB/s)=0 Avg-Latency(usec)=0
+Mmap				: n=328 ok=328 err=0 munmap=328
+Bar1-map			: n=328 ok=328 err=0 free=328 callbacks=0 active=0 delay-frees=0
+Error				: cpu-gpu-pages=0 sg-ext=0 dma-map=0 dma-ref=0
+Ops				: Read=0 Write=0 BatchIO=0
+GPU 0000:67:00.0  uuid:7136a415-f5e7-6b40-8a5b-70fe06b25edc : Registered_MiB=0 Cache_MiB=0 max_pinned_MiB=0 cross_root_port(%)=0
+GPU 0000:65:00.0  uuid:d164b9ea-0717-d77c-14e8-324155f83502 : Registered_MiB=0 Cache_MiB=0 max_pinned_MiB=0 cross_root_port(%)=0
+GPU 0000:69:00.0  uuid:3eace5fc-bd55-2116-ae2c-a0f1a44450d6 : Registered_MiB=0 Cache_MiB=0 max_pinned_MiB=0 cross_root_port(%)=0
+GPU 0000:63:00.0  uuid:712c50a0-b89a-98e8-4af8-708edf7cc285 : Registered_MiB=0 Cache_MiB=0 max_pinned_MiB=0 cross_root_port(%)=0

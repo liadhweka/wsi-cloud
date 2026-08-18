@@ -1,0 +1,28 @@
+{
+  "backend": "kvikio",
+  "world_size": 1,
+  "batch_size_per_rank": 256,
+  "effective_batch_size": 256,
+  "ramp_s": 30,
+  "runtime_s": 60,
+  "steady_steps_total_across_ranks": 244.0,
+  "steady_steps_per_rank": 244.0,
+  "steady_samples_total": 62464.0,
+  "samples_per_sec_aggregate": 1041.0666666666666,
+  "samples_per_sec_per_rank": 1041.0666666666666,
+  "training_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-18-175824-weka-s5.A-smoke-train-resnet50-kvikio-N1/training-steps.csv",
+  "path_accounting": {
+    "kvikio_compat_mode_requested": "off",
+    "kvikio_compat_mode_resolved": "OFF",
+    "nvfs_available": true,
+    "nvfs_stats_enabled": true,
+    "app_bytes_read": 15722348544,
+    "shadow_buffer_mib_seen": 16,
+    "basis": "gds_bytes = nvidia-fs readMiB delta (layer 3, true GPU-direct only); bounced_or_posix_bytes = app - gds (cuFile bounce or kvikio posix; the kvikio compat fields say which layer)",
+    "gds_bytes": 0,
+    "bounced_or_posix_bytes": 15722348544,
+    "gds_engaged": "none",
+    "scope": "cell-global: nvidia-fs deltas are device-global, so rank 0's snapshot window covers all ranks; app_bytes_read = aligned cuFile bytes summed across ranks. The wrapper's 1 Hz nvidia-fs timeline is the cell-level authority (D-6)."
+  },
+  "reader_bytes_read_aligned_total": 15722348544
+}

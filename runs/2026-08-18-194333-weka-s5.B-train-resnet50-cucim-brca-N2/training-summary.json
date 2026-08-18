@@ -1,0 +1,14 @@
+{
+  "backend": "cucim_batched_cpu",
+  "world_size": 2,
+  "batch_size_per_rank": 256,
+  "effective_batch_size": 512,
+  "ramp_s": 300,
+  "runtime_s": 1200,
+  "steady_steps_total_across_ranks": 5896.0,
+  "steady_steps_per_rank": 2948.0,
+  "steady_samples_total": 1509376.0,
+  "samples_per_sec_aggregate": 1257.8133333333333,
+  "samples_per_sec_per_rank": 628.9066666666666,
+  "training_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-18-194333-weka-s5.B-train-resnet50-cucim-brca-N2/training-steps.csv"
+}
