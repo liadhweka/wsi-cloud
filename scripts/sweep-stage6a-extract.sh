@@ -207,9 +207,21 @@ run_cell() {
   # on a cuCIM cell it is <n/a>, never a value the cell did not use.
   local preload=""
   local compat_mode=""
+  # D13/D-30: declared regime per cell, from what each backend's reader
+  # actually achieves (extractor summary = the reconciler's evidence).
+  # kvikio: discards each slide's page cache before opening it → cold,
+  # client-side only, server residual stated in the note. cucim: no discard
+  # mechanism exists and the subset is page-cache-resident across the sweep →
+  # warm by construction (steady-state corpus residency).
+  local kvikio_cell=0
+  local cstate=warm
+  local cache_note=" cuCIM per-process tile cache: 512 MiB (library default on this stack; recorded-not-swept per the Stage-4 register — identical on both legs). Cache regime=warm: steady-state by construction — this backend has no discard mechanism and the subset stays page-cache-resident across the sweep; achieved state recorded (client_page_cache_discarded=null), never asserted."
   if [ "$backend" = "kvikio" ]; then
     preload="$LIBCUFILE_SYSTEM"
     compat_mode="$CUFILE_COMPAT_MODE"
+    kvikio_cell=1
+    cstate=cold
+    cache_note=" Cache regime=cold: client-cold per slide (the reader discards each slide's page cache before opening it; achieved result recorded in extraction-summary.json — a failed discard CONTRADICTS this declaration); CLIENT-SIDE ONLY — the server-side residual is unmanaged and recorded, not asserted (D13)."
   fi
 
   # Cell + run-dir naming. A non-default cuFile mode joins the NAME, not only
@@ -247,7 +259,7 @@ run_cell() {
   if [ "$model" = "uni2-h" ]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   fi
-  local note="${approval_tag}Stage 6.A cell: model=${model} backend=${backend} N_gpus=${n_gpus} dataset=${dataset_tag} gpus=${gpu_csv} batch=256 cufile_compat_mode=${compat_mode:-<n/a>} (REQUESTED, not proven — the per-cell cuFile path accounting settles which path ran). WHY: docs/Stage-6-Feature-Extraction.md 6.A Tier 1 + that stage's decision register. Foundation-model frozen-eval extraction via mp.spawn DDP; per-rank modulo slide partitioning. AMP autocast FP16 + channels_last + cudnn.benchmark. CLS-token pooling (storage-benchmark universal choice). Per-cell LD_PRELOAD scoping: kvikio cells preload the system libcufile, cuCIM cells leave it unset — cuCIM links its own bundled libcufile and segfaults on its first read under the ABI clash."
+  local note="${approval_tag}Stage 6.A cell: model=${model} backend=${backend} N_gpus=${n_gpus} dataset=${dataset_tag} gpus=${gpu_csv} batch=256 cufile_compat_mode=${compat_mode:-<n/a>} (REQUESTED, not proven — the per-cell cuFile path accounting settles which path ran). WHY: docs/Stage-6-Feature-Extraction.md 6.A Tier 1 + that stage's decision register. Foundation-model frozen-eval extraction via mp.spawn DDP; per-rank modulo slide partitioning. AMP autocast FP16 + channels_last + cudnn.benchmark. CLS-token pooling (storage-benchmark universal choice).${cache_note} Per-cell LD_PRELOAD scoping: kvikio cells preload the system libcufile, cuCIM cells leave it unset — cuCIM links its own bundled libcufile and segfaults on its first read under the ABI clash."
 
   local extractor_args=(
     --backend "$backend"
@@ -279,6 +291,8 @@ run_cell() {
   CUDA_VISIBLE_DEVICES="$gpu_csv" \
   LD_PRELOAD="$preload" \
   RECORD_RUN_DIR="$run_dir" \
+  RECORD_CACHE_STATE="$cstate" \
+  RECORD_KVIKIO_CELL="$kvikio_cell" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.A \

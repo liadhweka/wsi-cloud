@@ -353,6 +353,9 @@ class KvikIOSlideReader:
         # drop never worked — and both look identical in the results.
         self.n_discard_attempted = 0
         self.n_discard_failed = 0
+        # D-6/D8: aligned bytes actually pread through cuFile by THIS rank —
+        # the app side of the GPU-direct-vs-bounced split.
+        self.bytes_read = 0
 
     def open_slide(self, slide_id: str):
         """Returns (handle, idx_meta) for the slide, or (None, None) if missing."""
@@ -388,6 +391,7 @@ class KvikIOSlideReader:
                 "n_tiles_per_row": (page.shape[1] + page.tilewidth - 1) // page.tilewidth,
                 "offsets": np.asarray(page.dataoffsets, dtype=np.int64),
                 "bytecounts": np.asarray(page.databytecounts, dtype=np.int64),
+                "file_size": path.stat().st_size,
             }
         handle = self._kvikio.CuFile(str(path), "r")
         return handle, idx_meta
@@ -440,7 +444,12 @@ class KvikIOSlideReader:
             futures = []
             for i in range(B):
                 slot_start = i * max_slot
-                slot_len = int(r_bcs[i])
+                # EOF clamp: a slide's last tile's 4096-up-rounded read overruns
+                # EOF, and kvikio's POSIX (compat) layer raises "pread: EOF" on
+                # the short read where the cuFile layer tolerates it.
+                slot_len = min(int(r_bcs[i]),
+                               int(idx_meta["file_size"]) - int(r_offs[i]))
+                self.bytes_read += slot_len
                 slot = raw_buf[slot_start: slot_start + slot_len]
                 fut = handle.pread(slot, file_offset=int(r_offs[i]))
                 futures.append(fut)
@@ -666,6 +675,16 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
         )
     else:
         raise SystemExit(f"unknown --backend {args.backend!r}")
+
+    # D-6/D8: cuFile path accounting on the kvikIO backend. nvidia-fs deltas are
+    # DEVICE-GLOBAL, so one snapshot window on rank 0 covers every rank's traffic;
+    # app bytes are summed across ranks in the counter all_reduce. Constructed
+    # after the reader init so kvikio's resolved compat mode is readable. The
+    # wrapper's 1 Hz nvidia-fs timeline remains the cell-level authority.
+    acct = None
+    if args.backend == "kvikio" and rank == 0:
+        from wsi_cufile_accounting import PathAccounting
+        acct = PathAccounting(requested_compat_mode=args.compat_mode)
 
     # Ensure output dir exists
     output_dir = Path(args.output_dir)
@@ -904,12 +923,14 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
     # honest count for the cuCIM backend rather than a missing field.
     counter_names = ["tiles_steady", "steps_steady", "slides_done", "slides_incomplete",
                      "scheduled", "skipped_exists", "skipped_no_coords",
-                     "skipped_input_missing", "discard_attempted", "discard_failed"]
+                     "skipped_input_missing", "discard_attempted", "discard_failed",
+                     "bytes_read"]
     local_counts = [total_tiles_steady, total_steps_steady, slides_done, slides_incomplete,
                     len(my_slide_ids), slides_skipped_exists, slides_skipped_no_coords,
                     slides_skipped_input_missing,
                     getattr(reader, "n_discard_attempted", 0),
-                    getattr(reader, "n_discard_failed", 0)]
+                    getattr(reader, "n_discard_failed", 0),
+                    getattr(reader, "bytes_read", 0)]
     if world_size > 1:
         local = torch.tensor([float(x) for x in local_counts], device=device)
         dist.all_reduce(local, op=dist.ReduceOp.SUM)
@@ -975,6 +996,11 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
             # must be read as WARM — cold cannot be inferred from the backend name.
             "n_page_cache_discards_attempted": int(g["discard_attempted"]),
             "n_page_cache_discards_failed": int(g["discard_failed"]),
+            # The D13 reconciler's field (wsi_agg_helper.py cache): null = not
+            # attempted (the cuCIM backend has no discard mechanism — WARM);
+            # false = any discard FAILED, which CONTRADICTS a cold declaration.
+            "client_page_cache_discarded": (None if int(g["discard_attempted"]) == 0
+                                            else int(g["discard_failed"]) == 0),
             # Client page cache only; the server side and the per-filesystem cold
             # mechanism are open (A.5 / D13). Stated, not left to omission.
             "cache_state_achieved": "unknown",
@@ -993,6 +1019,14 @@ def worker(local_rank: int, world_size: int, args, master_port: int):
             "n_ramp_steps_excluded": N_RAMP_STEPS,
             "dtype_out": args.dtype_out,
         }
+        if acct is not None:
+            pa = acct.finish(int(g["bytes_read"]))
+            pa["scope"] = ("cell-global: nvidia-fs deltas are device-global, so rank 0's snapshot "
+                           "window covers all ranks; app_bytes_read = aligned cuFile bytes summed "
+                           "across ranks. The wrapper's 1 Hz nvidia-fs timeline is the cell-level "
+                           "authority (D-6).")
+            summary["path_accounting"] = pa
+            summary["reader_bytes_read_aligned_total"] = int(g["bytes_read"])
         print(f"=== summary ===", flush=True)
         print(json.dumps(summary, indent=2), flush=True)
         if args.summary_json:

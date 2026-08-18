@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-18T16:32:19.544Z
+  modified: 2026-08-18T20:59:41.772Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -54,8 +54,8 @@ These change what the numbers mean, so resolving them after cells have run means
     canary (with D-7) — on THIS leg the known-good signature is *bounce accounting non-zero* (gds stays 0
     by determination); nvidia-fs read bytes non-zero is a Leg-B-only expectation. Stats format:
     `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
-    Remaining D-6 engineering: Stage-6 extractor wiring (Stage-5 trainer DONE 2026-08-18) + the nvidia-fs
-    block parser (tracker **D-6**).
+    Remaining D-6 engineering: the nvidia-fs block parser (Stage-5 trainer AND Stage-6 extractor wiring
+    DONE 2026-08-18, smoke-verified) — tracker **D-6**.
 8. **(resolved 2026-08-17 — tile counts measured from the real coords; numbers in
    `docs/Stage-6-Feature-Extraction.md` § Risks and the `coords-3.0` fingerprint. Delete on next hygiene
    pass once 6.B.1's grid is actually sized from them.)**
@@ -91,9 +91,12 @@ These change what the numbers mean, so resolving them after cells have run means
     labels per each roadmap's cache-discipline row, `na-*` where a stage deliberately defines no axis. Done:
     Stage-1/2/stability, 3.0, 4.A/4.D (`na-mixed-rw-unmanaged`), **4.C (`cold` — client-cold at read/window
     entry; the reader now emits `client_page_cache_discarded` for the reconciler)**, and **5 (`warm` —
-    steady-state by construction, note-worded)**. Remaining at each stage's gate (read the reader's
-    achieved-evidence emission first, don't invent labels): 6.A, 6.B-mil/stress, 6.C, 7 — tracker **D-30**'s
-    list. Item 14's cuCIM cache-size line: 4.B and 5.B carry it; wire 6.A's at its gate.
+    steady-state by construction, note-worded)**. Also done: **6.A Tier 1/3
+    (kvikio `cold` per-slide-discard / cucim `warm` steady-state; cuCIM cache-size line in the cucim notes —
+    item 14 fully implemented, delete on the next hygiene pass)**. Remaining at each stage's gate (read the
+    reader's achieved-evidence emission first, don't invent labels): 6.A Tier 2's chunked orchestrators
+    (regime = reads of just-converted server-resident chunks — surface at the Tier-2/CHUNK_SIZE gate),
+    6.B-mil/stress, 6.C, 7 — tracker **D-30**'s list.
 14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Implementation:
     4.B and 5.B cell notes carry the configured size (512 MiB library default). Remaining: the 6.A cuCIM
     cells' notes, at the 6.A gate — then delete this item.**
