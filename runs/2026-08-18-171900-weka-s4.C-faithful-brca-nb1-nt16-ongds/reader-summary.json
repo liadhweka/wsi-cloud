@@ -1,0 +1,541 @@
+{
+  "mode": "faithful",
+  "compat_mode": "on",
+  "n_buffer": 1,
+  "num_threads": 16,
+  "task_size": 4194304,
+  "preregister": false,
+  "level": 0,
+  "manifest": "/home/ec2-user/wsi-cloud/scripts/manifests/tcga-brca-stage4a-subset.tsv",
+  "rawtiff_dir": "/mnt/weka/data/tcga-brca-rawtiff",
+  "n_slides_attempted": 50,
+  "n_slides_read": 50,
+  "n_slides_missing": 0,
+  "n_slides_skipped_timecap": 0,
+  "max_duration_s": 600,
+  "warm_cache_requested": false,
+  "n_page_cache_discards_attempted": 50,
+  "n_page_cache_discards_failed": 0,
+  "client_page_cache_discarded": true,
+  "cache_state_achieved": "unknown",
+  "total_tiles": 1352932,
+  "total_bytes_aligned": 271538768800,
+  "path_accounting": {
+    "kvikio_compat_mode_requested": "on",
+    "kvikio_compat_mode_resolved": "ON",
+    "nvfs_available": true,
+    "nvfs_stats_enabled": true,
+    "app_bytes_read": 271538768800,
+    "shadow_buffer_mib_seen": 0,
+    "basis": "gds_bytes = nvidia-fs readMiB delta (layer 3, true GPU-direct only); bounced_or_posix_bytes = app - gds (cuFile bounce or kvikio posix; the kvikio compat fields say which layer)",
+    "gds_bytes": 0,
+    "bounced_or_posix_bytes": 271538768800,
+    "gds_engaged": "none"
+  },
+  "cell_wallclock_s": 203.27861116899294,
+  "sum_slide_wallclock_s": 172.3342204048531,
+  "tiles_per_sec_cell": 6655.555113347652,
+  "gbps_cell": 1.3357960645168905,
+  "per_slide": [
+    {
+      "slide_id": "TCGA-A1-A0SH-01Z-00-DX1.90E71B08-E1D9-4FC2-85AC-062E56DDF17C",
+      "level": 0,
+      "n_tiles": 24444,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4906007408,
+      "wallclock_s": 3.4612567820004188,
+      "tiles_per_sec": 7062.174678029144,
+      "gbps_aligned": 1.4174063691294796
+    },
+    {
+      "slide_id": "TCGA-A2-A0EO-01Z-00-DX1.D7A09E23-2CAB-4B3B-814C-BF0BA75B7589",
+      "level": 0,
+      "n_tiles": 30576,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 6136724192,
+      "wallclock_s": 3.7831922699988354,
+      "tiles_per_sec": 8082.063458014364,
+      "gbps_aligned": 1.6221021174802435
+    },
+    {
+      "slide_id": "TCGA-A2-A0ER-01Z-00-DX1.18123C1B-A0CC-4957-9373-5FFAB985C2E8",
+      "level": 0,
+      "n_tiles": 21545,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4324164496,
+      "wallclock_s": 2.7114563459763303,
+      "tiles_per_sec": 7945.914390977282,
+      "gbps_aligned": 1.5947756276500082
+    },
+    {
+      "slide_id": "TCGA-A2-A0EY-01Z-00-DX1.2F2428B3-0767-48E0-AC22-443C244CBD16",
+      "level": 0,
+      "n_tiles": 39780,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7984003664,
+      "wallclock_s": 4.821758163976483,
+      "tiles_per_sec": 8250.102690175901,
+      "gbps_aligned": 1.6558283083645213
+    },
+    {
+      "slide_id": "TCGA-A2-A0SW-01Z-00-DX1.E1EA0407-B831-4D75-826E-80B82B821797",
+      "level": 0,
+      "n_tiles": 39746,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7977179312,
+      "wallclock_s": 4.775622910994571,
+      "tiles_per_sec": 8322.683918048819,
+      "gbps_aligned": 1.6703955610973216
+    },
+    {
+      "slide_id": "TCGA-A2-A1FV-01Z-00-DX1.F70ACD9A-7819-4296-BD28-4D24BBA8AFF4",
+      "level": 0,
+      "n_tiles": 42042,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 8437994576,
+      "wallclock_s": 5.009315604984295,
+      "tiles_per_sec": 8392.763266536449,
+      "gbps_aligned": 1.6844605613597499
+    },
+    {
+      "slide_id": "TCGA-A2-A1G1-01Z-00-DX1.E52A474F-DE13-41CF-94D4-D00BAC46ECF4",
+      "level": 0,
+      "n_tiles": 17024,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3416784800,
+      "wallclock_s": 2.101859861984849,
+      "tiles_per_sec": 8099.493361999753,
+      "gbps_aligned": 1.6256006700529635
+    },
+    {
+      "slide_id": "TCGA-A7-A13F-01Z-00-DX1.AB4ADDD3-8E1C-4AB9-813E-D137A2CFB950",
+      "level": 0,
+      "n_tiles": 16608,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3333291040,
+      "wallclock_s": 2.1195152339932974,
+      "tiles_per_sec": 7835.754012821839,
+      "gbps_aligned": 1.5726667053578447
+    },
+    {
+      "slide_id": "TCGA-A7-A426-01Z-00-DX1.3058E873-9442-4872-80DA-E8A5B35054D2",
+      "level": 0,
+      "n_tiles": 19380,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3889643024,
+      "wallclock_s": 2.4739819020032883,
+      "tiles_per_sec": 7833.525372318686,
+      "gbps_aligned": 1.5722196758393385
+    },
+    {
+      "slide_id": "TCGA-A7-A4SB-01Z-00-DX1.E8925605-5189-441E-A719-92CFC1118B0B",
+      "level": 0,
+      "n_tiles": 27789,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 5577361472,
+      "wallclock_s": 3.349953826982528,
+      "tiles_per_sec": 8295.338215163089,
+      "gbps_aligned": 1.6649069688891234
+    },
+    {
+      "slide_id": "TCGA-A8-A06N-01Z-00-DX1.E25E65F8-DFE0-47CF-9FAB-B82EE8E321F7",
+      "level": 0,
+      "n_tiles": 10176,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 2042363552,
+      "wallclock_s": 1.3164082090079319,
+      "tiles_per_sec": 7730.124994942724,
+      "gbps_aligned": 1.5514667395907238
+    },
+    {
+      "slide_id": "TCGA-A8-A076-01Z-00-DX1.BAAC4F9C-0C04-42FB-95F4-D765305089B8",
+      "level": 0,
+      "n_tiles": 26928,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 5404557280,
+      "wallclock_s": 3.174301766004646,
+      "tiles_per_sec": 8483.125419387296,
+      "gbps_aligned": 1.7025971940917508
+    },
+    {
+      "slide_id": "TCGA-A8-A07B-01Z-00-DX1.950B5E4E-C5F0-4445-9F88-E8C32CDFE6DA",
+      "level": 0,
+      "n_tiles": 6300,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 1264433392,
+      "wallclock_s": 0.7848286009975709,
+      "tiles_per_sec": 8027.230393989552,
+      "gbps_aligned": 1.6110949453075725
+    },
+    {
+      "slide_id": "TCGA-A8-A07L-01Z-00-DX1.D9E1051F-724E-4E88-940A-C97005DC5BEB",
+      "level": 0,
+      "n_tiles": 5929,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 1189971856,
+      "wallclock_s": 0.7455671100178733,
+      "tiles_per_sec": 7952.335772775526,
+      "gbps_aligned": 1.5960627018156326
+    },
+    {
+      "slide_id": "TCGA-A8-A084-01Z-00-DX1.2B52D1B8-5AD4-4BD6-ADF7-9D65B8EE2621",
+      "level": 0,
+      "n_tiles": 15453,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3101476352,
+      "wallclock_s": 1.9045388250087854,
+      "tiles_per_sec": 8113.775259965476,
+      "gbps_aligned": 1.6284658056186874
+    },
+    {
+      "slide_id": "TCGA-A8-A090-01Z-00-DX1.01574070-D65E-486F-B69D-0F8E3816D057",
+      "level": 0,
+      "n_tiles": 7622,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 1529763552,
+      "wallclock_s": 0.9677136329992209,
+      "tiles_per_sec": 7876.297016067911,
+      "gbps_aligned": 1.5808019023756295
+    },
+    {
+      "slide_id": "TCGA-A8-A0A2-01Z-00-DX1.47BCDF13-1065-466A-B7CB-F91F5EAD7D91",
+      "level": 0,
+      "n_tiles": 18368,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3686530720,
+      "wallclock_s": 2.23718824799289,
+      "tiles_per_sec": 8210.305957256385,
+      "gbps_aligned": 1.6478410895048274
+    },
+    {
+      "slide_id": "TCGA-AC-A3TN-01Z-00-DX1.F00E81C7-0CA2-49E8-A30F-DE423538E93C",
+      "level": 0,
+      "n_tiles": 12800,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 2569009568,
+      "wallclock_s": 1.6960520470165648,
+      "tiles_per_sec": 7546.938210130875,
+      "gbps_aligned": 1.5146997242914852
+    },
+    {
+      "slide_id": "TCGA-AN-A0AT-01Z-00-DX1.DFD68CD2-C25E-47BE-BC06-8CE3C657B9FD",
+      "level": 0,
+      "n_tiles": 34875,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 6999549024,
+      "wallclock_s": 4.304244635015493,
+      "tiles_per_sec": 8102.466973249643,
+      "gbps_aligned": 1.6261968399885813
+    },
+    {
+      "slide_id": "TCGA-AN-A0FT-01Z-00-DX1.6F263AB3-FB1D-4056-AEC2-4F163017324F",
+      "level": 0,
+      "n_tiles": 21716,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4358486928,
+      "wallclock_s": 2.7568216109939385,
+      "tiles_per_sec": 7877.187233805295,
+      "gbps_aligned": 1.5809825745049206
+    },
+    {
+      "slide_id": "TCGA-AQ-A54O-01Z-00-DX1.85AB0AC4-47BB-4CD8-B7FB-5928108864AC",
+      "level": 0,
+      "n_tiles": 43008,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 8631873952,
+      "wallclock_s": 5.0838013339962345,
+      "tiles_per_sec": 8459.811305449382,
+      "gbps_aligned": 1.6979172443811301
+    },
+    {
+      "slide_id": "TCGA-AR-A0U1-01Z-00-DX1.276433E7-E841-42D2-AF21-762F2FEA3B9B",
+      "level": 0,
+      "n_tiles": 20320,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4078303776,
+      "wallclock_s": 2.4819355639920104,
+      "tiles_per_sec": 8187.158560763269,
+      "gbps_aligned": 1.643194865800766
+    },
+    {
+      "slide_id": "TCGA-AR-A24U-01Z-00-DX1.220FD0D0-0DB6-4E3C-92A0-66CD6509F0AD",
+      "level": 0,
+      "n_tiles": 28122,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 5644195792,
+      "wallclock_s": 3.474710148992017,
+      "tiles_per_sec": 8093.336938667517,
+      "gbps_aligned": 1.6243644937225432
+    },
+    {
+      "slide_id": "TCGA-AR-A252-01Z-00-DX1.2E7EE069-A0B8-489B-A2F0-3175FB58F468",
+      "level": 0,
+      "n_tiles": 40755,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 8179689472,
+      "wallclock_s": 5.080503495992161,
+      "tiles_per_sec": 8021.842723295093,
+      "gbps_aligned": 1.6100155188265655
+    },
+    {
+      "slide_id": "TCGA-AR-A2LE-01Z-00-DX1.E8E1FC5C-9A4A-463F-81D7-E9A8AF43EAD9",
+      "level": 0,
+      "n_tiles": 13559,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 2721344816,
+      "wallclock_s": 1.7230985169881023,
+      "tiles_per_sec": 7868.9638847235,
+      "gbps_aligned": 1.579332109667639
+    },
+    {
+      "slide_id": "TCGA-AR-A2LN-01Z-00-DX1.3EF43524-28B8-4326-9356-6BCBC63A1DA8",
+      "level": 0,
+      "n_tiles": 46620,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 9356819184,
+      "wallclock_s": 5.905470276018605,
+      "tiles_per_sec": 7894.3755232022995,
+      "gbps_aligned": 1.584432525551251
+    },
+    {
+      "slide_id": "TCGA-B6-A0I2-01Z-00-DX1.885D2034-73B7-48AE-8343-631F89061C38",
+      "level": 0,
+      "n_tiles": 24585,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4934304272,
+      "wallclock_s": 3.2035266080056317,
+      "tiles_per_sec": 7674.354862095399,
+      "gbps_aligned": 1.5402726044694448
+    },
+    {
+      "slide_id": "TCGA-B6-A0IH-01Z-00-DX1.3463B12E-D1B0-4FB2-B257-BFD63BA2B6BF",
+      "level": 0,
+      "n_tiles": 40656,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 8159818592,
+      "wallclock_s": 5.256580185989151,
+      "tiles_per_sec": 7734.306062402357,
+      "gbps_aligned": 1.5523055490999869
+    },
+    {
+      "slide_id": "TCGA-B6-A0WW-01Z-00-DX1.64048633-1D1A-4074-8C50-7641159355DB",
+      "level": 0,
+      "n_tiles": 36888,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7403565760,
+      "wallclock_s": 4.7532853379962035,
+      "tiles_per_sec": 7760.527167416067,
+      "gbps_aligned": 1.5575681309973808
+    },
+    {
+      "slide_id": "TCGA-BH-A0BS-01Z-00-DX1.FEE32127-4D0B-4560-A39C-4EAA5B189B70",
+      "level": 0,
+      "n_tiles": 36888,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7403565760,
+      "wallclock_s": 4.866456971998559,
+      "tiles_per_sec": 7580.052636292151,
+      "gbps_aligned": 1.5213461872980456
+    },
+    {
+      "slide_id": "TCGA-BH-A0DX-01Z-00-DX1.45C27E71-9A0A-400E-93A9-5CE7780F3C5E",
+      "level": 0,
+      "n_tiles": 46426,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 9317880272,
+      "wallclock_s": 5.823754734010436,
+      "tiles_per_sec": 7971.832970381546,
+      "gbps_aligned": 1.5999781408348204
+    },
+    {
+      "slide_id": "TCGA-BH-A0E7-01Z-00-DX1.7FEE54C4-3795-403C-85B9-FF932BE56788",
+      "level": 0,
+      "n_tiles": 37168,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7459766240,
+      "wallclock_s": 4.763634119997732,
+      "tiles_per_sec": 7802.446422988022,
+      "gbps_aligned": 1.5659822001618275
+    },
+    {
+      "slide_id": "TCGA-BH-A0HQ-01Z-00-DX1.0921FCEF-20A2-4D4B-A198-91AF9F6C814C",
+      "level": 0,
+      "n_tiles": 36547,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7335125696,
+      "wallclock_s": 4.669867325981613,
+      "tiles_per_sec": 7826.132403519144,
+      "gbps_aligned": 1.5707353515569409
+    },
+    {
+      "slide_id": "TCGA-BH-A0W5-01Z-00-DX1.84EA3913-667B-4694-A0F0-E629CAC615C8",
+      "level": 0,
+      "n_tiles": 38376,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 7702214784,
+      "wallclock_s": 4.942701116000535,
+      "tiles_per_sec": 7764.175720795464,
+      "gbps_aligned": 1.5583007354149647
+    },
+    {
+      "slide_id": "TCGA-C8-A26V-01Z-00-DX1.6E86DF74-D575-4969-8142-963D9DF5208F",
+      "level": 0,
+      "n_tiles": 16170,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3245381520,
+      "wallclock_s": 2.2650676500052214,
+      "tiles_per_sec": 7138.859627421161,
+      "gbps_aligned": 1.4327967290480346
+    },
+    {
+      "slide_id": "TCGA-C8-A275-01Z-00-DX1.44D27E67-4DD6-4893-B38A-01E48F5A358A",
+      "level": 0,
+      "n_tiles": 22632,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4542330496,
+      "wallclock_s": 2.9911434210080188,
+      "tiles_per_sec": 7566.3372879569215,
+      "gbps_aligned": 1.5185933459751086
+    },
+    {
+      "slide_id": "TCGA-C8-A8HR-01Z-00-DX1.8E841CA8-1CE2-4242-AC5A-3247075CF8F4",
+      "level": 0,
+      "n_tiles": 9630,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 1932776704,
+      "wallclock_s": 1.3267087109852582,
+      "tiles_per_sec": 7258.563933637279,
+      "gbps_aligned": 1.4568206931909382
+    },
+    {
+      "slide_id": "TCGA-D8-A1JI-01Z-00-DX2.E688E270-26C9-43EC-BC26-86BF8B74A31D",
+      "level": 0,
+      "n_tiles": 24079,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4832750160,
+      "wallclock_s": 3.1046071409946308,
+      "tiles_per_sec": 7755.892744705132,
+      "gbps_aligned": 1.5566382284528664
+    },
+    {
+      "slide_id": "TCGA-D8-A1JM-01Z-00-DX1.3CD15BC8-08B3-4BEE-9FD7-A8BEED33268E",
+      "level": 0,
+      "n_tiles": 23405,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4697475776,
+      "wallclock_s": 3.179879692994291,
+      "tiles_per_sec": 7360.341352399089,
+      "gbps_aligned": 1.4772495281344074
+    },
+    {
+      "slide_id": "TCGA-D8-A1XT-01Z-00-DX1.9E4DEEEB-AB0A-45F6-A69B-65B3E6F22D46",
+      "level": 0,
+      "n_tiles": 51554,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 10347090480,
+      "wallclock_s": 6.677442593994783,
+      "tiles_per_sec": 7720.620473227879,
+      "gbps_aligned": 1.5495588819146773
+    },
+    {
+      "slide_id": "TCGA-D8-A1XV-01Z-00-DX2.D1988E01-5FDC-4F50-8183-F0CCE74D0CB2",
+      "level": 0,
+      "n_tiles": 27462,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 5511731424,
+      "wallclock_s": 3.5856260530126747,
+      "tiles_per_sec": 7658.913560416091,
+      "gbps_aligned": 1.5371740785319747
+    },
+    {
+      "slide_id": "TCGA-E2-A15E-06Z-00-DX1.D394A007-91A2-4445-9B4A-1629EE684A51",
+      "level": 0,
+      "n_tiles": 41125,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 8253950304,
+      "wallclock_s": 5.3982196759898216,
+      "tiles_per_sec": 7618.252399567139,
+      "gbps_aligned": 1.5290134154250679
+    },
+    {
+      "slide_id": "TCGA-E2-A15J-01Z-00-DX1.BF7901D1-30B1-4A76-B0A5-E9B8B36EF4C9",
+      "level": 0,
+      "n_tiles": 33858,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 6795433136,
+      "wallclock_s": 4.5508996800053865,
+      "tiles_per_sec": 7439.847586348009,
+      "gbps_aligned": 1.4932065336127023
+    },
+    {
+      "slide_id": "TCGA-E2-A15K-01Z-00-DX1.9F424BE2-9BFE-4DFF-8CC9-10D2DADBBEA7",
+      "level": 0,
+      "n_tiles": 25696,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 5157287456,
+      "wallclock_s": 3.43004028199357,
+      "tiles_per_sec": 7491.4572096702195,
+      "gbps_aligned": 1.5035646907920683
+    },
+    {
+      "slide_id": "TCGA-E9-A1N8-01Z-00-DX1.1243AB1C-75A3-4A5E-9674-53992E6DD377",
+      "level": 0,
+      "n_tiles": 24332,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 4883527216,
+      "wallclock_s": 3.2098874019866344,
+      "tiles_per_sec": 7580.328202459893,
+      "gbps_aligned": 1.5214014089645425
+    },
+    {
+      "slide_id": "TCGA-E9-A1RD-01Z-00-DX1.34083668-cbd2-4610-b857-d50ee9f3e5bd",
+      "level": 0,
+      "n_tiles": 19177,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3848897680,
+      "wallclock_s": 2.555314178986009,
+      "tiles_per_sec": 7504.752314883546,
+      "gbps_aligned": 1.5062326627590297
+    },
+    {
+      "slide_id": "TCGA-GM-A2DN-01Z-00-DX1.593003B0-BA87-486B-B472-D6B85867D54D",
+      "level": 0,
+      "n_tiles": 28608,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 5741739680,
+      "wallclock_s": 3.7201742350007407,
+      "tiles_per_sec": 7689.962403063174,
+      "gbps_aligned": 1.543406119525167
+    },
+    {
+      "slide_id": "TCGA-PE-A5DC-01Z-00-DX1.8E6953AD-C14A-43F5-B062-E31AB13C7BDF",
+      "level": 0,
+      "n_tiles": 14964,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 3003334416,
+      "wallclock_s": 2.001364586991258,
+      "tiles_per_sec": 7476.898560744527,
+      "gbps_aligned": 1.500643328817489
+    },
+    {
+      "slide_id": "TCGA-S3-AA12-01Z-00-DX1.2A991B9F-E7E6-410B-B0BF-635E3CC40C7E",
+      "level": 0,
+      "n_tiles": 30927,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 6207171408,
+      "wallclock_s": 3.9463697969913483,
+      "tiles_per_sec": 7836.822596700966,
+      "gbps_aligned": 1.5728813383713438
+    },
+    {
+      "slide_id": "TCGA-Z7-A8R6-01Z-00-DX1.CE4ED818-D762-4324-9DEA-2ACB38B9B0B9",
+      "level": 0,
+      "n_tiles": 30294,
+      "tile_bytes_useful": 196608,
+      "bytes_aligned_transferred": 6080126368,
+      "wallclock_s": 3.8665719800046645,
+      "tiles_per_sec": 7834.847031598117,
+      "gbps_aligned": 1.5724849813846387
+    }
+  ]
+}

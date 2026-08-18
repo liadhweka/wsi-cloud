@@ -172,7 +172,7 @@ def find_rawtiff(rawtiff_dir, slide_id):
 # WHY this matches NVIDIA's benchmark: their read_tiled() iterates the same way,
 # so each filesystem is measured absorbing the same published blueprint.
 # -----------------------------------------------------------------------------
-def faithful_read_slide(fh, page, n_buffer, buffers):
+def faithful_read_slide(fh, page, n_buffer, buffers, file_size):
     """Read all tiles in `page` via async pread+pipelining. Returns bytes_read."""
     offsets = np.asarray(page.dataoffsets, dtype=np.int64)
     bytecounts = np.asarray(page.databytecounts, dtype=np.int64)
@@ -188,9 +188,15 @@ def faithful_read_slide(fh, page, n_buffer, buffers):
         )
 
     futures = []
+    total_bytes = 0
     for i in range(n_tiles):
         off = int(rounded_offs[i])
-        bc = int(rounded_bcs[i])
+        # The 4096-up-rounded length can extend the file's LAST tile past EOF;
+        # kvikio's POSIX (compat) layer raises "pread: EOF" on the resulting
+        # short read where the cuFile layer tolerates it — clamp to EOF so both
+        # layers issue the same reads.
+        bc = min(int(rounded_bcs[i]), file_size - off)
+        total_bytes += bc
         buf = buffers[i % n_buffer]
         fut = fh.pread(buf[:bc], file_offset=off)
         futures.append(fut)
@@ -200,7 +206,7 @@ def faithful_read_slide(fh, page, n_buffer, buffers):
             futures = []
     for f in futures:
         f.get()
-    return int(rounded_bcs.sum())  # bytes actually transferred (aligned size)
+    return total_bytes  # bytes actually transferred (aligned, EOF-clamped)
 
 
 def mode_faithful(args):
@@ -273,7 +279,8 @@ def mode_faithful(args):
         try:
             with TiffFile(str(path)) as tif:
                 page = tif.pages[args.level]
-                bytes_transferred = faithful_read_slide(fh, page, args.n_buffer, tile_buffers)
+                bytes_transferred = faithful_read_slide(fh, page, args.n_buffer, tile_buffers,
+                                                        path.stat().st_size)
         finally:
             fh.close()
         elapsed = time.monotonic() - t0
@@ -477,7 +484,8 @@ def mode_random(args):
         if idx_meta is None:
             return None
         handle = kvikio.CuFile(str(path), "r")
-        entry = {"handle": handle, "idx_meta": idx_meta, "path": path}
+        entry = {"handle": handle, "idx_meta": idx_meta, "path": path,
+                 "file_size": path.stat().st_size}
         slide_cache[slide_id] = entry
         return entry
 
@@ -528,7 +536,11 @@ def mode_random(args):
         bc = int(slide["idx_meta"]["bytecounts"][tile_idx])
         rounded_offs, rounded_bcs, _ = aligned_read_props([off], [bc])
         ro = int(rounded_offs[0])
-        rbc = int(rounded_bcs[0])
+        # EOF clamp: a slide's last tile up-rounds past EOF, and kvikio's POSIX
+        # (compat) layer raises on the short read where cuFile tolerates it.
+        # Corner tiles are rarely tissue, so this fires rarely here — but a
+        # drawn last tile must not kill the cell.
+        rbc = min(int(rounded_bcs[0]), slide["file_size"] - ro)
 
         buf = tile_buffers[len(in_flight) % args.n_buffer]
         t_call = time.monotonic()

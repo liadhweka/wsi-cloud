@@ -487,6 +487,16 @@ def main():
         if "s4.C-convert" in d.name:
             # Skip the conversion prep cell; it's not a sweep cell
             continue
+        if "FAILED" in d.name:
+            # Forensically renamed dirs are history, not subjects — a suffix
+            # rename does not escape this prefix glob, so exclude explicitly
+            # (same rule as verify-substage-closeout.sh).
+            continue
+        if re.search(r"-rep[0-9]+$", d.name):
+            # D18 rep cells stay out of the single-shot grid until the D-4
+            # helper's rep grouping (median + spread) lands — same convention
+            # as aggregate-sweep.py.
+            continue
         row = extract_cell_summary(d)
         if row is None:
             continue

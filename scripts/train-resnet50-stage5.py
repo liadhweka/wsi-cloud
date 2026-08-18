@@ -231,7 +231,8 @@ class KvikIOReader:
         if idx is None:
             return None
         handle = self._kvikio.CuFile(str(path), "r")
-        entry = {"handle": handle, "idx_meta": idx, "path": path}
+        entry = {"handle": handle, "idx_meta": idx, "path": path,
+                 "file_size": path.stat().st_size}
         self.cache[slide_id] = entry
         return entry
 
@@ -256,7 +257,7 @@ class KvikIOReader:
             tile_idx = self._pixel_to_tile_index(x_px, y_px, slide["idx_meta"])
             off = int(slide["idx_meta"]["offsets"][tile_idx])
             bc = int(slide["idx_meta"]["bytecounts"][tile_idx])
-            picks.append((slide["handle"], off, bc, x_px, y_px))
+            picks.append((slide["handle"], off, bc, x_px, y_px, slide["file_size"]))
 
         if len(picks) < batch_size:
             # Pad by repeating the first pick (rare; only if all LRU slides missing)
@@ -273,9 +274,14 @@ class KvikIOReader:
 
         # Issue all preads
         futures = []
-        for i, (handle, _, _, _, _) in enumerate(picks):
+        issued_bytes = 0
+        for i, (handle, _, _, _, _, fsize) in enumerate(picks):
             slot_start = i * max_slot
-            slot_len = int(rounded_bcs[i])
+            # EOF clamp: a slide's last tile up-rounds past EOF, and kvikio's
+            # POSIX (compat) layer raises "pread: EOF" on the short read where
+            # the cuFile layer tolerates it.
+            slot_len = min(int(rounded_bcs[i]), int(fsize) - int(rounded_offs[i]))
+            issued_bytes += slot_len
             slot_view = raw_buf[slot_start : slot_start + slot_len]
             fut = handle.pread(slot_view, file_offset=int(rounded_offs[i]))
             futures.append(fut)
@@ -283,7 +289,7 @@ class KvikIOReader:
         # Drain
         for f in futures:
             f.get()
-        self.bytes_read += int(rounded_bcs.sum())
+        self.bytes_read += issued_bytes
 
         # Extract tile data from each slot into a contiguous [B, H, W, 3] tensor.
         # tile_bytes is uniform per backend instance; alignment offset varies per tile.

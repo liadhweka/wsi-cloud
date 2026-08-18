@@ -354,7 +354,21 @@ case "${1:-}" in
   tier2_mp) tier2_mp;;
   tier3)    tier3;;
   smoke)    tier1 1;;
-  *) echo "usage: $0 {tier1 [smoke]|tier2|tier2_mp|tier3|smoke}" >&2; exit 2;;
+  # Surgical single-cell re-run after a mid-sweep failure: identical env, note
+  # and naming to the sweep's own invocation (hand-replicating run_cell is the
+  # transcription risk the recorded command exists to remove). Tier-1 grid
+  # cells only — extra reader args follow the tier1 shapes.
+  one)
+    shift
+    mode="${1:?usage: $0 one <faithful|random> <brca|cam16> <off|on> <n_buffer> [num_threads]}"
+    ds="${2:?dataset}"; compat="${3:?compat}"; nb="${4:?n_buffer}"; nt="${5:-16}"
+    if [ "$mode" = "random" ]; then
+      run_cell "$mode" "$ds" "$compat" "$nb" "$nt" "" --level 0 --runtime 60 --ramp 10
+    else
+      run_cell "$mode" "$ds" "$compat" "$nb" "$nt" "" --level 0
+    fi
+    ;;
+  *) echo "usage: $0 {tier1 [smoke]|tier2|tier2_mp|tier3|smoke|one <mode> <ds> <compat> <nb> [nt]}" >&2; exit 2;;
 esac
 
 if (( FAILED_CELLS > 0 )); then
