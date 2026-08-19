@@ -134,7 +134,8 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 12/12 cells OK + 6 D18 rep cells; canary PASS on all; cache declarations reconciled CONSISTENT on every cell) · ⏳ Leg B |
+| **Leg A results (`s6.A-extract-summary.csv`; 50-slide BRCA subset)** | **kvikIO tiles/s, N=1→2→4:** Virchow2 272→498→**971** (efficiency 91.5%/89.3%), GigaPath 227→415→**800** (91.4%/88.1%), UNI2-h `[PENDING-APPROVAL]` 276→507→**964** (91.8%/87.3%). **cuCIM comparator at N=4:** 859 / 729 / 873 → **kvikIO/cuCIM ≈ 1.10–1.13×** in the foundation-model regime — far narrower than Stage 5's 1.55×, exactly the compute-heavier balance point this tier exists to locate. GPU utilization 95–98% (kvikIO) vs 88–89% (cuCIM); the cells are **GPU-compute-bound by design** — fs-side reads at peak sit at ~2% of the block-size-matched read ceiling, so these numbers characterise whether each filesystem keeps extractors fed (it does: utilization stays ≥95% on the kvikIO path at N=4), not storage limits. **D18 reps at each model's N=4 peak:** medians 956 / 800 / 963 with **1.7% / 0.6% / 0.7% spreads**. Path proof per cell and per rep: `gds_engaged=none` — all bytes bounced (D8). Canary read ratios 1.05–1.08, all PASS; kvikIO cells declared `cold` (per-slide discard, achieved recorded), cuCIM cells `warm` (no discard mechanism — steady-state residency), all reconciled CONSISTENT. |
 | **Goal** | The tiles/sec curve across GPU count for each model, on both data paths, on the cross-stage subset |
 | **Step** | Run the frozen model over the tile stream from the selected data path and write one `.pt` per slide — `../scripts/extract-features-foundation-stage6.py` |
 | **Backends** | (a) kvikIO/cuFile + raw-TIFF. (b) cuCIM CPU batched |

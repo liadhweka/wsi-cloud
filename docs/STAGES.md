@@ -320,7 +320,10 @@ capacity); EFA-enabled file system + EFA-mounted client.
 floored by the same rule**, because a filesystem provisioned below the client's capability measures its own
 sizing rather than its architecture, and any delta that follows is a sizing artifact. This is a provisioning
 requirement, not a prediction about results. The provisioned configuration of **both** sides is recorded into
-the environment contract, so the fairness basis is verifiable after the fact rather than asserted.
+the environment contract, so the fairness basis is verifiable after the fact rather than asserted. **The
+whitepaper-facing statement of this basis — the recorded floor arithmetic per leg, the deliberate
+backend asymmetries, and why the floor points at the filesystems rather than the client — lives in
+`RESULTS.md` § Provisioning fairness.**
 
 **"At maximum" is a backend claim; the measurement is single-client — say both, with the ceiling on the
 page.** A single client cannot drive a maximally-provisioned backend's aggregate limits, so any externalized

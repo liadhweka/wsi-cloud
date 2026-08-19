@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-18T20:59:41.772Z
+  modified: 2026-08-19T00:04:03.818Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -109,6 +109,13 @@ These change what the numbers mean, so resolving them after cells have run means
     `LUSTRE_STRIPE_LAYOUT`, distinct from `--check`'s "configured") — **deliberately deferred until after
     the Stage-1.0 baseline**; not blocking. Detail: the original gap is that a leg can start with `--check`
     passing while the D12 consistency relation is underivable.
+17b. **[USER, optional strengthener] Confirm whether 4 FE cores / 4 NICs was the WEKA terraform module's
+    default client config for this instance class.** The documented basis is already recorded in the
+    fairness statement (docs.weka.io: >1 core required to maximize a ≥100 Gbps client; num_cores pairs
+    with configured network devices; deployment configured 4↔4, contract-recorded). If 4 was also the
+    vendor deployment tool's default, add that as a second-source sentence; if it was a hand choice,
+    leave the statement as is — the pairing-rule basis stands alone. Delete this item either way once
+    answered.
 18. **[USER] Cost-metering basis with WEKA Sales — the one cost remainder.** Does the Marketplace software
     rate meter RAW NVMe (120 TB @ 0.1141553/TB-hr = 13.699/hr, the recorded value) or USABLE (~67.5 TB →
     ~7.70/hr, the alternative in env.sh's comment)? Backfillable — cells record wallclock + dated prices,

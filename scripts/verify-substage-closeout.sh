@@ -45,7 +45,9 @@ TABLE="
 4.C|s4.C-|runs/s4.C-kvikio-summary.csv|docs/Stage-4-Patching.md|### 4.C
 4.D|s4.D-|-|docs/Stage-4-Patching.md|### 4.D
 5|s5.|runs/s5.A-training-summary.csv|docs/Stage-5-Training.md|### 5.A
-6.A|s6.A-|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|### 6.A
+6.A|s6.A-*brca50|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.A Tier 1
+6.A.3|s6.A-*cam16|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.A Tier 3
+6.A.2|s6.A-*brca_full|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.A Tier 2
 6.B.3|s6.B.3-|runs/s6.B-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.B.3
 6.B.2|s6.B.2-|runs/s6.B-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.B.2
 6.C|s6.C-|runs/s6.C-concurrent-summary.csv|docs/Stage-6-Feature-Extraction.md|### 6.C
@@ -63,7 +65,9 @@ check_one() {
 
   # collect run dirs (exclude forensically renamed)
   local dirs=() d
-  for d in runs/*-"$LEG"-"$mid"*/; do
+  # $mid is deliberately UNQUOTED: per-tier rows carry their own wildcard
+  # (e.g. "s6.A-*brca50"), which a quoted expansion would make literal.
+  for d in runs/*-"$LEG"-$mid*/; do
     d=${d%/}; [ -d "$d" ] || continue
     [[ "$d" == *FAILED* ]] && continue
     dirs+=("$d")

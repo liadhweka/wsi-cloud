@@ -40,6 +40,75 @@ A pointer cannot go stale in that way; at worst it dangles, which is visible.
 - **The caveats that change how the number is read** — cache state achieved, the I/O path proven, whether the
   cell was client-bound, and which sources were quoted.
 
+## Provisioning fairness — the statement every externalized form carries
+
+This is contract-level framing, recorded so it is **stated, not discovered by a reviewer**. The ruling
+decisions are **D7** (fairness basis), **D15** (per-filesystem core accounting), **D20** (the WEKA backend
+configuration), and `../PROJECT-THESIS.md` §5.1/§9. It is written per §10: recorded facts and design
+rationale only.
+
+**Neither filesystem is the artificial constraint, and on the WEKA leg that is verifiable arithmetic from
+recorded data.** The backends' aggregate sustained network capability is **300 Gbps** (8 × i8ge.6xlarge at
+37.5 Gbps sustained each, captured at spin-up — `STAGES.md` **D20**), against a client whose physical line
+rate is **200 Gbps** (environment contract `per_client_ceiling_gbps`, basis instance-line-rate) and whose
+demonstrated storage draw peaked at **~11.0 GiB/s ≈ 94 Gbps** of reads (the 1.0b large-block plateau,
+`Stage-1-Ingest.md`) and **8.48 GiB/s app-level writes ≈ 106 Gbps on the wire** after the measured 5+2 EC
+amplification (1.0a peak × the calibrated 1.456 relation). **The floor multiples: ~3.2× the demonstrated
+read demand, ~2.8× the highest measured write demand (larger still at every other point of the write
+grid), 1.5× the physical NIC.**
+
+**The denominator is not circular.** The obvious rejoinder — "the client's 'demonstrated capability' was
+measured against these very backends, so if they were the constraint the multiple computes itself" — is
+refuted by recorded attribution evidence: the band-calibration read cells deliberately read just-written,
+**backend-RAM-resident** files, taking the drives out of the path entirely, and sustain **10.85–10.88
+GiB/s** on this cluster (`runs/2026-08-16-03*-calib-seqr-*`; an attribution use of diagnostic cells, not a
+storage-performance quote) — statistically the same rate as the cold 1.0b plateau. The same client config
+hits the same ceiling with and without the storage media in the path, so the plateau belongs to the client
+stack, not the backends.
+
+The Lustre leg's floor follows from the same **D7** rule at provisioning — tier maximum, with per-TiB
+throughput × capacity clearing the client's line rate — verified against fetched, dated figures in that
+leg's contract before its first cell, and quoted here in the same form once they exist. **Floors are
+compared against demonstrated client demand on both legs**, and on the Lustre side there is no sizing
+judgment left to attack at all: the tier is the maximum purchasable (**D7**), so the only floor question
+there is arithmetic, not a choice we made.
+
+**The aggregate and capacity asymmetries between the two backends are deliberate and stated.** The WEKA
+leg's 300 Gbps / 67.46 TB usable (**D20**) and whatever the D7-maximum FSx configuration provides at
+provisioning are not matched to each other and are not meant to be: both are **unreachable at single-client
+scale**, both are **priced into their leg's recorded per-cell cost inputs**, and they follow from D7's
+asymmetric bases — Lustre at maximum capability, WEKA at a realistic production configuration — with
+cost-to-complete carrying the difference as arithmetic rather than caveat.
+
+**Why the floor points this way — the objection, preempted.** "Shouldn't the client exceed the filesystem
+under test?" That inversion is correct for an **aggregate-capability** benchmark, which this is not
+(`../PROJECT-THESIS.md` §9): the unit of analysis is the **per-client experience** — the pathology
+workstation, the inference node, the unit that scales. So the filesystems are sized to never be the
+artificial constraint, and **the client's ceiling is not a purchasing artifact but a property of the
+filesystem under test**: the same physical instance peaks differently under each client stack — a
+reserved-core DPDK data path on WEKA versus a kernel-thread EFA client on Lustre — and that difference,
+with its CPU cost (**D15**'s core accounting) and its dollar cost (**D7**'s cost inputs), is part of what
+is being measured. With both backends floored above client capability, a cross-leg delta can only mean the
+client-side architectures deliver differently — which is the buyer's question.
+
+**The client's WEKA-side configuration is itself on the realistic-production basis:** 4 FRONTEND cores,
+with their hyperthread siblings excluded from application accounting (`FS_CLIENT_RESERVED_CORES`, **D15**)
+— a production-shaped choice that is **priced and recorded, not hidden**. A larger FE reservation would
+raise the client's own ceiling, which is exactly why the reservation is reported as part of WEKA's cost
+and the measured-versus-documented ceiling is quoted beside the results (**D7**). **The citable basis for
+4 cores** (fetched 2026-08-19): WEKA's `num_cores` defaults to 1, but the vendor's own performance
+documentation states *"if the client uses a 100 Gbps NIC or above, mounting the WEKA filesystem with more
+than one core is required to maximize client throughput"* [docs.weka.io → performance tests], and in
+VF-based configurations *"num_cores usually matches the number of configured network devices"*
+[docs.weka.io → mount filesystems] — this deployment configured **4 network devices, hence 4 FRONTEND
+cores** (environment contract `weka_client_cores`/`weka_client_nics` = 4/4), i.e. 4 of 48 physical cores
+≈ 8% reserved: neither the bare default (documented as unable to maximize a ≥100 Gbps client) nor a
+benchmark-special maximum, but the documented pairing rule applied to the deployed network layout. **The
+Lustre client reserves nothing by design** — no core reservation exists anywhere in FSx's documented
+client model; its tuning surface is RPC/LRU/statahead parameters [docs.aws.amazon.com → FSx Lustre
+performance, performance tips; fetched 2026-08-19] — which is exactly the client-architecture asymmetry
+**D15** prices rather than hides.
+
 ## What must never appear here
 
 - A figure quoted from a source the filesystem in use bypasses (`../PROJECT-THESIS.md` §7).
