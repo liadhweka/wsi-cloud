@@ -215,7 +215,7 @@ run_cell() {
   # warm by construction (steady-state corpus residency).
   local kvikio_cell=0
   local cstate=warm
-  local cache_note=" cuCIM per-process tile cache: 512 MiB (library default on this stack; recorded-not-swept per the Stage-4 register — identical on both legs). Cache regime=warm: steady-state by construction — this backend has no discard mechanism and the subset stays page-cache-resident across the sweep; achieved state recorded (client_page_cache_discarded=null), never asserted."
+  local cache_note=" cuCIM per-process tile cache: 512 MiB (library default on this stack; recorded-not-swept per the Stage-4 register — identical on both legs). Cache regime=warm: steady-state by construction — this backend has no discard mechanism; residency is unmanaged (the 50-slide subset fits the client page cache; the full cohort exceeds it but fits the server-side cache, and reads are single-touch within a cell); achieved state recorded (client_page_cache_discarded=null), never asserted."
   if [ "$backend" = "kvikio" ]; then
     preload="$LIBCUFILE_SYSTEM"
     compat_mode="$CUFILE_COMPAT_MODE"
@@ -288,11 +288,18 @@ run_cell() {
   echo "  extractor: $PY $EXTRACTOR ${extractor_args[*]}"
   echo "=========================================="
 
+  # Full-cohort cells run ~4 h each and their raw telemetry (~5-6 GB/cell)
+  # would stack up on the 48 GB root volume before the step-end sync — write
+  # it straight to the NVMe overflow (D-35 mechanism in record-run.sh).
+  local raw_on_scratch=0
+  [ "$dataset_tag" = "brca_full" ] && raw_on_scratch=1
+
   CUDA_VISIBLE_DEVICES="$gpu_csv" \
   LD_PRELOAD="$preload" \
   RECORD_RUN_DIR="$run_dir" \
   RECORD_CACHE_STATE="$cstate" \
   RECORD_KVIKIO_CELL="$kvikio_cell" \
+  RECORD_RAW_ON_SCRATCH="$raw_on_scratch" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.A \
@@ -419,6 +426,9 @@ run_tier2_kvikio_chunked() {
   CUDA_VISIBLE_DEVICES="$gpu_csv" \
   LD_PRELOAD="$LIBCUFILE_SYSTEM" \
   RECORD_RUN_DIR="$run_dir" \
+  RECORD_CACHE_STATE="na-mixed-rw-chunk-resident" \
+  RECORD_KVIKIO_CELL=1 \
+  RECORD_RAW_ON_SCRATCH=1 \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.A \
@@ -477,7 +487,7 @@ run_tier2_kvikio_chunked_multimodel() {
   if [[ ",$models_csv," == *",uni2-h,"* ]]; then
     approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
   fi
-  local note="${approval_tag}Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=$models_csv backend=kvikio N=${n_gpus} dataset=brca_full (the uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL, not a micro-optimisation: full-cohort raw-TIFF does not fit at once and conversion is a large share of per-chunk wallclock. Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
+  local note="${approval_tag}Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=$models_csv backend=kvikio N=${n_gpus} dataset=brca_full (the uniform-magnification cohort per STAGES.md D5, chunked into batches of ${chunk_size} slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL: the chunk cadence (convert→extract→delete) is itself the measured production pattern (Stage-4 register: transient by design, independent of 4.D's retained artifact, which this cell never touches — it converts into its own chunk dirs), and conversion is a large share of per-chunk wallclock. Cache regime=na-mixed-rw-chunk-resident: each chunk's extraction reads raw-TIFF this cell wrote minutes earlier — server-cache-resident BY CONSTRUCTION, which is the workload, not a contamination; no cold arm exists by construction (D13 route-4 stated ground); the reader still discards client page cache per slide, achieved recorded in the per-chunk summaries under chunk-artifacts/. Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash)."
 
   echo ""
   echo "=========================================="
@@ -488,6 +498,9 @@ run_tier2_kvikio_chunked_multimodel() {
   CUDA_VISIBLE_DEVICES="$gpu_csv" \
   LD_PRELOAD="$LIBCUFILE_SYSTEM" \
   RECORD_RUN_DIR="$run_dir" \
+  RECORD_CACHE_STATE="na-mixed-rw-chunk-resident" \
+  RECORD_KVIKIO_CELL=1 \
+  RECORD_RAW_ON_SCRATCH=1 \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.A \
@@ -537,6 +550,8 @@ tier2_kvikio_multimodel_smoke() {
   CUDA_VISIBLE_DEVICES="$(gpu_csv_for_n 4)" \
   LD_PRELOAD="$LIBCUFILE_SYSTEM" \
   RECORD_RUN_DIR="$run_dir" \
+  RECORD_CACHE_STATE="na-mixed-rw-chunk-resident" \
+  RECORD_KVIKIO_CELL=1 \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.A \

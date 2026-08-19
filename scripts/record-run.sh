@@ -116,6 +116,19 @@ fi
 # then point at a directory that does not exist on disk.
 RUN_ID="$(basename "$RUN_DIR")"
 
+# D-35: a long cell's raw telemetry can exceed the 48 GB root volume's headroom
+# (a ~25 h cell writes ~30 GB of 1 Hz series; the 4.D BRCA cell wrote 18 GB in
+# 15.7 h). With RECORD_RAW_ON_SCRATCH=1, raw/ is created ON the local-NVMe
+# overflow and symlinked into the run dir — the same layout the post-sync
+# relocation produces, so parsers and the S3 sync (which follows symlinks) see
+# no difference; S3 stays authoritative and scratch stays ephemeral either way.
+if [[ "${RECORD_RAW_ON_SCRATCH:-0}" == "1" && -n "${SCRATCH_DIR:-}" && ! -e "$RUN_DIR/raw" ]]; then
+  _raw_ovf="$SCRATCH_DIR/runs-raw-overflow/${RUN_ID}-raw"
+  mkdir -p "$_raw_ovf" "$RUN_DIR"
+  ln -s "$_raw_ovf" "$RUN_DIR/raw"
+  echo "[record-run] raw/ on scratch overflow: $_raw_ovf (RECORD_RAW_ON_SCRATCH=1)" >&2
+fi
+
 mkdir -p "$RUN_DIR/pre" "$RUN_DIR/post" "$RUN_DIR/raw/.pids" "$RUN_DIR/plots"
 
 # Per-filesystem recorder set (D-4). The WEKA set below is written against this

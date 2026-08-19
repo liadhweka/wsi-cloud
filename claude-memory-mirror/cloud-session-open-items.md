@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-19T00:04:03.818Z
+  modified: 2026-08-19T15:21:01.719Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -100,10 +100,10 @@ These change what the numbers mean, so resolving them after cells have run means
 14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Implementation:
     4.B and 5.B cell notes carry the configured size (512 MiB library default). Remaining: the 6.A cuCIM
     cells' notes, at the 6.A gate — then delete this item.**
-15. **Re-derive `CHUNK_SIZE` for 6.A Tier 2 from this leg's provisioned capacity.** Both Tier-2 orchestrators
-    default to 200, sized against a different environment. **This decides whether Tier 2 fits on disk at all**
-    — too large and the conversion fails mid-cohort after hours; too small and it wastes wallclock. Use the
-    **same** value on both legs, since chunk size changes the write/delete cadence the filesystem sees.
+15. **(resolved 2026-08-19 under the no-obvious-ratification rule — `CHUNK_SIZE=200` re-derived and kept:
+    ~1.01 TiB transient per chunk vs ~50 TiB free on Leg A and ~4–5 TiB planned headroom on the D7-maximum
+    FSx config; identical-on-both-legs rule keeps the default. Stage-6 register carries the arithmetic.
+    Delete this entry once Leg B's actual provisioned capacity re-confirms the headroom at its gate.)**
 17. **`env.sh --check-ready` mode — RATIFIED (2026-08-16): build a separate "ready to measure" mode**
     (leg-conditional hard requirements: the running leg's canary field `WEKA_EC_SCHEME` /
     `LUSTRE_STRIPE_LAYOUT`, distinct from `--check`'s "configured") — **deliberately deferred until after

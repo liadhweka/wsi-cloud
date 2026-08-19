@@ -147,10 +147,17 @@ T_ORCH_START=$(date +%s.%N)
 CHUNK_BASE=${FS_MOUNT}/data/tcga-brca-rawtiff-chunk
 TMP_BASE=$(mktemp -d /tmp/stage6a-tier2-chunked-multi-XXXXXX)
 trap 'echo "[chunked-multi] cleanup tmp $TMP_BASE"; rm -rf "$TMP_BASE"' EXIT
+# Per-chunk extractor artifacts live IN THE RUN DIR, not in TMP_BASE: they are
+# recorded evidence (each per-chunk summary carries the D8 path_accounting
+# split and the D13 discard tallies), the D-21 kvikIO check greps the run dir
+# for them, and a crash 20 hours into the cell must not lose what the EXIT
+# trap would otherwise delete. TMP_BASE keeps only the transient chunk
+# manifests, which are regenerable.
+ART_BASE="$RUN_DIR/chunk-artifacts"
 
 # Per-model per-chunk CSV dirs (orchestrator concats at end)
 for model in "${MODEL_ARR[@]}"; do
-  mkdir -p "$TMP_BASE/$model/ex-steps" "$TMP_BASE/$model/per-slide" "$TMP_BASE/$model/summary"
+  mkdir -p "$ART_BASE/$model/ex-steps" "$ART_BASE/$model/per-slide" "$ART_BASE/$model/summary"
 done
 
 # ---------- convert_one_inline (TRUE 20× raw-TIFF; BRCA-only) ----------
@@ -271,9 +278,9 @@ for ((CHUNK_IDX=0; CHUNK_IDX<N_CHUNKS; CHUNK_IDX++)); do
     echo "[chunk $CHUNK_IDX] extracting model=$model"
     T_MODEL_START=$(date +%s.%N)
 
-    EX_STEPS_CHUNK="$TMP_BASE/$model/ex-steps/extraction-steps-chunk-${CHUNK_IDX}.csv"
-    PER_SLIDE_CHUNK="$TMP_BASE/$model/per-slide/per-slide-chunk-${CHUNK_IDX}.csv"
-    SUMMARY_CHUNK="$TMP_BASE/$model/summary/summary-chunk-${CHUNK_IDX}.json"
+    EX_STEPS_CHUNK="$ART_BASE/$model/ex-steps/extraction-steps-chunk-${CHUNK_IDX}.csv"
+    PER_SLIDE_CHUNK="$ART_BASE/$model/per-slide/per-slide-chunk-${CHUNK_IDX}.csv"
+    SUMMARY_CHUNK="$ART_BASE/$model/summary/summary-chunk-${CHUNK_IDX}.json"
 
     EXTRACT_STATUS="OK"
     CUDA_VISIBLE_DEVICES="$GPU_CSV" \
@@ -323,7 +330,7 @@ for model in "${MODEL_ARR[@]}"; do
 
   # extraction-steps merge
   FIRST=1
-  for f in "$TMP_BASE/$model/ex-steps"/*.csv; do
+  for f in "$ART_BASE/$model/ex-steps"/*.csv; do
     [ -f "$f" ] || continue
     if [ "$FIRST" -eq 1 ]; then
       cat "$f" > "$EX_STEPS_OUT"; FIRST=0
@@ -334,7 +341,7 @@ for model in "${MODEL_ARR[@]}"; do
 
   # per-slide merge
   FIRST=1
-  for f in "$TMP_BASE/$model/per-slide"/*.csv; do
+  for f in "$ART_BASE/$model/per-slide"/*.csv; do
     [ -f "$f" ] || continue
     if [ "$FIRST" -eq 1 ]; then
       cat "$f" > "$PER_SLIDE_OUT"; FIRST=0
@@ -347,7 +354,7 @@ for model in "${MODEL_ARR[@]}"; do
   N_THIS_MODEL=$(ls "${MODEL_OUTPUT_DIR[$model]}"/*.pt 2>/dev/null | wc -l)
   "$PY" -c "
 import json, glob, sys
-chunk_files = sorted(glob.glob('$TMP_BASE/$model/summary/summary-chunk-*.json'))
+chunk_files = sorted(glob.glob('$ART_BASE/$model/summary/summary-chunk-*.json'))
 total_tiles_steady = 0.0
 total_steady_steps = 0.0
 total_extract_wall = 0.0

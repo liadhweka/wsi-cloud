@@ -170,10 +170,11 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 3/3 cells OK; canary PASS; `cold` reconciled CONSISTENT) · ⏳ Leg B |
+| **Leg A results (`s6.A-extract-summary.csv`)** | kvikIO N=4: Virchow2 **918**, GigaPath **767**, UNI2-h `[PENDING-APPROVAL]` **928** tiles/s — **CAM16/BRCA ratio 0.95 / 0.96 / 0.96** against the matching Tier-1 N=4 cells: near-identical across all three models, i.e. the cross-dataset delta is tile-distribution-driven and model-independent, which is the sanity check this tier exists to provide. GPU utilization 96% throughout; `gds_engaged=none` per cell (D8). |
 | **Goal** | Cross-vendor format consistency in the foundation-model regime |
-| **Cell count** | **3 cells per leg** — three models at a mid GPU count, kvikIO, CAMELYON16 50-slide subset |
-| **Methodology** | Identical to the matching Tier 1 cells except the dataset. CAMELYON16 is native 20× so it uses `--patch_level 1 --patch_size 256` per the coord contract — no resize. A mid GPU count is chosen because this is a **consistency check, not a throughput peak**, so it does not need the full sweep |
+| **Cell count** | **3 cells per leg** — three models, kvikIO, CAMELYON16 50-slide subset |
+| **Methodology** | Identical to the matching Tier 1 cells except the dataset — including **N=4, the same GPU count as Tier 1's peak cells, so the cross-dataset ratio is read at an identical configuration** rather than interpolated across scales. CAMELYON16 is native 20× so it uses `--patch_level 1 --patch_size 256` per the coord contract — no resize. This is a **consistency check, not a throughput peak**, so it does not need the full sweep |
 | **⚠ Long-tail sensitivity** | CAMELYON16's per-slide tile counts vary more than BRCA's, so at multi-rank scale the **slowest rank dominates wallclock**. Two consequences: collective timeouts must be generous enough to tolerate the straggler (a too-short default will kill an otherwise valid cell), and the throughput number should be read alongside the tile-count distribution rather than on its own |
 | **Why this exists** | Closes the "what about non-TCGA data?" question at the feature-extraction layer, and — because the dataset ratio is driven by tile-count distributions rather than storage — doubles as a **sanity check on the comparison itself**: the ratio should be similar on both filesystems |
 | **Recorded per cell** | tiles/sec per model, and the CAMELYON16/BRCA ratio against the matching Tier 1 cells — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
@@ -456,6 +457,18 @@ live in `STAGES.md`.
 - **Cleanup-before-cell in 6.A is mandatory.** *Why:* existing output is skipped rather than rebuilt, so
   without a wipe every cell after the first would short-circuit and report a meaningless number that looks
   plausible.
+- **Tier 2's `CHUNK_SIZE` is 200 slides — re-derived against both legs' capacity and kept at the default.**
+  *Why:* a 200-slide chunk is ~1.01 TiB transient (measured per-slide raw-TIFF from 4.D), against ~50 TiB
+  free on the WEKA leg and ~4–5 TiB of planned headroom on the D7-maximum FSx configuration — it fits both
+  with margin, so the identical-on-both-legs rule (chunk size is write/delete cadence, i.e. workload shape)
+  keeps one value. 1064 slides → 6 chunks, a real chunked-pipeline cadence.
+- **Tier 2's kvikIO cells declare `RECORD_CACHE_STATE=na-mixed-rw-chunk-resident`.** *Why `na-*`:* each
+  chunk's extraction reads raw-TIFF the cell wrote minutes earlier — server-cache-resident **by
+  construction**, because the convert→extract→delete cadence *is* the measured production pattern (**D13**
+  route 4, stated ground: no cold arm exists by construction — you cannot cold-read data the workload just
+  wrote without falsifying the cadence). The reader still discards client page cache per slide, achieved
+  evidence recorded in the per-chunk summaries (`chunk-artifacts/` in the run dir). Tier 2 never touches
+  4.D's retained artifact — it converts into its own chunk dirs.
 
 ## Cross-references
 
