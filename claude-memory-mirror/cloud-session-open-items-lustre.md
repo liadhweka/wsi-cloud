@@ -37,6 +37,15 @@ has completed stage N. Ownership rules: `CLAUDE.md`, "Concurrent legs".
 10. **D-4 Lustre recorder schemas are live-derived here** — `/proc/fs/lustre`, `lctl get_param` shapes from
     the real client, never a recalled format.
 
+11. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
+    (a) docstring/comment headers describing the kvikio backend as "kvikIO+GDS" in
+    `train-resnet50-stage5.py`, `extract-features-foundation-stage6.py`, `read-tiles-kvikio.py` — the
+    backend is kvikIO/cuFile (compat on both legs per D8); (b) `cufile-full-rdma.template.json`'s header
+    could carry the D8 note (template for a GDS-capable transport — expected unused on both legs unless a
+    path split contradicts the docs). Functional behavior verified unaffected 2026-08-20: the Phase-0
+    probe treats refusal as a valid determination, accounting derives from bytes, mode defaults are
+    already best-available.
+
 ## B. Watch during benchmarking
 
 0. **Stage-lag check before every stage start** — Leg A's `.leg-state/weka/` markers are the evidence.
