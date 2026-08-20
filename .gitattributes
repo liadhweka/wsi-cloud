@@ -1,0 +1,4 @@
+# Concurrent legs (D6): two autonomous committers append to these — union merge
+# is correct because every line is independent and order-insensitive.
+runs/INDEX.md merge=union
+runs/*.csv merge=union

@@ -298,13 +298,23 @@ documented in `Stage-3-Tissue-Detection.md` produce none) → **1064** kept by t
 7 unknown-mpp, and 9 finer-than-40× excluded). The manifest header records the same derivation, and it is
 authoritative.
 
-**D6 — Two sequential legs, with a machine-enforced environment contract.** Leg A = WEKA, Leg B = FSx for
-Lustre, then the synthesis. *Why sequential:* the two are provisioned separately and the instance is rebuilt
-between them; running them concurrently would mean two clients or a shared client, either of which breaks the
-held-constant contract. *Why the contract:* legs separated in time can drift (AMI, driver, dataset bytes,
-script commit), and drift is indistinguishable from a filesystem difference after the fact. So Leg A writes a
-machine-readable contract that **Leg B verifies before its first cell**, split into fields that must match and
-fields expected to differ, and a mismatch is fail-loud. Full rule text in `../PROJECT-THESIS.md` §3.
+**D6 — Two legs, concurrent with a stage lag, under a machine-enforced environment contract.** Leg A = WEKA,
+Leg B = FSx for Lustre, then the synthesis. Originally sequential; **amended 2026-08-19 to concurrent** once
+Leg A had shaken down the shared machinery through Stage 1. *Why two clients don't break the held-constant
+contract:* every MUST_MATCH field is a **specification, not an identity** — instance type, AMI, kernel, the
+driver stack, dataset bytes, script commit — and two clients of identical specification satisfy all of them;
+that identity-of-spec is exactly what the contract verifies. (`aws_az` is the one reclassification this
+forced: capacity placed the legs in different zones; each leg remains intra-AZ beside its filesystem, and
+per-leg ambient variance is what **D18**'s canary bands measure. Region stays MUST_MATCH.) *The stage-lag
+rule:* **Leg B never starts stage N until Leg A has completed stage N** — any workload fix surfaces on Leg A
+before Leg B reaches that code, so shaken-down-before-measured holds by construction, and a fix that lands
+after Leg A ran a stage invalidates and re-runs that stage on BOTH legs, as it always would have. *The
+contract flow:* Leg B verifies against Leg A's current committed contract before its first cell; Leg A's
+leg-end contract must equal it on every MUST_MATCH field (held-constant within a leg is already enforced), so
+the reference cannot drift out from under Leg B. Concurrency also narrows the time-separation drift this
+decision originally guarded against — both legs sample the same cloud-weather window (**D18**). Git and
+file-ownership conventions for two committers: `CLAUDE.md`, "Concurrent legs". Full rule text in
+`../PROJECT-THESIS.md` §3.
 
 **D7 — Fairness basis: Lustre at MAXIMUM capability, WEKA at a realistic production config, cost reported
 alongside.** *Why:* beating a competitor's **best** configuration is worth far more than beating one we sized

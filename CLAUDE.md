@@ -232,6 +232,22 @@ head-to-head comparisons directly. *Why one tree:* the deliverable **is** the cr
 trees would force every comparison to be assembled by hand. A hardcoded mount makes a Lustre cell silently
 measure WEKA, and the number looks correct.
 
+## Concurrent legs (D6, amended 2026-08-19)
+
+Two sessions — one per leg, one repo, one branch. The rules that make that safe:
+
+1. **Push via `./scripts/push-safe.sh`**, never bare `git push` — it pull-rebases with retries. A rebase
+   conflict is an **ownership violation to report**, not to resolve silently.
+2. **Union-merged, append-only:** `runs/INDEX.md` and the summary CSVs merge themselves (`.gitattributes`).
+   Append; never rewrite another leg's lines.
+3. **File ownership.** Each leg writes: its own run dirs, its own `.leg-state/<leg>/`, its own memory file
+   (`cloud-session-open-items` = Leg A, `cloud-session-open-items-lustre` = Leg B), its own contract, and its
+   own leg's rows/columns in the stage roadmaps. **Structural doc edits (tracker, STAGES, THESIS, RUNBOOK
+   prose) belong to Leg A's session**; Leg B proposes them as numbered items instead of editing. Cross-cutting
+   script changes go through the human.
+4. **The stage-lag rule:** Leg B never starts stage N until Leg A has completed stage N (see D6). A shared-code
+   fix after Leg A ran a stage re-runs that stage on both legs.
+
 ## Docs cadence — which doc to update when
 
 After any exchange that shifts the picture durably, update every doc whose cadence is triggered, in place.

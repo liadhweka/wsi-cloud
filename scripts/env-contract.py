@@ -49,7 +49,7 @@ from pathlib import Path
 # ── Field sets — the load-bearing decision in this script ────────────────────────
 # MUST match across legs: if any of these differ, the comparison is invalid.
 MUST_MATCH = [
-    "instance_type", "aws_region", "aws_az", "ami_id",
+    "instance_type", "aws_region", "ami_id",
     "kernel", "driver_version", "cuda_version",
     "nvidia_fs_version", "libcufile_version",
     "gpu_model", "gpu_count", "cpu_count", "mem_total_kb",
@@ -65,6 +65,12 @@ MUST_MATCH = [
 # per-leg inputs that legitimately drift (prices, dated ceilings, reserved cores):
 # they are recorded for recovery and reporting, and must never fail a verify.
 MAY_DIFFER = [
+    # aws_az reclassified 2026-08-19 (concurrent legs, capacity-forced): each leg is
+    # intra-AZ by construction (client beside its filesystem), the AZ shapes no
+    # measured quantity the way kernel/driver do, and ambient variance is exactly
+    # what D18's per-leg canary bands measure. Region stays MUST_MATCH: pricing,
+    # service availability and the D7-cited ceilings are regional. Rationale: D6.
+    "aws_az",
     "leg", "fs_mount", "fs_type", "fs_transport", "client_hostname", "libcufile_path",
     "weka_backend_type", "weka_backend_count", "weka_backend_ami", "weka_capacity_tb",
     "weka_ec_scheme", "weka_backend_ram_total",

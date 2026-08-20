@@ -97,7 +97,7 @@ real, the recording is path-appropriate per leg, and every deviation is recorded
 ## STEP 1 — Read the governing instructions
 
 **`CLAUDE.md`** (the eleven rules; recording; durability; docs cadence; the autonomous-git convention),
-then **both memories end to end** — `cloud-session-open-items` (**your work list**: section A before the
+then **the memories end to end** — `cloud-session-open-items` (**your work list**: section A before the
 first measured cell, section B during benchmarking; the [USER]-tagged items are pending human
 ratifications) and `uni2h-conditional-use-status` (UNI2-h stays internal-only). **If `MEMORY.md` is
 missing:** run `./scripts/restore-memories.sh`, report, and ask the human to restart the session; if the
