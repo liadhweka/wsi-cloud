@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-20T17:47:14.777Z
+  modified: 2026-08-20T21:45:24.536Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -144,7 +144,8 @@ These change what the numbers mean, so resolving them after cells have run means
       land first. Content stays synthetic — visibility depends on size, tiling and fsync-then-rename, not
       pixels. Detail: `docs/Stage-6-Feature-Extraction.md`, `docs/Stage-7-Clinical-Inference-Deployment.md`.
 21. **The blocker gate is now three tiers, and two of them gate cells that used to precede it.**
-    `prompts/handoff-cloud.md`: **Tier 0** transport, before *any* cell including the throwaway (**CLOSED,
+    `prompts/handoff-skeleton.md` (the handoff SOP: filled inline per session turnover, 2026-08-20):
+    **Tier 0** transport, before *any* cell including the throwaway (**CLOSED,
     re-evidenced on the REBUILT 6xlarge cluster 2026-08-16** — 4 FRONTENDs NETWORK=DPDK on this host from
     the client's own report, 4 NICs igb_uio-bound, bootstrap evidence line; run-leg.sh refusal verified);
     **Tier 1** recording adapters, consistency relation, worker-correctness bugs, the 1.7 driver, and the
