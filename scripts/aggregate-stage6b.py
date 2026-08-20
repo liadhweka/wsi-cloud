@@ -424,11 +424,13 @@ def main():
               f"samples/s={sps_s}", file=sys.stderr)
 
     if b2_rows:
-        write_csv(b2_rows, _runs / "s6.B-stress-summary.csv")
-        print(f"# Wrote {len(b2_rows)} rows to {_runs / 's6.B-stress-summary.csv'}", file=sys.stderr)
+        _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+        write_csv(b2_rows, _runs / f"s6.B-stress-summary-{_LEG_OUT}.csv")
+        print(f"# Wrote {len(b2_rows)} rows to {_runs / f's6.B-stress-summary-{_LEG_OUT}.csv'}", file=sys.stderr)
     if b3_rows:
-        write_csv(b3_rows, _runs / "s6.B-mil-summary.csv")
-        print(f"# Wrote {len(b3_rows)} rows to {_runs / 's6.B-mil-summary.csv'}", file=sys.stderr)
+        _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+        write_csv(b3_rows, _runs / f"s6.B-mil-summary-{_LEG_OUT}.csv")
+        print(f"# Wrote {len(b3_rows)} rows to {_runs / f's6.B-mil-summary-{_LEG_OUT}.csv'}", file=sys.stderr)
 
     if not b2_rows and not b3_rows:
         print("# No 6.B cells matched.", file=sys.stderr)

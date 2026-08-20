@@ -152,7 +152,8 @@ def main():
         print("# No 6.D cells matched.", file=sys.stderr)
         return 1
 
-    out = Path(__file__).resolve().parent.parent / "runs" / "s6.D-e2e-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out = Path(__file__).resolve().parent.parent / "runs" / f"s6.D-e2e-summary-{_LEG_OUT}.csv"
     # Union fieldnames
     fieldnames = []
     seen = set()

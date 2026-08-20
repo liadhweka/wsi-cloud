@@ -266,7 +266,8 @@ def main():
         print("no parseable rows", file=sys.stderr)
         sys.exit(1)
 
-    out_csv = dirs[0].parent / "s1.5-fpsync-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out_csv = dirs[0].parent / f"s1.5-fpsync-summary-{_LEG_OUT}.csv"
     with out_csv.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()

@@ -302,7 +302,8 @@ def main():
     rows.sort(key=lambda r: (r["dataset"], r["backend"], r["n_processes"],
                              r.get("num_workers") or 0, r["coldref_from_name"]))
 
-    out_csv = dirs[0].parent / "s4.B-tilesread-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out_csv = dirs[0].parent / f"s4.B-tilesread-summary-{_LEG_OUT}.csv"
     with out_csv.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()

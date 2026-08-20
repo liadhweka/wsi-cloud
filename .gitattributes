@@ -1,4 +1,7 @@
-# Concurrent legs (D6): two autonomous committers append to these — union merge
-# is correct because every line is independent and order-insensitive.
+# Concurrent legs (D6): two autonomous committers append to INDEX.md — union
+# merge is correct there because every line is independent, order-insensitive,
+# and appended exactly once by its owning leg. The summary CSVs are NOT union-
+# merged: aggregators REWRITE them whole (rows legitimately appear, change and
+# vanish across re-aggregations), so they are per-leg FILES instead
+# (…-summary-<leg>.csv) — two rewriting writers never share a target.
 runs/INDEX.md merge=union
-runs/*.csv merge=union

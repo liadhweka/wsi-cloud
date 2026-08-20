@@ -536,7 +536,8 @@ def main():
         print("# No cells matched.", file=sys.stderr)
         return 1
 
-    out_path = Path(__file__).resolve().parent.parent / "runs" / "s5.A-training-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out_path = Path(__file__).resolve().parent.parent / "runs" / f"s5.A-training-summary-{_LEG_OUT}.csv"
     fieldnames = list(rows[0].keys())
     with out_path.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)

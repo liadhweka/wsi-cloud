@@ -84,6 +84,10 @@ check_one() {
   [ $not_ok -eq 0 ] && echo "  OK:   every cell OK in INDEX" || fail=1
 
   # 2. aggregate CSV exists + fresher than the newest cell
+  # Summary CSVs are PER-LEG files (D6, concurrent legs — two rewriting
+  # aggregators must never share a write target). The table stays leg-neutral;
+  # the suffix is applied mechanically here.
+  [ "$csv" != "-" ] && csv="${csv%.csv}-$LEG.csv"
   if [ "$csv" != "-" ]; then
     if [ ! -s "$csv" ]; then echo "  FAIL: aggregate $csv missing/empty — run the aggregator"; fail=1
     else

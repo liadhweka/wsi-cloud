@@ -334,7 +334,8 @@ def main():
     rows = [r for r in rows if r is not None]
     rows.sort(key=lambda r: (r["dataset"], r["concurrency"]))
 
-    out_csv = dirs[0].parent / "s3.0-tissue-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out_csv = dirs[0].parent / f"s3.0-tissue-summary-{_LEG_OUT}.csv"
     with out_csv.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()

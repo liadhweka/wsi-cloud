@@ -236,7 +236,7 @@ convention. Rep cells are audited (INDEX/canary/S3) but excluded from grid CSVs 
 grouping lands — `aggregate-sweep.py`'s name regex skips `-repN` dirs, so the grids stay single-shot.
 
 ### `aggregate-stage1-hydrate.py` — the 1.7 aggregate the closeout gate found missing ⭐ NEW
-**What.** Rolls the hydration cells into `s1.7-hydrate-summary.csv`: per cell mcr, wallclock, fs-side write
+**What.** Rolls the hydration cells into `s1.7-hydrate-summary-<leg>.csv`: per cell mcr, wallclock, fs-side write
 (active-window + naive means), corpus-GiB/s-over-wallclock, INDEX verdict. Self-locates; no args.
 **Why.** The roadmap promised the aggregate; no script produced it — the same class of miss as the Stage-3
 results block, found by the closeout gate's first full audit.

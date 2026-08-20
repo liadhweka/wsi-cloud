@@ -47,7 +47,8 @@ for d in sorted(RUNS.glob(f"*-{_LEG}-s1.7-hydrate-*")):
 if not rows:
     sys.exit("aggregate-stage1-hydrate: no s1.7 run dirs found")
 rows.sort(key=lambda r: (r["mcr"] is None, r["mcr"]))
-out = RUNS / "s1.7-hydrate-summary.csv"
+_LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+out = RUNS / f"s1.7-hydrate-summary-{_LEG_OUT}.csv"
 with out.open("w", newline="") as f:
     wtr = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
     wtr.writeheader()

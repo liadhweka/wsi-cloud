@@ -90,7 +90,8 @@ note "OK  raw telemetry verified in S3 ($(echo "$S3_LIST" | wc -l) objects)"
 # 15 — the generic aggregator emits a row for the cell
 python3 "$REPO/scripts/aggregate-sweep.py" "$REPO/runs/*-${LEG}-s0-${NAME}" >/dev/null 2>&1 \
   || fail 15 "aggregate-sweep.py did not emit a summary for the proof cell"
-SUMMARY="$REPO/runs/s0-proof-summary.csv"
+# Per-leg CSV names (D6, concurrent legs).
+SUMMARY="$REPO/runs/s0-proof-summary-${LEG:?LEG is unset -- source env.sh}.csv"
 [ -s "$SUMMARY" ] && grep -q "$RUN_ID" "$SUMMARY" \
   || fail 15 "aggregator summary missing the proof cell's row"
 note "OK  aggregator emitted the cell's row ($SUMMARY)"

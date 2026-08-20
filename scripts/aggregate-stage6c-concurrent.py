@@ -336,7 +336,8 @@ def main():
     # Sort: solos first, then by n_workloads ascending, then by tag
     rows.sort(key=lambda r: (r["n_workloads"], r["workloads_tag"]))
 
-    out = Path(__file__).resolve().parent.parent / "runs" / "s6.C-concurrent-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out = Path(__file__).resolve().parent.parent / "runs" / f"s6.C-concurrent-summary-{_LEG_OUT}.csv"
     # Union fieldnames across all rows (different cells have different per-workload keys)
     fieldnames = []
     seen = set()

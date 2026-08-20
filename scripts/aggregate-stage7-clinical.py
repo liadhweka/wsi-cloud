@@ -573,7 +573,8 @@ def main():
                 fieldnames.append(k)
                 seen.add(k)
 
-    out_csv = runs_root / 's7-clinical-summary.csv'
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out_csv = runs_root / f's7-clinical-summary-{_LEG_OUT}.csv'
     with out_csv.open('w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=fieldnames)
         w.writeheader()

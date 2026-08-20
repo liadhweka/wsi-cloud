@@ -181,7 +181,8 @@ def main():
     side = "read" if is_read else "write"
 
     # CSV next to runs/
-    out_csv = dirs[0].parent / f"{stage}-{workload}-summary.csv"
+    _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
+    out_csv = dirs[0].parent / f"{stage}-{workload}-summary-{_LEG_OUT}.csv"
     with out_csv.open("w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         w.writeheader()

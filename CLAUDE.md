@@ -238,8 +238,10 @@ Two sessions — one per leg, one repo, one branch. The rules that make that saf
 
 1. **Push via `./scripts/push-safe.sh`**, never bare `git push` — it pull-rebases with retries. A rebase
    conflict is an **ownership violation to report**, not to resolve silently.
-2. **Union-merged, append-only:** `runs/INDEX.md` and the summary CSVs merge themselves (`.gitattributes`).
-   Append; never rewrite another leg's lines.
+2. **`runs/INDEX.md` is union-merged and append-only** (`.gitattributes`) — append; never rewrite another
+   leg's lines. **The summary CSVs are per-leg files** (`…-summary-<leg>.csv`): aggregators rewrite them
+   whole, so the two legs never share a CSV write target; the head-to-head pivot reads both legs' files
+   (the D-4 helper).
 3. **File ownership.** Each leg writes: its own run dirs, its own `.leg-state/<leg>/`, its own memory file
    (`cloud-session-open-items` = Leg A, `cloud-session-open-items-lustre` = Leg B), its own contract, and its
    own leg's rows/columns in the stage roadmaps. **Structural doc edits (tracker, STAGES, THESIS, RUNBOOK
