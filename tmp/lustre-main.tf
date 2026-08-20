@@ -200,9 +200,10 @@ resource "aws_launch_template" "client" {
   user_data = base64encode(local.wsi_lustre_client_user_data)
   tag_specifications {
     resource_type = "instance"
-    # weka_hostgroup_type is a Leg-A leftover — kept because instance_metadata_tags
-    # is enabled and nothing verified NOT to key on it; drop only after checking.
-    tags          = { Name = "wsi-lustre-client", weka_hostgroup_type = "client" }
+    # No weka_hostgroup_type here (checked 2026-08-20): Leg A's WEKA module runs
+    # discovery lambdas that FILTER instances by that tag — a Lustre client must
+    # not advertise itself as a WEKA cluster member. IAM has no condition on it.
+    tags          = { Name = "wsi-lustre-client" }
   }
 }
 
