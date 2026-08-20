@@ -55,7 +55,24 @@ mkdir -p "$DST"
 # leg's mirror pass clobbers the other's file with a stale post-pull copy —
 # git then records those reverts as intentional edits and the other leg's
 # updates are silently lost. Leg-B memory files carry the `-lustre` suffix.
-if [ "${LEG:-weka}" = "lustre" ]; then
+#
+# LEG must be ESTABLISHED, never defaulted: a bare invocation on Leg B's box
+# with LEG unset would otherwise run the weka branch and clobber Leg A's files
+# from Leg B's stale post-pull copies — the same failure through the back door.
+# Unset means unknown, and unknown refuses (the project's standing convention).
+if [ -z "${LEG:-}" ] && [ -f ./env.sh ]; then
+  # Pull only LEG from env.sh, in a subshell — deliberately NOT sourcing into
+  # this environment, so a caller's overrides (e.g. S3_BUCKET= for a
+  # mirror-only pass) survive.
+  LEG="$(. ./env.sh >/dev/null 2>&1; printf '%s' "${LEG:-}")"
+fi
+case "${LEG:-}" in
+  weka|lustre) ;;
+  *) echo "backup.sh: LEG is unset/invalid ('${LEG:-}') and env.sh did not provide it — refusing:" >&2
+     echo "backup.sh: the mirror is leg-scoped (D6) and a guessed leg clobbers the other leg's memories." >&2
+     exit 1 ;;
+esac
+if [ "$LEG" = "lustre" ]; then
   # Leg B: copy in its own files only; never --delete (everything else in the
   # mirror is Leg A's, including MEMORY.md).
   rsync -a --include='*-lustre.md' --exclude='*' "$SRC" "$DST"
