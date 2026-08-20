@@ -336,6 +336,10 @@ if [ "$LEG" = "lustre" ]; then
   [ -n "$FSX_ID" ]         && py_set FSX_ID "$FSX_ID"
   [ -n "$FSX_DNS_NAME" ]   && py_set FSX_DNS_NAME "$FSX_DNS_NAME"
   [ -n "$FSX_MOUNT_NAME" ] && py_set FSX_MOUNT_NAME "$FSX_MOUNT_NAME"
+  # D15: the Lustre client reserves no cores — set 'none' explicitly at build
+  # time, because unset means UNKNOWN and every CPU aggregator refuses it. True
+  # regardless of the mount walk (a client-stack property, not a mount fact).
+  py_set FS_CLIENT_RESERVED_CORES "none"
 fi
 [ -n "$EC" ]           && py_set WEKA_EC_SCHEME "$EC"
 [ -n "$CAP" ]          && py_set WEKA_CAPACITY_TB "$CAP"

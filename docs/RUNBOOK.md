@@ -136,8 +136,8 @@ runs/
 ```
 
 **Small text stays in git; heavy raw goes to S3** (**D14**). Both filesystem mounts and the instance's local
-NVMe are **ephemeral** — they die with the instance and the cluster, and the instance is rebuilt between legs.
-Run `./backup.sh` before any commit or teardown.
+NVMe are **ephemeral** — they die with the instance and the cluster, and each leg's instance can be rebuilt
+at any time. Run `./backup.sh` before any commit or teardown.
 
 ---
 

@@ -92,7 +92,8 @@ expected** (the filesystem fields, which are the variable under test), and it fa
 because a null cannot be shown to have matched.
 
 **Expect violations at this point** for anything not yet provisioned or installed — that is normal this early.
-What matters is that `instance_type`, `aws_region`, `aws_az`, `ami_id` and `kernel` already match. **If the AMI
+What matters is that `instance_type`, `aws_region`, `ami_id` and `kernel` (`aws_az` is MAY_DIFFER by design
+— the concurrent-legs reclassification, `STAGES.md` **D6**; each leg is intra-AZ beside its filesystem) already match. **If the AMI
 or kernel differs from Leg A, stop and surface it** — that is `D-17`, and it is cheaper to rebuild the instance
 now than to discover it after a week of cells.
 

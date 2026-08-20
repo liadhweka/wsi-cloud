@@ -20,7 +20,8 @@ RUNS = REPO / "runs"
 CORPUS_BYTES = 1158795315120 + 762471984787  # byte-verified staging totals (both prefixes)
 
 rows = []
-for d in sorted(RUNS.glob("*-s1.7-hydrate-*")):
+_LEG = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (the default glob is leg-scoped: pulled other-leg run dirs must not enter this leg's summary CSV)")
+for d in sorted(RUNS.glob(f"*-{_LEG}-s1.7-hydrate-*")):
     if not d.is_dir() or "FAILED" in d.name:
         continue
     m = re.search(r"-mcr(\d+)$", d.name)

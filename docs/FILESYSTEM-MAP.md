@@ -85,7 +85,8 @@ environment contract instead.
 ## S3 — the durable store (the only thing that survives a teardown besides git)
 
 Instance-local NVMe and **both filesystem mounts are ephemeral.** They die with the instance and the
-cluster, and the instance is rebuilt between legs. Claude's conversation context does not survive either.
+cluster, and each leg's instance can be rebuilt at any time. Claude's conversation context does not
+survive either.
 
 **Authority split, non-overlapping** (**D14**):
 - **git** is authoritative for all small text — docs, `results.json`, `metadata.json`, `0_README.md`,

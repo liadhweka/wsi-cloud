@@ -524,7 +524,8 @@ def extract_cell_summary(run_dir: Path, model_override: str = None,
 
 def main():
     if len(sys.argv) < 2:
-        pattern = str(Path(__file__).resolve().parent.parent / "runs" / "2026-*-s6.A-extract-*")
+        _LEG = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (the default glob is leg-scoped: pulled other-leg run dirs must not enter this leg's summary CSV)")
+        pattern = str(Path(__file__).resolve().parent.parent / "runs" / f"2026-*-{_LEG}-s6.A-extract-*")
     else:
         pattern = sys.argv[1]
     print(f"# Aggregating Stage 6.A cells matching: {pattern}", file=sys.stderr)

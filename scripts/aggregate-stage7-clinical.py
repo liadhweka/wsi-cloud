@@ -535,7 +535,8 @@ def main():
 
     # Discover Stage 7 cells
     cells = []
-    for p in sorted(runs_root.glob('*-s7*-*')):
+    _LEG = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (the default glob is leg-scoped: pulled other-leg run dirs must not enter this leg's summary CSV)")
+    for p in sorted(runs_root.glob(f'*-{_LEG}-s7*-*')):
         if not p.is_dir():
             continue
         if SMOKE_PAT.search(p.name):

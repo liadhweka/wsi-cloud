@@ -49,8 +49,20 @@ if [ ! -d "$SRC" ] || [ -z "$(ls -A "$SRC" 2>/dev/null)" ]; then
 fi
 
 mkdir -p "$DST"
-rsync -a --delete "$SRC" "$DST"
-echo "backup.sh: mirrored $(find "$DST" -type f | wc -l | tr -d ' ') memory files ($(du -sh "$DST" | cut -f1)) -> $DST"
+# Concurrent legs (D6): TWO writers share this mirror, so each leg's backup may
+# touch ONLY its own leg's memory namespace. Without this split, Leg A's
+# `--delete` removes Leg B's seeded memory (absent from A's live dir), and each
+# leg's mirror pass clobbers the other's file with a stale post-pull copy —
+# git then records those reverts as intentional edits and the other leg's
+# updates are silently lost. Leg-B memory files carry the `-lustre` suffix.
+if [ "${LEG:-weka}" = "lustre" ]; then
+  # Leg B: copy in its own files only; never --delete (everything else in the
+  # mirror is Leg A's, including MEMORY.md).
+  rsync -a --include='*-lustre.md' --exclude='*' "$SRC" "$DST"
+else
+  rsync -a --delete --exclude='*-lustre.md' "$SRC" "$DST"
+fi
+echo "backup.sh: mirrored $(find "$DST" -type f | wc -l | tr -d ' ') memory files ($(du -sh "$DST" | cut -f1)) -> $DST (leg-scoped: ${LEG:-weka})"
 
 # ---- Second half: push everything teardown-critical to S3 ---------------------
 # git covers all the small text; S3 covers the heavy write-once telemetry and the

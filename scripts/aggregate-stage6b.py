@@ -388,8 +388,9 @@ def write_csv(rows, out_path):
 
 def main():
     _runs = Path(__file__).resolve().parent.parent / "runs"
-    pattern_b2 = sys.argv[1] if len(sys.argv) > 1 else str(_runs / "2026-*-s6.B.2-*")
-    pattern_b3 = sys.argv[2] if len(sys.argv) > 2 else str(_runs / "2026-*-s6.B.3-*")
+    _LEG = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (the default glob is leg-scoped: pulled other-leg run dirs must not enter this leg's summary CSV)")
+    pattern_b2 = sys.argv[1] if len(sys.argv) > 1 else str(_runs / f"2026-*-{_LEG}-s6.B.2-*")
+    pattern_b3 = sys.argv[2] if len(sys.argv) > 2 else str(_runs / f"2026-*-{_LEG}-s6.B.3-*")
 
     print(f"# Aggregating 6.B.2 cells matching: {pattern_b2}", file=sys.stderr)
     b2_rows = []

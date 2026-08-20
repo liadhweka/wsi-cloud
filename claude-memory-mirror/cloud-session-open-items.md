@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-19T15:21:01.719Z
+  modified: 2026-08-20T17:02:17.526Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -155,6 +155,13 @@ These change what the numbers mean, so resolving them after cells have run means
     calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
 ## B. Watch during benchmarking
 
+-2. **CONCURRENT LEGS ARE LIVE (D6 amended; CLAUDE.md "Concurrent legs").** Leg B runs on its own instance
+    under the stage-lag rule, gated on THIS leg's pushed `.leg-state/weka/` markers — so **push promptly at
+    every substage boundary; a lazy push stalls Leg B.** Push ONLY via `scripts/push-safe.sh` (never bare
+    `git push`); exit 3 = autostash stranded dirty work in the stash — recover before anything appends.
+    Ownership: structural docs + cross-cutting scripts are this session's; Leg B's run dirs, `.leg-state/
+    lustre/`, memory file, contract, and roadmap rows are theirs — never edit them. My aggregators'
+    self-locating globs are leg-scoped (2026-08-20) so pulled Leg-B run dirs never enter Leg-A CSVs.
 -1. **CLOSEOUT GATE — before launching ANY next phase, run
     `scripts/verify-substage-closeout.sh --all-completed` (or per new substage) and get exit 0.** It
     mechanically asserts the full cadence: fresh aggregate CSV, the roadmap `**Leg <X> results` row, canary,

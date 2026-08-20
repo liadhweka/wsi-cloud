@@ -23,9 +23,9 @@ everything else held constant (`../PROJECT-THESIS.md` §3). Concretely:
   cannot run identically on both sides is either (a) redesigned until it can, or (b) explicitly labelled a
   **single-filesystem capability cell** and excluded from the head-to-head (see **D8** for the one deliberate
   exception, and Stage 1 for the FSx-native-S3-import case).
-- **Leg A (WEKA) runs first, then Leg B (FSx for Lustre)**, because the two are provisioned separately and the
-  instance is rebuilt between them. Cross-leg comparability is enforced by the **environment contract**
-  (**D6**), not by trust.
+- **Leg A (WEKA) leads; Leg B (FSx for Lustre) runs concurrently on its own identically-specified instance
+  under the stage-lag rule** — Leg B never starts stage N until Leg A has completed stage N (**D6**, amended).
+  Cross-leg comparability is enforced by the **environment contract** (**D6**), not by trust.
 
 **Every cell reports the full measurement set, and no metric is designated primary** (`../PROJECT-THESIS.md`
 §4). Which axis turns out to be decisive is a result, not a design input — so a cell that recorded only the
@@ -458,8 +458,8 @@ server-side component is only partly under our control on a managed service. *So
 [SSD storage performance characteristics](https://docs.aws.amazon.com/fsx/latest/LustreGuide/ssd-storage.html).
 
 **D14 — S3 is the durable store; git and S3 have non-overlapping authority.** Instance-local NVMe and both
-filesystem mounts are **ephemeral** — they die with the instance and the cluster, and the instance is
-deliberately rebuilt between legs. **git is authoritative for all small text**; **S3 for the heavy write-once
+filesystem mounts are **ephemeral** — they die with the instance and the cluster, and each leg's instance
+can be rebuilt at any time (mid-leg rebuilds have happened). **git is authoritative for all small text**; **S3 for the heavy write-once
 data git cannot hold.** Because the two do not overlap, **S3 versioning is unnecessary** — an object is
 written once and never edited, so there is no prior version for versioning to retain and nothing it would
 protect that the write-once discipline does not. Full rule text,

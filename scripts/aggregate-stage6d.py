@@ -133,7 +133,8 @@ def extract_cell_summary(run_dir):
 
 
 def main():
-    pattern = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).resolve().parent.parent / "runs" / "2026-*-s6.D-pipeline-e2e-*")
+    _LEG = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (the default glob is leg-scoped: pulled other-leg run dirs must not enter this leg's summary CSV)")
+    pattern = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).resolve().parent.parent / "runs" / f"2026-*-{_LEG}-s6.D-pipeline-e2e-*")
     print(f"# Aggregating 6.D cells matching: {pattern}", file=sys.stderr)
     rows = []
     for p in sorted(glob.glob(pattern)):

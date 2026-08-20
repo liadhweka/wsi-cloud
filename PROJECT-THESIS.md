@@ -23,20 +23,24 @@ client. This is a genuine head-to-head, not a demonstration.
 
 ## 2. The comparison structure
 
-**Two sequential legs, one workload, one client.**
+**Two legs, one workload, one client specification.**
 
 | | |
 |---|---|
 | **Leg A** | WEKA, self-managed on EC2, mounted at `/mnt/weka` |
 | **Leg B** | FSx for Lustre, managed, mounted at `/mnt/lustre` |
-| Client | one GPU instance type, held constant across both legs |
+| Client | one GPU instance **specification**, held constant across both legs — one client instance per leg |
 | Pipeline | ingest → cataloging → tissue detection → patching → training → foundation-model feature extraction and MIL → clinical inference |
 
-The legs run at **different times on a rebuilt instance** — the instance is deliberately destroyed between
-them. That is the defining constraint of this project's methodology, and §3 is the response to it.
+The legs run **concurrently on separate, identically-specified instances, under a stage-lag rule: Leg B
+never starts stage N until Leg A has completed stage N** (originally sequential on one rebuilt instance;
+amended once Leg A had shaken down the shared machinery — the amendment's full reasoning is `STAGES.md`
+**D6**). The defining constraint is unchanged: the two legs must be provably comparable without sharing a
+live environment, and §3 is the response to it.
 
-**Leg B's plan is provisional until Leg A's results exist.** Improving it from what Leg A taught us is the
-point, not a deviation.
+**Leg B's plan for each stage is provisional until Leg A's results for that stage exist** — the stage lag
+is what preserves this. Improving Leg B from what Leg A taught us is the point, not a deviation; a shared
+workload fix that lands after Leg A ran a stage invalidates and re-runs that stage on both legs.
 
 ---
 
@@ -44,20 +48,24 @@ point, not a deviation.
 
 Exactly one thing changes between legs: **the filesystem under the mount point.**
 
-**Held constant:** the compute instance (type, region, AZ, AMI) · the workload code (one script commit) · the
-datasets and their byte contents · the magnification contract · the model set · the recording harness's metric
-definitions.
+**Held constant:** the compute instance **specification** (type, region, AMI — every must-match field is a
+specification two instances can both satisfy, which is what the contract verifies; the AZ is per-leg, each
+client colocated with its filesystem — `STAGES.md` **D6**) · the workload code (one script commit) · the
+datasets and their byte contents · the magnification contract · the model set · the recording harness's
+metric definitions.
 
 **Varied:** the filesystem, its mount, its provisioning and tuning (§5), and **the telemetry sources
 collected**, which are filesystem-specific by necessity (§7).
 
-**Because the legs run at different times, this is enforced mechanically rather than by care.** A
-machine-readable **environment contract** is written at the end of Leg A — instance type, region/AZ, AMI,
-kernel, driver and library versions, dataset byte-manifest, script commit — and **Leg B verifies it before its
-first cell.** Fields are split into those that **must match** and those **expected to differ** (everything
-filesystem-specific, which is the variable under test); a verifier ignoring that split would either fail on
-everything or catch nothing. **A mismatch is a fail-loud condition, not a footnote** — without it, "were these
-two legs even comparable?" is unanswerable at exactly the moment it matters most.
+**Because the legs run on separate instances, this is enforced mechanically rather than by care.** A
+machine-readable **environment contract** carries the facts — instance type, region, AMI, kernel, driver and
+library versions, dataset byte-manifest, script commit. **Leg B verifies against Leg A's current committed
+contract before its first cell, and Leg A's leg-end contract must equal that reference on every must-match
+field**, so the reference cannot drift out from under Leg B (**D6**). Fields are split into those that
+**must match** and those **expected to differ** (everything filesystem-specific, which is the variable under
+test); a verifier ignoring that split would either fail on everything or catch nothing. **A mismatch is a
+fail-loud condition, not a footnote** — without it, "were these two legs even comparable?" is unanswerable
+at exactly the moment it matters most.
 
 An unrecorded fact is treated as **unverifiable, therefore failed**: a null cannot be shown to have matched.
 
