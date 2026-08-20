@@ -919,6 +919,25 @@ and rep-grouping are aggregation-side — **D-4**'s shared helper.
 
 ---
 
+### `push-safe.sh` — the two-committer push convention (`D6`)
+**What.** `git pull --rebase --autostash` + `git push`, retried ×5 with backoff.
+**Why.** Two autonomous sessions commit concurrently; bare `git push` loses races. Union-merge attributes
+(`.gitattributes`) let the append-only artifacts merge themselves; a REAL rebase conflict aborts loudly —
+that is an ownership violation to report (`CLAUDE.md`, "Concurrent legs"), never to auto-resolve.
+**I/O.** No arguments. → pushed HEAD, or a loud refusal.
+
+---
+
+### `wsi-lustre-phase2.sh` — the baked lustre mount automation (`D6`/`D16`/`D-17`) — **NOT YET BAKED**
+**What.** Ships as a loud refusal carrying the baked shape (six stages, every failure a WSI-FATAL that
+leaves the filesystem unmounted). Content comes from the first gated walk's validated transcript.
+**Why.** The FSx EFA client procedure cannot be safely automated before it has been validated once on the
+pinned AMI/kernel — the walk validates, this file inherits. Until baked, invoking it refuses.
+**Caveats.** The D16 gate is structural: `lnetctl net show` must evidence `efa` or there is no mount and no
+fallback — a TCP waiver is a human decision.
+
+---
+
 ## Environment specs (`../scripts/env-specs/`)
 
 Four kinds of file, **not interchangeable** — pick deliberately, because `conda_env_main` and

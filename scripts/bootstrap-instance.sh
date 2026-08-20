@@ -37,12 +37,19 @@ SSM_PREFIX="${SSM_PREFIX:-/wsi-bench}"
 DATASET_PREFETCH="${DATASET_PREFETCH:-none}"
 GIT_USER_NAME="${GIT_USER_NAME:-}"
 GIT_USER_EMAIL="${GIT_USER_EMAIL:-}"
+# Concurrent legs (D6): the wrapper's conf says which leg this box is. Absent = weka
+# (Leg-A back-compat). On lustre the wrapper also delivers the FSx facts from
+# terraform — never retyped by anyone.
+LEG="${LEG:-weka}"
+FSX_ID="${FSX_ID:-}"; FSX_DNS_NAME="${FSX_DNS_NAME:-}"; FSX_MOUNT_NAME="${FSX_MOUNT_NAME:-}"
 
 U=ec2-user
 UH=/home/$U
 REPO=$UH/wsi-cloud
 SCRATCH=/data/local-nvme
+# Historical name; holds the filesystem-under-test mount on EITHER leg.
 WEKA_MNT=/mnt/weka
+[ "$LEG" = "lustre" ] && WEKA_MNT=/mnt/lustre
 warn()  { echo "WSI-WARN: $*"; }
 fatal() { echo "WSI-FATAL: $*"; }
 step()  { printf '\n===== %s ===== (%s)\n' "$*" "$(date -u +%H:%M:%S)"; }
@@ -88,13 +95,20 @@ echo "fpsync=$(command -v fpsync || echo MISSING)"
 step "2. NVIDIA driver / CUDA / GDS (AL2023 NVIDIA repo)"
 # Rebuild pinning: if a Leg-A contract exists in S3, try to install the SAME driver
 # branch it recorded; a silent driver drift would violate MUST_MATCH.
-CONTRACT=/tmp/env-contract-leg-weka.json
-REBUILD=0
-if aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-weka.json" "$CONTRACT" 2>/dev/null; then
-  REBUILD=1; echo "contract found in S3 -> REBUILD mode"
-fi
+# Two contract roles (D6, concurrent legs): the PIN REFERENCE is always Leg A's
+# contract — Leg A defines every MUST_MATCH value, both legs pin to it. The
+# REBUILD-MERGE contract is THIS leg's own — recovering a leg's env fields from
+# the OTHER leg's contract would write weka facts into a lustre env.sh.
+PINREF=/tmp/env-contract-leg-weka.json
 PIN_DRIVER=""
-[ $REBUILD -eq 1 ] && PIN_DRIVER=$(python3 -c "import json;c=json.load(open('$CONTRACT'));print(c.get('driver_version') or '')" 2>/dev/null)
+if aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-weka.json" "$PINREF" 2>/dev/null; then
+  PIN_DRIVER=$(python3 -c "import json;c=json.load(open('$PINREF'));print(c.get('driver_version') or '')" 2>/dev/null)
+fi
+CONTRACT=/tmp/env-contract-leg-$LEG.json
+REBUILD=0
+if aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-$LEG.json" "$CONTRACT" 2>/dev/null; then
+  REBUILD=1; echo "own-leg contract found in S3 -> REBUILD mode"
+fi
 dnf install -y nvidia-release || warn "nvidia-release install failed — no AL2023 NVIDIA repo"
 if [ -n "$PIN_DRIVER" ]; then
   dnf install -y "nvidia-driver-$PIN_DRIVER*" \
@@ -163,10 +177,21 @@ fi
 mkdir -p "$SCRATCH" && chown $U:$U "$SCRATCH" && df -h "$SCRATCH" || true
 
 step "4. filesystem-under-test ownership"
-mountpoint -q "$WEKA_MNT" || fatal "$WEKA_MNT not mounted — post_mount ordering violated?"
-chown $U:$U "$WEKA_MNT" 2>/dev/null || warn "could not chown $WEKA_MNT"
+if [ "$LEG" = "lustre" ]; then
+  # The lustre mount is a GATED, session-driven step (prompt: EFA config + lnetctl
+  # gate + human approvals; later the baked phase-2). Phase 1 only prepares the
+  # mount point; ownership is set post-mount.
+  mkdir -p "$WEKA_MNT"
+  echo "lustre leg: $WEKA_MNT prepared; mount deferred to the gated walk / phase-2"
+else
+  mountpoint -q "$WEKA_MNT" || fatal "$WEKA_MNT not mounted — post_mount ordering violated?"
+  chown $U:$U "$WEKA_MNT" 2>/dev/null || warn "could not chown $WEKA_MNT"
+fi
 
 step "5.0 WEKA cluster login (admin password from Secrets Manager)"
+if [ "$LEG" = "lustre" ]; then
+  echo "lustre leg: no cluster login (managed service)"
+else
 # Cluster-level queries (weka status / weka cluster ...) need `weka user login`;
 # the local ones (weka local *) and the DPDK evidence below do not. The module
 # stores the generated admin password in Secrets Manager as
@@ -215,7 +240,18 @@ else
 fi
 unset WEKA_PASS
 
+fi
+
 step "5. WEKA facts (evidence, not intent — D16)"
+if [ "$LEG" = "lustre" ]; then
+  # Lustre facts phase 1 can honestly state: the fs identity from terraform via the
+  # conf. Transport evidence (lnetctl showing efa) is POST-MOUNT — FS_TRANSPORT
+  # stays blank, and run-leg's D16 gate keeps refusing until phase-2/the walk
+  # writes the evidenced value. Blank-and-refused beats guessed-and-plausible.
+  FS_NAME="${FSX_MOUNT_NAME:-}"; EC=""; CAP=""; CAP_TIB=""; BACKENDS=""; CLIENT_CORES=""
+  BOUND_NICS=0; FS_TRANSPORT=""
+  echo "lustre leg: fs_name=$FS_NAME (from terraform conf); FS_TRANSPORT pending phase-2 lnetctl evidence (D16)"
+else
 FS_NAME=$(findmnt -n -o SOURCE "$WEKA_MNT" 2>/dev/null | awk -F/ '{print $NF}')
 WSTAT=$(weka status 2>/dev/null || true)
 EC=$(echo "$WSTAT"     | sed -n 's/.*protection: \([0-9]\++[0-9]\+\).*/\1/p' | head -1)
@@ -252,6 +288,8 @@ FS_TRANSPORT=""
 if [ "$BOUND_NICS" -ge 1 ] && [ "${HUGE:-0}" -gt 0 ]; then FS_TRANSPORT="dpdk"; fi
 echo "fs_name=$FS_NAME ec=$EC cap_tb=$CAP (=${CAP_TIB:-?} TiB) backends=$BACKENDS client_cores=$CLIENT_CORES bound_nics=$BOUND_NICS hugepages=$HUGE -> FS_TRANSPORT='${FS_TRANSPORT:-<blank: no evidence>}'"
 
+fi
+
 step "6. env.sh (rebuild-aware)"
 ENV_SH=$REPO/env.sh
 if [ ! -f "$ENV_SH" ]; then cp "$REPO/env.example.sh" "$ENV_SH"; fi
@@ -283,7 +321,7 @@ if [ $REBUILD -eq 1 ]; then
   # --for-leg weka: this bootstrap builds only the WEKA leg, so a rebuild here is
   # same-leg by definition — the leg-specific fields must emit LIVE or the merge
   # (which consumes only live export lines) drops them, as the 2026-08 rebuild did.
-  python3 "$REPO/scripts/env-contract.py" env --file "$CONTRACT" --for-leg weka 2>/dev/null | \
+  python3 "$REPO/scripts/env-contract.py" env --file "$CONTRACT" --for-leg "$LEG" 2>/dev/null | \
   while IFS= read -r line; do
     case "$line" in export\ *=\"*\")
       k=${line#export }; k=${k%%=*}; v=${line#*\"}; v=${v%\"*}
@@ -292,6 +330,13 @@ if [ $REBUILD -eq 1 ]; then
   done
 fi
 py_set AWS_REGION "$REGION";            py_set S3_BUCKET "$S3_BUCKET"
+py_set LEG "$LEG";                      py_set FS_MOUNT "$WEKA_MNT"
+if [ "$LEG" = "lustre" ]; then
+  [ -n "$FS_NAME" ]        && py_set FS_NAME "$FS_NAME"
+  [ -n "$FSX_ID" ]         && py_set FSX_ID "$FSX_ID"
+  [ -n "$FSX_DNS_NAME" ]   && py_set FSX_DNS_NAME "$FSX_DNS_NAME"
+  [ -n "$FSX_MOUNT_NAME" ] && py_set FSX_MOUNT_NAME "$FSX_MOUNT_NAME"
+fi
 [ -n "$EC" ]           && py_set WEKA_EC_SCHEME "$EC"
 [ -n "$CAP" ]          && py_set WEKA_CAPACITY_TB "$CAP"
 [ -n "$BACKENDS" ]     && py_set WEKA_BACKEND_COUNT "$BACKENDS"
@@ -300,12 +345,14 @@ py_set AWS_REGION "$REGION";            py_set S3_BUCKET "$S3_BUCKET"
 [ -n "$FS_TRANSPORT" ] && py_set FS_TRANSPORT "$FS_TRANSPORT"
 chown $U:$U "$ENV_SH"
 
-step "6.5 cuFile/GDS wiring (weka leg: compat mode — D-10 mechanical half)"
-# This leg runs over ENA with no RDMA, so kvikIO cells run libcufile in COMPAT
-# mode by design (D8 runs the kvikIO path on both legs). gdscheck reporting GDS
-# unsupported here is a recorded fact, not a failure; per-cell GPU-direct-vs-
-# bounced accounting (D-6) remains the proof of path. Tuning judgment stays with
-# the benchmark session (D-10); this step does only the mechanical wiring.
+step "6.5 cuFile/GDS wiring (D-10 mechanical half)"
+# weka leg: ENA, no RDMA — kvikIO cells run libcufile in COMPAT mode by design
+# (D8 runs the kvikIO path on both legs); gdscheck reporting GDS unsupported is a
+# recorded fact, not a failure. lustre leg: this compat-true default is the safe
+# PRE-WALK state; the FSx-EFA GDS wiring (if evidenced) is phase-2/walk work and
+# replaces this config deliberately. Per-cell GPU-direct-vs-bounced accounting
+# (D-6) remains the proof of path either way; tuning judgment stays with the
+# benchmark session (D-10).
 CUFILE_DIR=$UH/cufile-config
 mkdir -p "$CUFILE_DIR"
 if [ ! -f "$CUFILE_DIR/cufile.json" ]; then
@@ -490,7 +537,7 @@ step "13.5 conditional re-hydration (unmeasured; only when 1.7 is on record but 
 # completion (runs/.leg-state/$LEG/hydration-complete — written by the D-13
 # driver) and the data is absent, i.e. a mid-leg cluster rebuild lost the
 # filesystem contents after the measurement already happened.
-if [ -f "$REPO/runs/.leg-state/weka/hydration-complete" ] && [ ! -d "$WEKA_MNT/data/tcga-brca" ]; then
+if [ -f "$REPO/runs/.leg-state/$LEG/hydration-complete" ] && [ ! -d "$WEKA_MNT/data/tcga-brca" ]; then
   echo "1.7 recorded complete but data absent -> re-hydrating UNMEASURED in background"
   nohup runuser -u $U -- aws s3 sync "s3://$S3_BUCKET/datasets/tcga-brca/"  "$WEKA_MNT/data/tcga-brca/"  --only-show-errors > /var/log/wsi-rehydrate.log 2>&1 &
   nohup runuser -u $U -- aws s3 sync "s3://$S3_BUCKET/datasets/camelyon16/" "$WEKA_MNT/data/camelyon16/" --only-show-errors >> /var/log/wsi-rehydrate.log 2>&1 &
@@ -503,7 +550,12 @@ mkdir -p /etc/motd.d 2>/dev/null || true
   echo "  1. Verify GitHub push works: ssh -T git@github.com  (the SSM deploy key installs automatically;"
   echo "     only if that fails: add ~/GITHUB-DEPLOY-KEY.pub as a repo deploy key with write access)"
   echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
-  echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
+  if [ "$LEG" = "lustre" ] && ! mountpoint -q "$WEKA_MNT"; then
+    echo "  3. Paste prompts/prompt-lustre-cluster-cloud.md FIRST (gated EFA + mount walk);"
+    echo "     the Leg-B handoff comes after the walk"
+  else
+    echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
+  fi
   echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
   echo "Triage: grep WSI- /var/log/wsi-bootstrap.log"
 } | tee /etc/motd.d/50-wsi 2>/dev/null || true

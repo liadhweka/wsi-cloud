@@ -49,7 +49,9 @@ None of these is a reason to avoid the work. All are reasons to check, record, a
 
 ## What only the human can do
 
-- **Create the FSx file system** (Step 2) — or approve you doing it via the CLI. It is a paid resource with
+- **Create the FSx file system** — via `terraform apply` on their machine, before your session starts
+  (Step 2 is verification only). If you find no file system, that is a stop-and-report, never a
+  create-it-yourself. It remains a paid resource with
   configuration that *is* the experiment; `aws fsx create-file-system` is on the ask list, so you may propose
   and execute it but never unilaterally.
 - **Decide the kernel policy** (Step 4).
@@ -94,7 +96,25 @@ What matters is that `instance_type`, `aws_region`, `aws_az`, `ami_id` and `kern
 or kernel differs from Leg A, stop and surface it** — that is `D-17`, and it is cheaper to rebuild the instance
 now than to discover it after a week of cells.
 
-## Step 2 — The file system *(human creates, or approves you creating)*
+## Step 2 — The file system *(terraform-owned — you verify and record, never create)*
+
+The file system is created by the human's `terraform apply` (their `~/terraform/lustre`) **before this
+session exists** — creation moved out of this prompt (ratified 2026-08-18) so mid-leg rebuilds are
+repeatable; Leg A needed one. Your job is the half that matters scientifically: **prove the live file
+system matches the ratified spec below, and record it.** `FSX_ID` / `FSX_DNS_NAME` / `FSX_MOUNT_NAME`
+arrive in `/etc/wsi-bootstrap.conf` from terraform — never retype them.
+
+```bash
+aws fsx describe-file-systems --file-system-ids "$FSX_ID" --region ap-northeast-2 \
+  --query 'FileSystems[0].[Lifecycle,StorageCapacity,LustreConfiguration.DeploymentType,LustreConfiguration.PerUnitStorageThroughput,LustreConfiguration.EfaEnabled,LustreConfiguration.MetadataConfiguration]'
+```
+
+Assert, refusing loudly on any mismatch (a wrong filesystem measured correctly is still the wrong
+experiment): `AVAILABLE`; `PERSISTENT_2`; `1000` MB/s/TiB; `EfaEnabled=true`; capacity `26400`; metadata
+`USER_PROVISIONED` at the ratified IOPS (placeholder 48,000 — verified against Leg A's measured metadata
+peaks before this leg's metadata-heavy stages, per the stage-lag rule; if raised, that is a **recorded,
+human-ratified provisioning event**, priced into `FS_USD_PER_HR`). Record everything into env.sh and the
+environment contract, then treat the table below as the verification checklist it now is:
 
 The configuration below **is** the experiment — this side is deliberately provisioned at maximum capability, so
 under-configuring it is as damaging as under-configuring the other leg. Every value has a reason:
