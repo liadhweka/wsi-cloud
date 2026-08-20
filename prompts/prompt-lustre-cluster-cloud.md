@@ -111,7 +111,7 @@ aws fsx describe-file-systems --file-system-ids "$FSX_ID" --region ap-northeast-
 ```
 
 Assert, refusing loudly on any mismatch (a wrong filesystem measured correctly is still the wrong
-experiment): `AVAILABLE`; `PERSISTENT_2`; `1000` MB/s/TiB; `EfaEnabled=true`; capacity `26400`; metadata
+experiment): `AVAILABLE`; `PERSISTENT_2`; `1000` MB/s/TiB; `EfaEnabled=true`; capacity `28800` (EFA+P2-1000+SSD moves in 4800-GiB steps — the API rejects anything else); metadata
 `USER_PROVISIONED` at the ratified IOPS (placeholder 48,000 — verified against Leg A's measured metadata
 peaks before this leg's metadata-heavy stages, per the stage-lag rule; if raised, that is a **recorded,
 human-ratified provisioning event**, priced into `FS_USD_PER_HR`). Record everything into env.sh and the
