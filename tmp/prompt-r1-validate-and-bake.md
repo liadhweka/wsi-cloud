@@ -57,11 +57,11 @@ entry, memory item B.1/C.
    against Leg A's committed one automatically; write `runs/.leg-state/lustre/contract-verified` on a clean
    verify, refuse-loud otherwise (`run-leg.sh` already refuses without the marker). Wire it into the
    bootstrap's lustre branch or a phase-2 stage — match the existing refuse-loud shape; `bash -n`; tracker.
-2. **The three `stage1_*` fields (D13):** they are held-constant, so Leg B adopts Leg A's values — but first
-   verify the definition still holds: fetch AWS's documented FSx server-side cache figures for this tier
-   and confirm Leg A's corpus values are ≥ ~2× the **larger** of the two filesystems' server caches.
-   Propose to the human with the source; on confirmation write into env.sh + rewrite the contract. After
-   this, the contract verify must come back **fully clean** — R2 requires it.
+2. **The three `stage1_*` fields — DONE at the 2026-08-20 teardown** (D13 re-verified: FSx PERSISTENT-1000
+   documents 27.3 GiB RAM/TiB → ~768 GiB server cache; WEKA's 1536 GiB remains the larger side; 2×1536 =
+   3072 = the recorded corpus — source: docs.aws.amazon.com/fsx/latest/LustreGuide/ssd-storage.html). The
+   contract shipped **fully clean (19/19 captured, 0 unverifiable)**. Your only job here: the boot
+   contract-verify on the rebuilt box must reproduce that clean result.
 3. **NVIDIA driver pin (D-17's open half, cross-cutting — Leg A shares the code path):** propose pinning
    the bootstrap's NVIDIA install to the contract-recorded NVRs (dnf versionlock or explicit versions);
    implement only on the human's explicit ratification; otherwise record the decision and leave the

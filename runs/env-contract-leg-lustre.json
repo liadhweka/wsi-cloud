@@ -35,12 +35,12 @@
   "price_checked_utc": "2026-08-20",
   "python_version": "3.11.15",
   "s3_bucket": "liad-wsi-cloud",
-  "script_commit": "b4efc5fffd587ce590109744a0938e0595d755b5",
+  "script_commit": "a2be7d05ca684f203990bcb422baae3e81fe3ccb",
   "software_usd_per_hr": "0",
   "source_conflicts": [],
-  "stage1_randr_region_gib": null,
-  "stage1_randr_regions": null,
-  "stage1_seq_corpus_gib": null,
+  "stage1_randr_region_gib": "256",
+  "stage1_randr_regions": "26",
+  "stage1_seq_corpus_gib": "3072",
   "weka_backend_ami": null,
   "weka_backend_count": null,
   "weka_backend_ram_total": null,
@@ -49,5 +49,5 @@
   "weka_client_cores": null,
   "weka_client_nics": null,
   "weka_ec_scheme": null,
-  "written_utc": "2026-08-20T18:58:55.359098+00:00"
+  "written_utc": "2026-08-20T21:31:36.416348+00:00"
 }

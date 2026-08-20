@@ -51,7 +51,8 @@ L1–L7 — ratified; carry, don't re-litigate) → **`docs/SCRIPT-TRACKER.md`**
 `journalctl -u wsi-lustre-phase2.service` — gate + counter-proof passed unattended.
 **Contract fully clean:** the boot automation wrote+verified it and left
 `runs/.leg-state/lustre/contract-verified`; re-run `env-contract.py verify` yourself — **every
-held-constant field must now verify, including `stage1_*`** (R1 filled them); any violation is a stop.
+held-constant field must now verify, including `stage1_*`** (filled + D13-re-verified at the 2026-08-20
+teardown); any violation is a stop.
 `./env.sh --check` (cost/ceiling trios present and dated; `FS_CLIENT_RESERVED_CORES=none`;
 `LUSTRE_STRIPE_LAYOUT` live). Tier 0 per the gate above. `./scripts/verify-conda-env.sh` (both envs, GPU
 count). nvidia-fs counters enabled (`/sys/module/nvidia_fs/parameters/*_stats_enabled` = 1). S3 reachable;

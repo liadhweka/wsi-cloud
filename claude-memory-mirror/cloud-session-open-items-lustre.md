@@ -44,10 +44,10 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    the walk box only; on the rebuilt box treat a failure as a baking bug first
    (`journalctl -u wsi-lustre-phase2.service`). After it passes once: delete this item and the
    "proof-pending" notes in the script header + tracker entry.
-2. **Contract: 3 stage-1 fields still UNVERIFIABLE** (`stage1_seq_corpus_gib`, `stage1_randr_region_gib`,
-   `stage1_randr_regions`) — they fill at corpus prep (D13 cache-derived). The verify must come back fully
-   clean before the first measured cell (**D6**); everything else already matches. NOTE: after the rebuild,
-   re-run write+verify on the new instance (instance_id/hostname refresh; kernel/AMI must still MATCH).
+2. **Contract is FULLY CLEAN as of the 2026-08-20 teardown** (19/19 captured; stage1_* = 3072/256/26,
+   D13 re-verified vs FSx's documented 27.3 GiB RAM/TiB — WEKA's 1536 GiB is the larger cache, 2×1536=3072).
+   After each rebuild: re-run write+verify on the new instance (instance_id/hostname refresh; kernel/AMI
+   must still MATCH) and it must reproduce the clean result before the first measured cell (**D6**).
 3. **No true GDS on this leg either — documented, not measured (STAGES.md D8, checked 2026-08-20):** GDS on
    FSx requires a P5-class client; this client is g6e. Expect compat/bounce like Leg A; do NOT chase GDS
    wiring. The leg's Phase-0 determination cell and every kvikIO cell's path split still verify — a split
