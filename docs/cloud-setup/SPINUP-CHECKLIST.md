@@ -44,8 +44,8 @@ cheap now and expensive later.
    must be identical across Leg A and Leg B or the comparison isn't valid.
 
 4. **Launch it EFA-capable, even though Leg A doesn't use EFA.** WEKA runs DPDK over ENA, but Leg B's
-   FSx-Lustre needs EFA both for GPUDirect Storage and to escape the **per-client-per-file-server bandwidth
-   cap** that applies without it — a cap that would break the "Lustre at maximum" fairness basis invisibly.
+   FSx-Lustre needs EFA to escape the **per-client-per-file-server bandwidth
+   cap** that applies without it (GDS is separately out of reach on this client class — STAGES.md **D8**) — a cap that would break the "Lustre at maximum" fairness basis invisibly.
    The instance must be the same one in both legs, so EFA capability has to be there from the start.
    *Fetch the current cap figure from
    [FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html) when

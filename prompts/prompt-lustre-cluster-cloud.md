@@ -18,7 +18,7 @@ with hard gates rather than a checklist.
 
 **1. Mounting over TCP instead of EFA.** Enabling EFA on the instance, requesting EFA on the file system, and
 installing the *generic* EC2 EFA software does **not** configure the *Lustre client* to use EFA. Without the
-FSx-specific client configuration the mount quietly uses TCP — forfeiting GPUDirect Storage **and** the escape
+FSx-specific client configuration the mount quietly uses TCP — forfeiting the escape
 from the per-client-per-file-server bandwidth cap. This project's fairness basis is "Lustre provisioned at
 maximum capability"; a TCP mount breaks that promise while still producing numbers. **Step 5 is a hard gate.**
 Tracked as deferred item `D-16`.
@@ -127,7 +127,7 @@ under-configuring it is as damaging as under-configuring the other leg. Every va
 | Storage capacity | **≥ 25 TiB** | At 1000 MB/s/TiB this is where disk throughput reaches the client's ~25 GB/s ceiling; below it the file system is the constraint and any delta is a sizing artifact |
 | Metadata IOPS | **User-provisioned, high** | Persistent 2 provisions metadata independently of capacity, so leaving it at the default would under-provision the metadata path while the data path runs at maximum (**D7**) |
 | VPC / subnet / security group | **same as this instance**, `wsi-bench-sg` | Cross-AZ traffic would contaminate the comparison |
-| EFA | **Enabled** | Prerequisite for GPUDirect Storage, and it removes a hard per-file-server cap |
+| EFA | **Enabled** | Removes a hard per-client-per-file-server cap — the load-bearing reason on this client class (true GDS is out of reach on g6e per the documented client constraint, STAGES.md **D8**; expect compat mode, verified per cell) |
 
 **Prefer the CLI if the human agrees**, and say why when you propose it: `aws fsx create-file-system` records the
 exact parameters in your transcript, which is precisely what the fairness basis has to be able to evidence
@@ -206,7 +206,7 @@ cell run. Report at once: what you ran, the exact output, which AWS page you fol
 diverged from it. **Then wait for the human.**
 
 *Why not "mount over TCP and flag it in the report":* a TCP mount works. It produces a complete, believable set
-of numbers for a transport this project explicitly decided not to measure (**D16**), while forfeiting GPUDirect
+of numbers for a transport this project explicitly decided not to measure (**D16**), while forfeiting
 Storage *and* the escape from the per-client-per-file-server bandwidth cap — so it breaks the "Lustre at
 maximum" fairness basis (**D7**) invisibly. Flagging it afterwards does not undo the wallclock, the money, or a
 results tree whose provenance now has to be argued about. Mounting over TCP anyway is a **human decision, in

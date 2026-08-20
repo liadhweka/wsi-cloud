@@ -49,7 +49,7 @@ is unset.** An unset variable must never silently default, because the defaults 
 | `CONDA_ENV_ALT` | **`wsi-cucim`** | Second env, same reasoning. Used by the two cuCIM-CPU drivers (Stage 4.A, 4.B). |
 | `CLAM_DIR` | **`$PROJECT_HOME/wsi-tools/CLAM`** | The tissue detector used by Stage 3. Cloned during setup; the commit is recorded per run. |
 | `CUFILE_CONFIG_DIR` | **`$PROJECT_HOME/cufile-config`** | Where the generated cuFile config lives. |
-| `CUFILE_ENV_PATH_JSON` | **`$CUFILE_CONFIG_DIR/cufile.json`** | Generated **per instance, per leg** by the bootstrap — a compat-mode config on the WEKA leg (no address list). The Lustre-over-EFA config is deferred item `D-10`. |
+| `CUFILE_ENV_PATH_JSON` | **`$CUFILE_CONFIG_DIR/cufile.json`** | Generated **per instance, per leg** by the bootstrap — a compat-mode config on BOTH legs, which per **D8**'s expected-symmetric outcome is also the end state (no true GDS at this client class; a per-cell path split contradicting that would reopen `D-10`'s GDS-side wiring). |
 | `LIBCUFILE_PRELOAD` | *(set by the bootstrap)* | The **path** of the system `libcufile` matched to the loaded `nvidia-fs` module. Every kvikIO sweep driver reads it and **refuses to start without it.** The bootstrap locates and exports it from the installed CUDA stack at build time. |
 
 > **`LIBCUFILE_PRELOAD` holds a path; `LD_PRELOAD` is what must never be global.** Exporting the *path* is
@@ -82,7 +82,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 | `FSX_TIER` · `FSX_CAPACITY_TIB` · `FSX_METADATA_IOPS` | FSx provisioning (Leg B) | The "Lustre at maximum" evidence (**D7**), and FSX's cache size follows from tier × capacity. |
 | `STAGE1_SEQ_CORPUS_GIB` | Derived from the fetched server-side cache figures at provisioning — ≥ ~2× the **larger** of the two filesystems' server caches | The 1.0b scan corpus. Sizes are parameters, never driver literals (**D13**); one identical definition serves both legs. `prep-stage1-read-corpora.sh` stages it; both read sweeps refuse without its marker and cross-check the staged size against this value. |
 | `STAGE1_RANDR_REGION_GIB` · `STAGE1_RANDR_REGIONS` | Same derivation event | The 1.0d **one-touch region pool**: 21 grid cells plus reserve regions for the **D18** knee/peak repeats (a repeat must read fresh blocks or it measures its first run's cache). Region count must exceed 21 or the randr driver refuses. |
-| `FSX_EFA_ENABLED` | FSx provisioning | Required for GDS and to escape the per-client-per-server cap. |
+| `FSX_EFA_ENABLED` | FSx provisioning | Required to escape the per-client-per-server cap (GDS is out of reach on this client class regardless — `STAGES.md` **D8**). |
 | `LUSTRE_STRIPE_LAYOUT` | `lfs getstripe` after mount | **Required** to derive the Lustre consistency relation (**D12**). |
 | `DRIVER_VERSION` · `CUDA_VERSION` · `NVIDIA_FS_VERSION` · `LIBCUFILE_VERSION` · `KERNEL_VERSION` | The instance | Held-constant contract; the cuFile stack must be version-matched. |
 | `SCRIPT_COMMIT` | `git rev-parse HEAD` | Both legs must run the same code. **Collected by `env-contract.py` itself — never an `env.sh` field.** The contract is written at the *end* of a leg, so a hand-typed copy goes stale the moment the tree advances, and only the typed one would be wrong. |

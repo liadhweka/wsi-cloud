@@ -90,7 +90,7 @@ actually achieved** and state the residual uncertainty rather than labelling a c
 **RESOLVED (ratified 2026-08-16, route (a)): the 6.B production-scale corpus is 3.0 TiB — one identical
 definition on both legs.** *Why 3.0 TiB:* it must exceed the client page cache (768 GiB) plus the larger of
 the two server-side caches — WEKA's confirmed 1536 GiB backend RAM against FSx's ~721 GiB at
-PERSISTENT-1000 × 26.4 TiB (both fetched, not recalled) — so the floor is 2304 GiB and 3.0 TiB carries
+PERSISTENT-1000 × the provisioned capacity — ~768 GiB at the re-ratified 28,800 GiB, still below WEKA's; both fetched, not recalled — so the floor is 2304 GiB and 3.0 TiB carries
 ~30% margin. The per-`(N_files, file_size, dtype)` grid inside that envelope is still fixed at substage
 entry against the measured 6.A Tier 2 file-size distribution (the tile-count open item). "Cold" remains
 verified per cell, never asserted (**D13**).
@@ -459,7 +459,7 @@ live in `STAGES.md`.
   plausible.
 - **Tier 2's `CHUNK_SIZE` is 200 slides — re-derived against both legs' capacity and kept at the default.**
   *Why:* a 200-slide chunk is ~1.01 TiB transient (measured per-slide raw-TIFF from 4.D), against ~50 TiB
-  free on the WEKA leg and ~4–5 TiB of planned headroom on the D7-maximum FSx configuration — it fits both
+  free on the WEKA leg and ~7 TiB of planned headroom on the D7-maximum FSx configuration (28,800 GiB, re-ratified 2026-08-20) — it fits both
   with margin, so the identical-on-both-legs rule (chunk size is write/delete cadence, i.e. workload shape)
   keeps one value. 1064 slides → 6 chunks, a real chunked-pipeline cadence.
 - **Tier 2's kvikIO cells declare `RECORD_CACHE_STATE=na-mixed-rw-chunk-resident`.** *Why `na-*`:* each

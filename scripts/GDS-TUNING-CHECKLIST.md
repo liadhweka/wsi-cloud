@@ -2,6 +2,12 @@
 
 > ## ⏳ PENDING RETARGET — DO NOT FOLLOW AS WRITTEN
 >
+> **D8 update (2026-08-20): neither AWS leg can run true GDS at this project's client class** — WEKA
+> measured (ENA, no RDMA), FSx documented (GDS requires a P5-class client; g6e is not one — see
+> STAGES.md D8 for the dated source). The GDS-side tuning below is therefore inapplicable on BOTH
+> legs unless a per-cell path split ever contradicts the docs; the compat-mode verify-and-measure
+> half is what remains relevant.
+>
 > **This checklist describes a previous, on-premises environment** (a different mount path, an
 > InfiniBand fabric, and one filesystem). It is carried forward because the **procedure** — verify
 > the path works, measure, then tune against measured throughput — is sound and doc-grounded. The

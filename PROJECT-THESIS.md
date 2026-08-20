@@ -151,10 +151,14 @@ wallclock and the money before anyone can act. Each leg's transport is **evidenc
 report** — never inferred from the mount options passed — and recorded per leg.
 
 **The GPU-direct matrix runs both cuFile modes on both filesystems**, so the filesystem effect is separated
-from the transport effect rather than confounded with it. The matrix is designed on the expectation that the
-WEKA leg's transport does not support true GPU-direct and runs in compat mode; **a single Phase-0 cell confirms
-that empirically before the matrix is committed**, because the vendor's materials and the transport analysis do
-not agree, and one cell converts an assumption into evidence.
+from the transport effect rather than confounded with it. **Neither leg is expected to run true GPU-direct
+at this project's client class**: WEKA because its AWS transport is not RDMA-capable — confirmed empirically
+by Leg A's Phase-0 cell — and Lustre because AWS documents that GDS on FSx requires a P5-class client
+instance, which the held-constant client is not (the dated source is in `STAGES.md` **D8**). **The
+expectation is documentation; the verdict is evidence** — each leg's Phase-0 cell and every kvikIO cell's
+recorded byte split still decide, and a split contradicting the documented expectation is a finding. The
+mode axis stays measured on both sides regardless, because the two requested modes are two genuinely
+different code paths even without GDS.
 
 **Prove the I/O path per cell.** Record cuFile's own accounting of GPU-direct versus bounced bytes as a
 first-class source. **A configuration flag is not proof of behaviour** — a cell that quietly fell back, or

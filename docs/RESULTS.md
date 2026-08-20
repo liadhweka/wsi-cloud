@@ -109,6 +109,20 @@ client model; its tuning surface is RPC/LRU/statahead parameters [docs.aws.amazo
 performance, performance tips; fetched 2026-08-19] — which is exactly the client-architecture asymmetry
 **D15** prices rather than hides.
 
+## The GPU-direct statement (whitepaper-facing, per §10)
+
+**At single-client scale on this project's instance class (`g6e.24xlarge`), neither stack offers a true
+GPU-direct path — a simplification of the story, and itself a quotable finding.** WEKA-over-ENA:
+**measured** — Leg A's Phase-0 cell (strict-GDS open refused; every byte bounced, from cuFile's own
+accounting) and 20/20 Stage-4.C cells recording `gds_engaged=none`. FSx-over-EFA: **documented platform
+constraint** — GDS requires a P5/P5e/P5en/P6-B200 client instance
+[docs.aws.amazon.com → FSx for Lustre → EFA-enabled file systems; checked 2026-08-20], and the
+held-constant client is not in the set; EFA itself (and its per-client-cap escape) is unaffected. Leg B's
+per-cell path accounting verifies the expectation rather than assuming it; a contradiction would be a
+finding. Consequence for the reader: the kvikIO comparison between the legs is **compat-vs-compat — an
+identical code path on both sides** — and the cuFile-mode axis (kvikio-POSIX vs cuFile-bounce) is a real
+two-path measurement on both legs, not a GDS proxy.
+
 ## What must never appear here
 
 - A figure quoted from a source the filesystem in use bypasses (`../PROJECT-THESIS.md` §7).

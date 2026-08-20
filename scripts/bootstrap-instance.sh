@@ -352,9 +352,11 @@ chown $U:$U "$ENV_SH"
 step "6.5 cuFile/GDS wiring (D-10 mechanical half)"
 # weka leg: ENA, no RDMA — kvikIO cells run libcufile in COMPAT mode by design
 # (D8 runs the kvikIO path on both legs); gdscheck reporting GDS unsupported is a
-# recorded fact, not a failure. lustre leg: this compat-true default is the safe
-# PRE-WALK state; the FSx-EFA GDS wiring (if evidenced) is phase-2/walk work and
-# replaces this config deliberately. Per-cell GPU-direct-vs-bounced accounting
+# recorded fact, not a failure. lustre leg: compat is ALSO the expected END state,
+# not just the pre-walk default — AWS documents GDS on FSx as requiring a
+# P5/P5e/P5en/P6-B200 client and this project's client is g6e (STAGES.md D8,
+# checked 2026-08-20). No GDS wiring is expected at the walk/phase-2; only a
+# per-cell path split contradicting the docs would reopen it. Per-cell GPU-direct-vs-bounced accounting
 # (D-6) remains the proof of path either way; tuning judgment stays with the
 # benchmark session (D-10).
 CUFILE_DIR=$UH/cufile-config

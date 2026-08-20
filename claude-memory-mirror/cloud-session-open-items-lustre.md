@@ -18,6 +18,10 @@ has completed stage N. Ownership rules: `CLAUDE.md`, "Concurrent legs".
    inherits.
 3. **Tier 0 for this leg is EFA, evidenced** (`lnetctl net show`), never mount options. TCP fallback = STOP,
    human waiver only (**D16**).
+3b. **No true GDS on this leg either — documented, not measured (STAGES.md D8, checked 2026-08-20):** GDS
+    on FSx requires a P5-class client; this client is g6e. Expect compat/bounce like Leg A; do NOT chase
+    GDS wiring. The leg's Phase-0 determination cell and every kvikIO cell's path split still verify —
+    a split contradicting the docs is a finding to surface immediately.
 4. **Contract verify against Leg A's current committed contract** before any cell (**D6**) — `aws_az` is
    MAY_DIFFER by design; everything else on MUST_MATCH must hold.
 5. **[USER] Cost + ceiling inputs, Lustre values**: `SOFTWARE_USD_PER_HR=0` (FSx is software-inclusive, basis

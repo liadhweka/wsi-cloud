@@ -49,33 +49,33 @@ project on both sides (`../PROJECT-THESIS.md` §9).
 This is the methodological core of Stage 4, and it is worth stating precisely, because a naive version of
 this comparison would confound two variables at once.
 
-**The situation.** Lustre-over-EFA supports GPUDirect Storage. WEKA's own materials claim GDS support on
-AWS while the transport analysis says ENA is not RDMA-capable, so the matrix is **designed on the
-expectation that the WEKA leg runs in cuFile compat mode — and a single Phase-0 cell confirms that
-empirically before the matrix is committed** (**D8**; `../PROJECT-THESIS.md` §5.2). A straight "Lustre
-GPU-direct vs WEKA GPU-direct" comparison would vary *both* the filesystem *and* the transport, and no
-single number could tell you which caused the difference.
+**The situation (updated as the answers landed — the design predates them and absorbed both).** Neither
+leg is expected to run true GPUDirect Storage at this project's client class (**D8**): WEKA because ENA is
+not RDMA-capable — **measured**, the Phase-0 cells below — and Lustre because AWS documents that GDS on FSx
+requires a P5/P5e/P5en/P6-B200 client instance, which the held-constant `g6e.24xlarge` is not
+(the dated source is in **D8**; EFA itself is unaffected). The matrix was designed so any combination of
+answers is usable, which is why neither answer changes a cell.
 
 **The design.** cuFile's compat mode is available on **both** filesystems. So every applicable cell is run
-in **both modes on both filesystems**, giving a 2×2 that decomposes cleanly:
+in **both requested modes on both filesystems**:
 
 | | cuFile **compat** (bounce buffer, POSIX under the hood) | cuFile **GDS** (direct to GPU memory) |
 |---|---|---|
-| **WEKA** | ✅ | ✅ *if achievable — determined empirically (**D8**)* |
-| **Lustre** | ✅ | ✅ |
+| **WEKA** | ✅ | **not achievable — measured** (Phase-0, below) |
+| **Lustre** | ✅ | **expected not achievable — documented client-class constraint (D8); verified per cell** |
 
-Which yields three separable readings:
+Which yields the readings:
 
 1. **Lustre-compat vs WEKA-compat** → the **pure filesystem comparison** at an identical code path,
-   identical artifact, identical API. No transport difference. This is the cleanest apples-to-apples number
-   in the GPU-direct block.
-2. **Lustre-GDS vs Lustre-compat** → the **pure GDS effect**, isolated within one filesystem.
-3. **Lustre-GDS vs WEKA-best** → the **deployment-reality question**: what a customer actually gets on
-   each, given what each can do on AWS.
+   identical artifact, identical API. No transport difference. Under the expected-symmetric D8 outcome this
+   is the whole GPU-direct story — and the cleanest apples-to-apples number in the block.
+2. **kvikio-POSIX vs cuFile-bounce, within each leg** → the requested-mode axis remains a real two-path
+   measurement without GDS (Leg A measured them ~2× apart at peak).
+3. **The original GDS readings (pure GDS effect; deployment reality) revive only if a leg's per-cell path
+   accounting contradicts its expectation** — which would be a finding, not an error.
 
-*Why this matters:* it converts an unavoidable asymmetry from a confound into a measurement. If the Phase-0
-cell shows WEKA supporting true GDS, row 1 of the table fills in and the design becomes a full 2×2 with
-nothing wasted — which is why it is built so that either answer is usable, rather than around one answer.
+*Why this matters:* it converts what could have been a confound into a measurement whichever way the
+answers land — and the per-cell byte split, not any document or flag, is always the verdict.
 
 **The Leg-A answer (measured, Phase-0 determination cells 2026-08-16): WEKA over DPDK/ENA does NOT do true
 GDS — the WEKA leg's cuFile path is compat/bounce.** Evidence, from cuFile's own accounting, never a flag
@@ -253,12 +253,13 @@ stack rather than assuming the same versions behave identically.
 
 One entry per live Stage 4 decision. Cross-stage decisions live in `STAGES.md`.
 
-- **Every 4.C cell runs in BOTH cuFile modes on BOTH filesystems.** *Why:* this is what turns the
-  unavoidable GDS asymmetry from a confound into a measurement. Compat mode exists on both sides, so
-  **Lustre-compat vs WEKA-compat is a pure filesystem comparison at an identical code path**, while
-  **Lustre-GDS vs Lustre-compat isolates the GDS effect** — and the two combine to answer the deployment
-  question. With only one mode, a single "Lustre GPU-direct vs WEKA GPU-direct" number would vary
-  filesystem and transport simultaneously and could not be attributed.
+- **Every 4.C cell runs in BOTH requested cuFile modes on BOTH filesystems.** *Why:* originally to turn a
+  possible GDS asymmetry from a confound into a measurement; under **D8**'s now-expected symmetric outcome
+  (no true GDS on either leg at this client class — WEKA measured, Lustre documented) the axis remains
+  load-bearing for two reasons: **compat-vs-compat is the pure filesystem comparison at an identical code
+  path**, and the two requested modes (kvikio-POSIX vs cuFile-bounce) are genuinely different code paths —
+  Leg A measured them ~2× apart at peak — so a customer choosing a mode still needs both curves. The
+  per-cell path accounting keeps the expectation honest on both legs.
 - **cuFile path accounting is a hard per-cell requirement, not an optional extra.** *Why:* a configuration
   flag does not tell you which path a read actually took, and a silently-fallen-back cell looks identical
   to a working one in the throughput data. A kvikIO cell without recorded GPU-direct-vs-bounced bytes is

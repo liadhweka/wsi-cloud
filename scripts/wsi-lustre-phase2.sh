@@ -16,6 +16,10 @@
 #      NO MOUNT, NO FALLBACK — a TCP waiver is a human decision (D16).
 #   6. Mount → chown → fstab → FS_TRANSPORT=efa evidence line (quoting lnetctl)
 #      → env.sh update → motd update.
+#   NOTE (D8, checked 2026-08-20): no GDS driver/config work belongs here — GDS
+#   on FSx requires a P5-class client and this project's client is g6e, so the
+#   compat cufile.json from phase 1 is the END state. Per-cell path accounting
+#   verifies; a contradicting split is a finding to surface, not wiring to add.
 set -uo pipefail
 echo "WSI-FATAL: phase-2 is not baked yet — run the gated walk (prompts/prompt-lustre-cluster-cloud.md);" >&2
 echo "           its validated transcript becomes this script's content. Refusing to guess a mount." >&2

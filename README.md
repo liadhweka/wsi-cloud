@@ -40,12 +40,15 @@ place the provisioning asymmetry below stops being a caveat and becomes arithmet
    we sized ourselves. Both sides are sized above what the client can drive, so neither is the constraint —
    and because a single client cannot drive an aggregate maximum, results are framed as **measured at
    single-client scale, with the recorded per-client ceilings beside them**.
-2. **Transport / GPU-direct.** Lustre over EFA supports GPUDirect Storage; **WEKA on AWS does not — settled
-   empirically** (the vendor's materials and the transport analysis disagreed, so a recorded Phase-0 cell
-   decided it: cuFile on WEKA-over-ENA runs compat/bounce, and every kvikIO cell records its own
-   GPU-direct-vs-bounced byte split as proof of path). We **keep** the GPU-direct path rather than dropping
-   it for symmetry, and run **both cuFile modes on both filesystems** — which separates the filesystem
-   effect from the transport effect instead of confounding them.
+2. **Transport / GPU-direct.** Each filesystem runs its intended transport (WEKA/DPDK, Lustre/EFA) — but
+   **neither leg is expected to run true GPUDirect Storage at this project's client class**: WEKA because
+   ENA is not RDMA-capable (settled empirically by a recorded Phase-0 cell — compat/bounce), Lustre because
+   AWS documents that GDS on FSx requires a P5-class client, which the held-constant `g6e` is not
+   (`docs/STAGES.md` **D8**, dated source). We **keep** the kvikIO/cuFile path and run **both requested
+   cuFile modes on both filesystems** — the modes are genuinely different code paths regardless — and every
+   kvikIO cell records its own GPU-direct-vs-bounced byte split, so the expectation is verified per cell
+   rather than assumed. At single-client scale on this instance class, **neither stack offers a true
+   GPU-direct path** — itself a finding.
 
 **Results precede story.** No document here contains a predicted outcome or a pre-assigned "headline" stage.
 Whatever the benchmark produces is what gets reported, including cells where WEKA loses.

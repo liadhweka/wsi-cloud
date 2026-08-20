@@ -43,25 +43,35 @@ which both cuFile modes are read:
 
 | | POSIX (native reads) | cuFile **compat** | cuFile **GDS** |
 |---|---|---|---|
-| **WEKA** | measured | measured | measured *if achievable — determined empirically* |
-| **Lustre** | measured | measured | measured (over EFA) |
+| **WEKA** | measured | measured | **not achievable — measured empirically** (Phase-0, 2026-08-16: ENA is not RDMA-capable; strict-GDS open refused) |
+| **Lustre** | measured | measured | **expected not achievable on this client — documented platform constraint** (verified per cell regardless) |
 
-That grid separates three readings that a single "Lustre-GDS vs WEKA-GDS" number would conflate:
+**The Lustre-GDS expectation (recorded 2026-08-20, like a price — platform constraints drift):** AWS
+documents that GDS on FSx for Lustre requires a **P5, P5e, P5en, or P6-B200 client instance**
+([Working with EFA-enabled file systems](https://docs.aws.amazon.com/fsx/latest/LustreGuide/efa-file-systems.html),
+checked 2026-08-20); the held-constant client is `g6e.24xlarge` on both legs (**D10**), which is not in the
+supported set. EFA itself is unaffected (Nitro v4+, AL2023 — both satisfied). **This is a documented
+expectation, not a measurement**: Leg B's per-cell path accounting still runs and still decides, and if it
+ever contradicts the docs that is a finding, not an error.
+
+The grid's readings, under the expected-symmetric outcome:
 
 1. **Lustre-compat vs WEKA-compat** → the **pure filesystem comparison** at an identical code path, identical
-   artifact, identical API — no transport difference.
-2. **Lustre-GDS vs Lustre-compat** → the **pure GDS effect**, isolated inside one filesystem.
-3. **Lustre-GDS vs WEKA-best** → the **deployment-reality question**: what a customer actually gets on each,
-   given what each can do on AWS.
+   artifact, identical API — no transport difference. Expected to be the whole GPU-direct story.
+2. **kvikio-POSIX vs cuFile-compat within each leg** → the mode axis remains two genuinely different code
+   paths (Leg A measured them ~2× apart at peak), so both requested modes still run on both filesystems.
+3. **A true-GDS reading exists only if a leg's path accounting contradicts its expectation** — in which case
+   readings 2 and 3 of the original design (pure GDS effect; deployment reality) revive unchanged.
 
 The plain-POSIX cell is additionally needed because cuFile-compat stacks a bounce buffer and the cuFile layer
 on top of POSIX and may be **slower than a filesystem's own native path** — without it we would understate
 whichever side falls back. POSIX is each filesystem's best-foot-forward number; compat is the like-for-like
 one. Full design rationale in `Stage-4-Patching.md` § GPU-direct experimental design.
 
-**A single Phase-0 cell settles the WEKA-GDS question empirically before the matrix is committed**
-(`../PROJECT-THESIS.md` §5.2). The matrix is built so either answer is usable and nothing is wasted — that is
-why it is designed this way rather than around an assumed answer.
+**A Phase-0 determination cell settles each leg's GDS question empirically before that leg's matrix cells
+are committed** (`../PROJECT-THESIS.md` §5.2) — Leg A's ran 2026-08-16 (answer: no true GDS). The matrix is
+built so either answer is usable and nothing is wasted — that is why it is designed this way rather than
+around an assumed answer, and why the documented Leg-B expectation above changes no cell.
 
 **The later GPU-direct stages deliberately do not repeat the full grid**, because 4.C already characterises
 the GDS-vs-compat delta at the read level across the whole grid, and repeating it at every rank count would
@@ -72,6 +82,8 @@ multiply cells for information already in hand.
   link back to 4.C, so a cross-leg difference at training or extraction scale can be checked against the
   read-level mode difference rather than guessed at. **Whether a leg has that cell at all follows from that
   leg's answer to the D8 question**, so their cell counts are given as a composition, not a fixed total.
+  (Under D8's expected-symmetric outcome — no true GDS on either leg at this client class — **no leg is
+  expected to have the paired cell**; Leg A measured none.)
 - **Stage 7's kvikIO backends** run in **best available mode only, with no paired cell.** Stage 7 measures
   per-slide latency and its behaviour under concurrency; the mode delta is a read-path property already
   measured at 4.C, and adding a mode axis here would multiply the latency grid without answering a question
@@ -357,18 +369,26 @@ negotiated price is not — dated like every price. An all-in figure with the as
 infra-only figure with the licence silently excluded: the latter is the most attackable number in the
 deliverable.
 
-**D8 — GPU-direct retained, and asymmetric by design.** kvikIO/cuFile is **not** dropped to force symmetry.
-*Why:* Lustre-over-EFA supports GDS while WEKA-over-ENA may fall back to compat mode, and **that is precisely
-the choice a customer faces on AWS** — so it is the measurement, not a confound. kvikIO/cuFile runs on both
-sides, meaning the same application code and the same raw-TIFF artifact execute on both. Both sides
-additionally get a plain-POSIX cell, because compat mode stacks a bounce buffer on top of POSIX and would
-otherwise understate whichever side falls back. **The GDS-on-WEKA question is resolved empirically, not from
-documentation** — WEKA's own materials claim GDS support on AWS while the transport analysis (ENA is not
-RDMA-capable) suggests fallback; a single Phase-0 cell using `gdscheck -p` plus a recorded canary settles it,
-and the matrix is built so either answer is usable. **Prove the path per cell** via cuFile's
-GPU-direct-vs-bounced byte accounting; a config flag is not proof. *Sources:*
-[FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html) (EFA-enabled
-file systems support GDS; per-client caps by interface),
+**D8 — GPU-direct retained; expected SYMMETRIC-compat at this project's client class, with the expectation
+verified per cell on both legs.** kvikIO/cuFile is **not** dropped: it is the NVIDIA-documented WSI pipeline
+and the same application code and raw-TIFF artifact execute on both sides. **Neither leg is expected to run
+true GDS on the held-constant `g6e.24xlarge` client:** WEKA because ENA is not RDMA-capable — **measured**,
+Phase-0 determination 2026-08-16 (strict-GDS open refused; every byte bounced, from cuFile's own accounting)
+— and Lustre because AWS documents that **GDS on FSx requires a P5/P5e/P5en/P6-B200 client instance**
+([Working with EFA-enabled file systems](https://docs.aws.amazon.com/fsx/latest/LustreGuide/efa-file-systems.html),
+checked 2026-08-20; EFA itself is unaffected on g6e). *What this does to the design:* nothing structural —
+the matrix always ran **both requested cuFile modes on both filesystems**, and it keeps doing so, because
+the mode axis is two genuinely different code paths regardless of GDS (kvikio-POSIX vs cuFile-bounce ran ~2×
+apart at peak on Leg A). **The expectation is documentation; the verdict is evidence** — every kvikIO cell
+records cuFile's GPU-direct-vs-bounced byte split, a config flag is never proof, and a per-cell split
+contradicting the documented expectation on either leg is a finding to chase, not an error to suppress. At
+single-client scale on this instance class, **neither stack offers a true GPU-direct path** — itself a
+quotable result (`RESULTS.md`). Both sides additionally get a plain-POSIX cell (4.B), because cuFile-compat
+stacks a bounce buffer on top of POSIX and would otherwise understate both. *Sources:*
+[FSx for Lustre — EFA-enabled file systems](https://docs.aws.amazon.com/fsx/latest/LustreGuide/efa-file-systems.html)
+(GDS client-instance requirement; checked 2026-08-20),
+[FSx for Lustre performance](https://docs.aws.amazon.com/fsx/latest/LustreGuide/performance.html) (per-client
+caps by interface),
 [WEKA networking](https://docs.weka.io/weka-system-overview/networking-in-wekaio).
 
 **D10 — Compute instance `g6e.24xlarge`, with a pre-committed revisit trigger.** 96 vCPU, 768 GiB, 4× L40S,
@@ -489,8 +509,9 @@ available-core count are recorded per cell.
 has the generic EC2 EFA software but not the FSx-specific client configuration mounts over **TCP**. *Why this
 is a recorded decision rather than an implementation detail:* each fallback produces a complete, plausible set
 of numbers for a configuration this project has explicitly promised not to measure — UDP would understate
-WEKA, and TCP forfeits both GPUDirect Storage and the escape from Lustre's per-client-per-file-server bandwidth
-cap, breaking the "Lustre at maximum" fairness basis (**D7**) invisibly. So the intended transport is **not** a
+WEKA, and TCP forfeits the escape from Lustre's per-client-per-file-server bandwidth cap (the reason EFA is
+load-bearing on this client class — GDS is separately out of reach on g6e per **D8**'s documented
+constraint), breaking the "Lustre at maximum" fairness basis (**D7**) invisibly. So the intended transport is **not** a
 tuning preference to be optimised toward; it is a **precondition of the measurement**.
 
 **Enforcement.** The transport in use is evidenced from the client's own report, never inferred from the

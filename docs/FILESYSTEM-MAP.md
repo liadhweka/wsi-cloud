@@ -167,7 +167,7 @@ copy values from another machine:**
 |---|---|---|
 | conda env | The RAPIDS/cuCIM/PyTorch environment (its own interpreter; `CONDA_PREFIX` exported) | Use the **conda** build, not pip — pip cuCIM wheels have been observed to crash on a libstdc++ ABI mismatch inside `read_region()` |
 | `LD_PRELOAD` | The **system** `libcufile`, matched to the installed kernel `nvidia-fs` | The conda env bundles an older copy; the system one matches the kernel module |
-| cuFile config (`CUFILE_ENV_PATH_JSON`) | Per-process cuFile JSON | Per-leg: a compat-mode config on the WEKA leg (no address list); the Lustre-over-EFA config sets what that transport needs (`D-10`) |
+| cuFile config (`CUFILE_ENV_PATH_JSON`) | Per-process cuFile JSON | A compat-mode config on both legs — per **D8** neither leg is expected to run true GDS at this client class, so compat is the end state (a contradicting per-cell path split would reopen `D-10`'s GDS wiring) |
 
 > ⚠ **Scope `LD_PRELOAD` per cell.** cuCIM segfaults inside `read_region()` when a newer libcufile is
 > preloaded over its bundled one (ABI clash), and it links libcufile internally even for CPU reads. Since

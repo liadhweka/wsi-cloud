@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-20T17:02:17.526Z
+  modified: 2026-08-20T17:47:14.777Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -52,7 +52,9 @@ These change what the numbers mean, so resolving them after cells have run means
     cuFile-bounce read, nvidia-fs zero on the kvikio-posix read, `unknown-accounting-off` never fired).
     What remains of the D-6 canary half:** wire the pre-cuFile-cell requirement into the mechanical pre-cell
     canary (with D-7) — on THIS leg the known-good signature is *bounce accounting non-zero* (gds stays 0
-    by determination); nvidia-fs read bytes non-zero is a Leg-B-only expectation. Stats format:
+    by determination); **Leg B's expected signature is the same** (no true GDS there either — documented
+    client-class constraint, STAGES.md D8, checked 2026-08-20; nvidia-fs read bytes non-zero would now be a
+    docs-contradicting finding on either leg, not an expectation). Stats format:
     `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
     Remaining D-6 engineering: the nvidia-fs block parser (Stage-5 trainer AND Stage-6 extractor wiring
     DONE 2026-08-18, smoke-verified) — tracker **D-6**.
@@ -73,7 +75,7 @@ These change what the numbers mean, so resolving them after cells have run means
     6.B = 3.0 TiB; Stage-1 + Stage-6 registers, carried in the contract).** Worst case: datasets 1.75 TiB +
     full-cohort raw-TIFF ~6.4 TiB (retained at rest per the Stage-4 register) + Stage-1.0 read corpora
     **9.5 TiB** (seq 3 TiB + 26 × 256 GiB one-touch regions) + 6.B corpus 3.0 TiB +
-    features/heatmaps/scratch ≲ 1 TiB ≈ **21.7 TiB** — fits FSx at 26.4 TiB (~18% headroom) and the WEKA
+    features/heatmaps/scratch ≲ 1 TiB ≈ **21.7 TiB** — fits FSx at 28,800 GiB = 28.1 TiB (~23% headroom; capacity re-ratified 2026-08-20 — EFA+P2 moves in 4800-GiB steps) and the WEKA
     cluster (61.37 TiB usable) trivially. If FSx headroom feels tight at Leg-B spin-up, raising FSx
     capacity is a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full 1073
     slides — measured work, not dead time, but plan the leg's schedule with it.
@@ -101,7 +103,7 @@ These change what the numbers mean, so resolving them after cells have run means
     4.B and 5.B cell notes carry the configured size (512 MiB library default). Remaining: the 6.A cuCIM
     cells' notes, at the 6.A gate — then delete this item.**
 15. **(resolved 2026-08-19 under the no-obvious-ratification rule — `CHUNK_SIZE=200` re-derived and kept:
-    ~1.01 TiB transient per chunk vs ~50 TiB free on Leg A and ~4–5 TiB planned headroom on the D7-maximum
+    ~1.01 TiB transient per chunk vs ~50 TiB free on Leg A and ~7 TiB planned headroom on the re-ratified 28,800-GiB
     FSx config; identical-on-both-legs rule keeps the default. Stage-6 register carries the arithmetic.
     Delete this entry once Leg B's actual provisioned capacity re-confirms the headroom at its gate.)**
 17. **`env.sh --check-ready` mode — RATIFIED (2026-08-16): build a separate "ready to measure" mode**
@@ -122,7 +124,7 @@ These change what the numbers mean, so resolving them after cells have run means
     cost is re-derived arithmetic. Everything else from the old item is DONE and verified on the rebuilt
     cluster 2026-08-16 (type/count/RAM/capacity/EC/reserved cores; backend AMI recorded, STAGES **D20**;
     `weka_version` pin confirmed by the human; values in env.sh + the contract's recovery fields). Leg B's
-    documented per-client caps (2026-08-15, performance.html): EFA 700 Gbps, EFA+GDS 1200 Gbps — set at
+    documented per-client caps (2026-08-15, performance.html): EFA 700 Gbps (the EFA+GDS 1200 Gbps row is inapplicable — g6e is not a GDS-capable client class, D8 2026-08-20) — set at
     Leg-B spin-up.
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
