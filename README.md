@@ -8,12 +8,15 @@ workload against the same datasets. **Only the filesystem under the mount point 
 
 ## What makes this a real comparison
 
-**One variable.** Held constant and recorded: the compute instance, the workload code, the datasets and
-their byte contents, the magnification contract, the model set, the recording harness. Varied: the mount.
+**One variable.** Held constant and recorded: the compute instance **specification**, the workload code, the
+datasets and their byte contents, the magnification contract, the model set, the recording harness. Varied:
+the mount.
 
-**Two sequential legs.** **Leg A: WEKA**, then **Leg B: FSx for Lustre**, then the synthesis. Because they
-run at different times, comparability is enforced mechanically — Leg A writes a machine-readable
-**environment contract** that Leg B verifies before its first cell.
+**Two legs, concurrent under a stage lag.** **Leg A: WEKA** leads; **Leg B: FSx for Lustre** runs on its own
+identically-specified instance and **never starts stage N until Leg A has completed stage N**; then the
+synthesis. Comparability is enforced mechanically — Leg B verifies a machine-readable **environment
+contract** against Leg A before its first cell (`docs/STAGES.md` **D6** for the full design, including why
+two clients of identical specification satisfy the held-constant contract).
 
 **The full pipeline, not a microbenchmark.** Ingest → cataloging → tissue detection → patching → training →
 foundation-model feature extraction and MIL → clinical inference. Each stage stresses storage differently, and
@@ -37,11 +40,12 @@ place the provisioning asymmetry below stops being a caveat and becomes arithmet
    we sized ourselves. Both sides are sized above what the client can drive, so neither is the constraint —
    and because a single client cannot drive an aggregate maximum, results are framed as **measured at
    single-client scale, with the recorded per-client ceilings beside them**.
-2. **Transport / GPU-direct.** Lustre over EFA supports GPUDirect Storage; whether WEKA on AWS does is
-   **settled empirically by a single cell before the matrix is committed**, because the vendor's materials and
-   the transport analysis disagree. We **keep** the GPU-direct path rather than dropping it for symmetry, and
-   run **both cuFile modes on both filesystems** — which separates the filesystem effect from the transport
-   effect instead of confounding them.
+2. **Transport / GPU-direct.** Lustre over EFA supports GPUDirect Storage; **WEKA on AWS does not — settled
+   empirically** (the vendor's materials and the transport analysis disagreed, so a recorded Phase-0 cell
+   decided it: cuFile on WEKA-over-ENA runs compat/bounce, and every kvikIO cell records its own
+   GPU-direct-vs-bounced byte split as proof of path). We **keep** the GPU-direct path rather than dropping
+   it for symmetry, and run **both cuFile modes on both filesystems** — which separates the filesystem
+   effect from the transport effect instead of confounding them.
 
 **Results precede story.** No document here contains a predicted outcome or a pre-assigned "headline" stage.
 Whatever the benchmark produces is what gets reported, including cells where WEKA loses.
@@ -98,24 +102,27 @@ runs/                  one directory per run, plus INDEX.md, the per-leg resume 
 
 ---
 
-## Getting to a first result
+## How a leg runs
 
-1. **Provision** — `docs/cloud-setup/SPINUP-CHECKLIST.md` (region, quota, instance, S3 + IAM, WEKA cluster).
-2. **Build** — `terraform apply` provisions the cluster and client, and `scripts/bootstrap-instance.sh`
-   (cloud-init) builds the whole client unattended, recording the transport from the client's own evidence.
-   The human runs `claude /login` and pastes **`prompts/handoff-cloud.md`** — the living handoff. *Why the
-   Leg-B mount keeps a prompt (`prompts/prompt-lustre-cluster-cloud.md`):* no Lustre automation exists yet,
-   and its silent-failure mode (a TCP-instead-of-EFA mount) produces believable numbers for the wrong
-   configuration.
-3. **Build + Leg A** — Claude does the deferred script work, proves the pipeline on a throwaway cell, takes a
-   baseline, and runs Leg A. The deferred-work table in `docs/SCRIPT-TRACKER.md` is the authoritative list of
-   what is still owed and what is already done.
-4. **Leg B** — provision FSx at maximum, rebuild the instance from the pinned AMI, verify the environment
-   contract, repeat.
-5. **Synthesis** — the actual deliverable.
+1. **Provision** — `docs/cloud-setup/SPINUP-CHECKLIST.md` (region, quota, instance, S3 + IAM, the leg's
+   filesystem). `terraform apply` provisions everything; `scripts/bootstrap-instance.sh` (cloud-init, leg-
+   dispatched) builds the client unattended, recording the transport from the client's own evidence. The
+   human runs `claude /login` and pastes the session prompt. *Why the Leg-B mount is a gated, human-approved
+   walk first (`prompts/prompt-lustre-cluster-cloud.md`):* its silent-failure mode — a TCP-instead-of-EFA
+   mount — produces believable numbers for the wrong configuration; the validated walk gets baked into
+   `scripts/wsi-lustre-phase2.sh` for every rebuild after.
+2. **Run the leg** — `scripts/run-leg.sh` drives the sweeps in dependency order with resume markers; every
+   cell goes through the recording wrapper; **every completed substage must pass
+   `scripts/verify-substage-closeout.sh` before the next phase launches.** Per-cell results land in the
+   stage roadmaps as they are produced; Leg B additionally holds the stage-lag rule against Leg A's pushed
+   markers.
+3. **Synthesis** — the actual deliverable, built in `docs/RESULTS.md` once both legs' cells exist.
 
-> **Everything the scripts contain about paths, addresses, versions, core counts, and tuning came from a
-> different environment. Re-derive; never copy.**
+Leg A has run through Stage 6.A on this design; the deferred-work table in `docs/SCRIPT-TRACKER.md` remains
+the authoritative list of what is still owed versus done.
+
+> **Everything environment-specific — paths, addresses, versions, core counts, tuning — is re-derived on
+> the live instance and recorded. Never copied from another environment, and never quoted from memory.**
 
 ---
 
@@ -133,4 +140,9 @@ runs/                  one directory per run, plus INDEX.md, the per-leg resume 
 - **Both mounts and local scratch are ephemeral.** git is authoritative for small text; **S3** for heavy
   write-once telemetry and datasets. Run `./backup.sh` before every commit and every teardown.
 - **Claude commits and pushes autonomously**, batched at coherent work-block boundaries, `./backup.sh`
-  first. Destruction (terraform, filesystem deletion) stays human.
+  first — and **always via `scripts/push-safe.sh`**, never bare `git push`: two legs commit concurrently.
+  Destruction (terraform, filesystem deletion) stays human.
+- **Two sessions, strict file ownership** (`CLAUDE.md`, "Concurrent legs"): each leg writes only its own
+  run dirs, `.leg-state/<leg>/`, memory file, contract, summary CSVs (per-leg filenames), and its own
+  rows in the roadmaps; structural docs belong to Leg A's session; `runs/INDEX.md` is union-merged and
+  append-only.
