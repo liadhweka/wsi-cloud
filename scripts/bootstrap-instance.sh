@@ -378,7 +378,7 @@ systemctl enable wsi-lustre-phase2.service
 if systemctl start wsi-lustre-phase2.service; then
   echo "phase-2 oneshot: ran clean now, armed for every boot"
 else
-  warn "phase-2 FAILED (journalctl -u wsi-lustre-phase2.service) — fs left unmounted by design (D16); the gated walk prompt is the manual fallback"
+  warn "phase-2 FAILED (journalctl -u wsi-lustre-phase2.service) — fs left unmounted by design (D16); manual fallback: docs/cloud-setup/LUSTRE-PROVISIONING.md"
 fi
 fi
 
@@ -591,8 +591,8 @@ mkdir -p /etc/motd.d 2>/dev/null || true
   echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
   if [ "$LEG" = "lustre" ] && ! mountpoint -q "$WEKA_MNT"; then
     echo "  3. Lustre NOT mounted — baked phase-2 failed or was gated (D16). Triage:"
-    echo "     journalctl -u wsi-lustre-phase2.service; manual fallback: the gated walk,"
-    echo "     prompts/prompt-lustre-cluster-cloud.md"
+    echo "     journalctl -u wsi-lustre-phase2.service; manual fallback:"
+    echo "     docs/cloud-setup/LUSTRE-PROVISIONING.md"
   else
     echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
   fi

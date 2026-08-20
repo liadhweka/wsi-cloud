@@ -133,8 +133,10 @@ prefixed `WSI-WARN`. Boot log: `/var/log/wsi-bootstrap.log`; triage with `grep W
 ```bash
 tmux new -A -s wsi && cd ~/wsi-cloud && claude   # then /login
 ```
-**Leg B only:** first paste `prompts/prompt-lustre-cluster-cloud.md` — the Lustre mount has no automation
-yet, and its EFA-vs-TCP gate is a hard stop (**D16**), checked *before* anything is spent.
+**Leg B only:** the Lustre mount is automatic (baked `wsi-lustre-phase2.service`, run by the bootstrap and
+re-proven per boot); its EFA-vs-TCP gate is a hard stop (**D16**) enforced *before* anything is spent.
+Verify with `findmnt /mnt/lustre` + `journalctl -u wsi-lustre-phase2.service`; on failure the fs stays
+unmounted by design — triage per `LUSTRE-PROVISIONING.md` (manual fallback there).
 
 ### 3. Paste the living handoff
 > Read the file `prompts/handoff-cloud.md` and do everything it says, then report back.

@@ -59,8 +59,7 @@ run and a Lustre run is which mount `$FS_MOUNT` points at.
 │       └── TEARDOWN-AND-REBUILD.md# THE ONE CHECKLIST: teardown · rebuild · leg switch
 │
 ├── prompts/                   # handoff-cloud.md — THE LIVING HANDOFF, edited to current state at each
-│                              #   teardown (the pre-flight gates on its Written: date) — plus the
-│                              #   Leg-B cluster prompt (prompt-lustre-cluster-cloud.md)
+│                              #   teardown (the pre-flight gates on its Written: date)
 │
 ├── scripts/                   # what we run with — the script library, the cuFile config template
 │   │                          #   and GDS-TUNING-CHECKLIST.md, plus:
@@ -236,7 +235,7 @@ else that is durable lives in the docs, not in memory.
 | Run history | `../runs/INDEX.md` (auto-generated) |
 | **Start here / what do I do next** | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** — the one checklist |
 | Provisioning checklist | `cloud-setup/SPINUP-CHECKLIST.md` |
-| Leg-B filesystem setup | `../prompts/prompt-lustre-cluster-cloud.md` (Leg A's mount is bootstrap-automatic) |
+| Leg-B filesystem setup | Automatic — baked `../scripts/wsi-lustre-phase2.sh`; reasoning/register/fallback: `cloud-setup/LUSTRE-PROVISIONING.md` (Leg A's mount is likewise bootstrap-automatic) |
 | Leg close-out / teardown | `../scripts/teardown-prep.sh` per `cloud-setup/TEARDOWN-AND-REBUILD.md`; the living handoff (`../prompts/handoff-cloud.md`) is edited to current state first |
 | The two mounts | `/mnt/weka` · `/mnt/lustre` — via `$FS_MOUNT` |
 | Datasets (per leg) | `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |

@@ -150,13 +150,18 @@ case "$MODE" in
     # These are what let Leg B prove it matched Leg A, so several consumers expect
     # them in S3: teardown-preflight.sh NO-GOes without them, and Leg B fetches
     # Leg A's contract from s3://<bucket>/env-contracts/ before provisioning
-    # anything (prompts/prompt-lustre-cluster-cloud.md, "Verify comparability
+    # anything (docs/cloud-setup/LUSTRE-PROVISIONING.md, "Verify comparability
     # against Leg A first"; generic form in TEARDOWN-AND-REBUILD.md, Rebuild step 4).
     # ARCHIVE, not MIRROR, deliberately: a --delete sync run from a checkout that
     # happens not to hold the other leg's contract would remove the one artifact
     # whose loss makes the whole comparison unverifiable. Tiny files; never prune.
+    # --no-follow-symlinks (ratified 2026-08-20): this op walks ALL of runs/ just to
+    # match two filenames, and the other leg's git-committed raw -> local-NVMe
+    # symlinks dangle on this box — following them poisons the exit code into a
+    # false FAILED while both contracts upload fine. The filter never matched
+    # symlinked content, so skipping links changes nothing about what uploads.
     do_sync archive "$REPO_ROOT/runs/" "s3://$S3_BUCKET/env-contracts/" \
-      --exclude '*' --include 'env-contract-leg-*.json'
+      --exclude '*' --include 'env-contract-leg-*.json' --no-follow-symlinks
 
     # ---- ARCHIVE group: heavy, write-once, may be pruned locally ----
     # Every run dir's raw/ for this leg. Requires LEG so two legs never collide.

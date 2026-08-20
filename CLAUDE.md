@@ -221,7 +221,7 @@ comparable; a mismatch is a fail-loud condition, not a footnote.
 docs/      what we decided — methodology, roadmaps, findings, provisioning procedure
 scripts/   what we run with — the library, manifests, environment specs
 runs/      what we got — INDEX.md, run directories, the per-leg resume markers, sweep logs, contracts
-prompts/   the living handoff (edited to current state at each teardown) + the Leg-B cluster prompt
+prompts/   the living handoff (edited to current state at each teardown)
 ```
 
 Scripts derive their repo root from their own location and **never hardcode a path.**

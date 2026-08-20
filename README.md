@@ -69,7 +69,7 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Know what a script does | **`docs/SCRIPT-TRACKER.md`** |
 | Find where something lives | **`docs/FILESYSTEM-MAP.md`** |
 | Provision the environment | **`docs/cloud-setup/SPINUP-CHECKLIST.md`** — the reasoning; the build itself is Terraform + `scripts/bootstrap-instance.sh` |
-| Create + mount a filesystem for a leg | Leg A: Terraform + the bootstrap, automatic. Leg B: **`prompts/prompt-lustre-cluster-cloud.md`** — paste-to-Claude |
+| Create + mount a filesystem for a leg | Both automatic: Terraform + the bootstrap (Leg B via the baked `scripts/wsi-lustre-phase2.sh`; reasoning + fallback: **`docs/cloud-setup/LUSTRE-PROVISIONING.md`**) |
 | Know what every path / name / variable should be | **`docs/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
 | Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — Claude runs the whole prep (`scripts/teardown-prep.sh`, gated by `scripts/teardown-preflight.sh`) and hands over a GO; the human only destroys |
 | Pick up where the last session stopped | **`prompts/handoff-cloud.md`** — the living handoff, edited to current state at every teardown, because Claude's context does not survive one |
@@ -97,8 +97,8 @@ docs/
   FILESYSTEM-MAP.md    where everything lives
   NAMING-AND-VARIABLES.md  every path/name/variable with its recommended value
   cloud-setup/         SPINUP-CHECKLIST.md (provisioning reasoning) + TEARDOWN-AND-REBUILD.md (the checklist)
+                       + LUSTRE-PROVISIONING.md (Leg-B reasoning, decision register, manual fallback)
 prompts/               handoff-cloud.md (THE LIVING HANDOFF, edited to current state at each teardown)
-                       + the Leg-B cluster prompt
 scripts/               the script library + manifests/ + env-specs/
 runs/                  one directory per run, plus INDEX.md, the per-leg resume markers, and sweep logs
 ```
@@ -110,10 +110,11 @@ runs/                  one directory per run, plus INDEX.md, the per-leg resume 
 1. **Provision** — `docs/cloud-setup/SPINUP-CHECKLIST.md` (region, quota, instance, S3 + IAM, the leg's
    filesystem). `terraform apply` provisions everything; `scripts/bootstrap-instance.sh` (cloud-init, leg-
    dispatched) builds the client unattended, recording the transport from the client's own evidence. The
-   human runs `claude /login` and pastes the session prompt. *Why the Leg-B mount is a gated, human-approved
-   walk first (`prompts/prompt-lustre-cluster-cloud.md`):* its silent-failure mode — a TCP-instead-of-EFA
-   mount — produces believable numbers for the wrong configuration; the validated walk gets baked into
-   `scripts/wsi-lustre-phase2.sh` for every rebuild after.
+   human runs `claude /login` and pastes the session prompt. *The Leg-B mount is baked*
+   (`scripts/wsi-lustre-phase2.sh`, bootstrap-armed per boot): its silent-failure mode — a
+   TCP-instead-of-EFA mount that produces believable numbers for the wrong configuration — is caught
+   mechanically by the D16 gate plus an LNet counter-proof; reasoning, decision register, and the manual
+   fallback live in `docs/cloud-setup/LUSTRE-PROVISIONING.md`.
 2. **Run the leg** — `scripts/run-leg.sh` drives the sweeps in dependency order with resume markers; every
    cell goes through the recording wrapper; **every completed substage must pass
    `scripts/verify-substage-closeout.sh` before the next phase launches.** Per-cell results land in the

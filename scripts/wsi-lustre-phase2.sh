@@ -262,8 +262,9 @@ else
 fi
 
 if [ "$DRY" -eq 0 ] && [ -f /etc/motd.d/50-wsi ]; then
-  sed -i 's|.*Paste prompts/prompt-lustre-cluster-cloud.md FIRST.*|  3. Lustre is MOUNTED with evidenced EFA (phase-2 baked). Paste the Leg-B handoff.|' /etc/motd.d/50-wsi
-  sed -i '/the Leg-B handoff comes after the walk/d' /etc/motd.d/50-wsi
+  # flip the bootstrap's not-mounted triage block (3 lines) to the mounted state
+  sed -i 's|.*Lustre NOT mounted.*|  3. Lustre is MOUNTED with evidenced EFA (phase-2). Paste the living handoff.|' /etc/motd.d/50-wsi
+  sed -i '/journalctl -u wsi-lustre-phase2.service; manual fallback:/d;/docs\/cloud-setup\/LUSTRE-PROVISIONING.md/d' /etc/motd.d/50-wsi
 fi
 
 step "DONE"
