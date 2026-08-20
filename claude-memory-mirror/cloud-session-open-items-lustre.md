@@ -26,7 +26,12 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 3. **[USER decided to include a 2nd EFA interface at reapply — if applied:** the rebuilt client gets 2 EFA
    NIs and AWS's configurator adds its CPT/CPU-partition options (register L7 covers both counts;
    `FS_CLIENT_RESERVED_CORES=none` still holds). Verify the phase-2 gate + counter-proof on the rebuilt box
-   and record the count in the walk-evidence convention.]
+   and record the count in the walk-evidence convention. **Known fail-loud possibility:** the configurator's
+   CPT path requires ≥1 EFA device per NUMA node (2 nodes on g6e.24xlarge); if EC2 wires both network cards
+   to one node, its precheck raises "No EFA devices found for NUMA node" and phase-2 stops unmounted —
+   recovery is dropping the second interface block and reapplying, or a human-ratified manual LNet config.
+   Also: with >1 interface the primary loses auto-assign public IP (EC2 rule) — the terraform must carry an
+   EIP or the bootstrap has no internet path.]
 
 ## B. Before the first measured cell on this leg
 
