@@ -8,9 +8,11 @@
 >   handoffs happen between Claude *sessions* on the same box. The outgoing session prints the filled
 >   handoff **inline in its final message**; the human copies it, `exit` → `claude` → paste. No teardown
 >   machinery is involved.
-> - **Destroy/rebuild — exceptional.** The filled handoff is written to a **durable file in `tmp/`** and
->   committed (chat text dies with the context; `teardown-preflight.sh` gates on a tmp/ handoff naming the
->   leg). The full checklist in `docs/cloud-setup/TEARDOWN-AND-REBUILD.md` applies.
+> - **Destroy/rebuild — exceptional.** At the human's discretion (worth it when the teardown lands
+>   mid-work), the filled handoff is written to a **durable committed file in `tmp/`** — inline chat text
+>   dies with the context. Memory + repo remain the designed continuity either way; the preflight only
+>   warns, never blocks, on a missing tmp/ handoff. The full checklist in
+>   `docs/cloud-setup/TEARDOWN-AND-REBUILD.md` applies.
 >
 > A received handoff with unfilled `⟨...⟩` blanks is a **NO-GO**: report it and stop. Each leg writes its
 > own handoffs (concurrent legs, D6); never hand off the other leg's state.

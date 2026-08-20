@@ -22,9 +22,10 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    load-bearing; skipping a step loses work permanently.
 2. **Handoff SOP (ratified 2026-08-20, repo-wide):** `prompts/handoff-skeleton.md` is a TEMPLATE, never
    pasted directly. Same-instance session turnover (the normal mode): the outgoing session prints the
-   filled handoff inline in its final message. Destroy/rebuild: the filled handoff goes into `tmp/` as a
-   durable committed file — `teardown-preflight.sh` gates on a dated tmp/ handoff naming the leg. The two
-   provisioning rebuilds already have theirs: `tmp/prompt-r1-validate-and-bake.md`,
+   filled handoff inline in its final message. Destroy/rebuild: OPTIONALLY (human's call, worth it
+   mid-work) the filled handoff goes into `tmp/` as a durable committed file — memory + repo are the
+   designed continuity and the preflight only warns, never blocks, without one. The two provisioning
+   rebuilds already have theirs: `tmp/prompt-r1-validate-and-bake.md`,
    `tmp/prompt-r2-verify-and-benchmark.md`.
 3. **[USER decided to include a 2nd EFA interface at reapply** (proposed tf: repo `tmp/lustre-main.tf`,
    2nd interface + the EIP it forces) **— if applied:** the rebuilt client gets 2 EFA

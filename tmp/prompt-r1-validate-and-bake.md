@@ -81,9 +81,9 @@ entry, memory item B.1/C.
 `./backup.sh` (must exit 0) → commit/push via push-safe (per work block, never mid-edit) → run
 `scripts/teardown-prep.sh` gated by `scripts/teardown-preflight.sh` to a GO → final report: spinup verdict
 with evidence, what got baked, what R2 inherits, terraform proposals if any — then **stop; the human
-destroys and reapplies.** The preflight's handoff gate looks for a dated `tmp/` handoff naming this leg —
-`tmp/prompt-r2-verify-and-benchmark.md` is that handoff; if the gate warns on its age, confirm it still
-describes the intended R2 state (update it if your session changed the plan) and proceed.
+destroys and reapplies.** The preflight's handoff check is warn-only; `tmp/prompt-r2-verify-and-benchmark.md`
+already satisfies it — if it warns on age, confirm the R2 prompt still describes the intended next state
+(update it if your session changed the plan) and proceed.
 
 **Done means:** the from-scratch proof is recorded with its notes deleted, contract verifies fully clean
 end-to-end automatically on the next boot, the recorder half exists and is capture-verified, docs/memory

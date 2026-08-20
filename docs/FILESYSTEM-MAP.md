@@ -59,8 +59,8 @@ run and a Lustre run is which mount `$FS_MOUNT` points at.
 │       └── TEARDOWN-AND-REBUILD.md# THE ONE CHECKLIST: teardown · rebuild · leg switch
 │
 ├── prompts/                   # handoff-skeleton.md — THE HANDOFF TEMPLATE: sessions hand off inline
-│                              #   from it (same instance); rebuilds hand off via a durable tmp/ file
-│                              #   (the pre-flight gates on that file's Written: date + leg)
+│                              #   from it (same instance, the normal mode); rebuilds may hand off via a
+│                              #   durable tmp/ file (optional — memory + repo are the designed continuity)
 │
 ├── tmp/                       # HUMAN-TRANSFER CHANNEL between machines via git (tmux blocks copy-paste):
 │                              #   proposed terraform for the laptop, carried snippets. Transient; never

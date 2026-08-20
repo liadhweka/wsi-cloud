@@ -222,8 +222,9 @@ docs/      what we decided — methodology, roadmaps, findings, provisioning pro
 scripts/   what we run with — the library, manifests, environment specs
 runs/      what we got — INDEX.md, run directories, the per-leg resume markers, sweep logs, contracts
 prompts/   the handoff SKELETON — each session's handoff is written from it: inline in the final
-           message for same-instance session turnover (the normal mode), or into tmp/ as a durable
-           committed file when an instance is destroyed and rebuilt (preflight gates on it)
+           message for same-instance session turnover (the normal mode), or optionally into tmp/ as a
+           durable committed file when an instance is destroyed and rebuilt (memory + repo remain the
+           designed continuity; the preflight warns, never blocks, if no tmp/ handoff exists)
 ```
 
 Scripts derive their repo root from their own location and **never hardcode a path.**

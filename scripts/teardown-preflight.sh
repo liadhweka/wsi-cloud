@@ -77,13 +77,13 @@ else
   warn "no live memory dir at $LIVE (expected if memories were authored straight into the mirror)"
 fi
 
-# ── 2b. The next-session handoff prompt ──────────────────────────────────────────
-# WHY THIS IS A GATE. The teardown checklist calls this "the step most easily
-# skipped and most expensive to skip": a rebuild handoff must be a DURABLE FILE
-# in tmp/, written from prompts/handoff-skeleton.md — with no defined file, a
-# handoff "written" into the chat would die with the very context it exists to
-# carry. (Same-instance session turnover hands off inline and never runs this.)
-hdr "Next-session handoff prompt (tmp/, from the skeleton)"
+# ── 2b. The next-session handoff prompt — REMINDER, NOT A GATE ───────────────────
+# Memory + repo are the DESIGNED continuity (CLAUDE.md: a fresh session loads
+# memory plus the rules and continues) — a handoff prompt is an accelerator on
+# top, written into tmp/ at the human's discretion when a teardown lands
+# mid-work. So its absence warns; it never blocks a GO. (Same-instance session
+# turnover hands off inline and never runs this machinery at all.)
+hdr "Next-session handoff prompt (tmp/, optional)"
 newest=""; newest_epoch=0
 for f in "$REPO"/tmp/*.md; do
   [ -f "$f" ] || continue
@@ -96,11 +96,11 @@ for f in "$REPO"/tmp/*.md; do
   if [ "$w_epoch" -gt "$newest_epoch" ]; then newest="$f"; newest_epoch=$w_epoch; newest_written=$written; fi
 done
 if [ -z "$newest" ]; then
-  bad "no tmp/*.md handoff with a 'Written: YYYY-MM-DD' header naming leg '${LEG:-unset}' — the next session would start not knowing what this one did (write it from prompts/handoff-skeleton.md)"
+  warn "no tmp/ handoff naming leg '${LEG:-unset}' — the next session starts from memory + repo alone (the designed continuity); if this teardown lands mid-work, consider writing one from prompts/handoff-skeleton.md"
 else
   age=$(( ( $(date -u +%s) - newest_epoch ) / 86400 ))
   if [ "$age" -le 2 ]; then ok "handoff $(basename "$newest") written $newest_written (${age}d old)"
-  else warn "newest tmp/ handoff for this leg is ${age}d old ($(basename "$newest"), Written: $newest_written) — confirm it describes THIS teardown, not an earlier state"; fi
+  else warn "newest tmp/ handoff for this leg is ${age}d old ($(basename "$newest"), Written: $newest_written) — confirm it still describes the intended next-session state"; fi
 fi
 
 # ── 3. Git clean and pushed ──────────────────────────────────────────────────────

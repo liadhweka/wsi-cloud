@@ -25,8 +25,9 @@ be the worst possible tool. **Run the pre-flight, then do the destruction yourse
 ## Teardown
 
 > ### How the work splits
-> **Claude does steps 1–6, in order** — the stop-check, the handoff (which only it can write — its context
-> is what's being destroyed), the backup + sync proof, the contract, the commit + push (the autonomous-git
+> **Claude does steps 1–6, in order** — the stop-check, the continuity step (memory current; optionally a
+> handoff, which only it can write — its context is what's being destroyed), the backup + sync proof, the
+> contract, the commit + push (the autonomous-git
 > convention), and the pre-flight — then **hands the human an explicit GO with the rebuild inputs named.
 > The human does exactly one thing: step 7, the destruction** — irreversible, therefore never automated.
 > Steps 3–5 are mechanised as one command (`teardown-prep.sh`); every piece is idempotent, so re-running
@@ -41,21 +42,21 @@ pgrep -fa 'record-run.sh|sweep-stage|run-leg.sh'      # must be empty
 If a sweep is running, let the current cell finish (or note it and forensically rename the partial run dir
 with a `-FAILED-interrupted` suffix — **don't delete it**, per the data-preservation rule).
 
-### 2. Write the next-session handoff into `tmp/` *(Claude — only it can)*
-**This is the step most easily skipped and most expensive to skip** — Claude's context does not survive, so
-whatever isn't written down is genuinely gone. Write the handoff **from `prompts/handoff-skeleton.md`**
-(every `⟨...⟩` filled, durable sections carried) **into a durable file in `tmp/`**, committed — the state as
-of this teardown: `Written:` date, the leg named, what completed, what's mid-stage, anything learned that
-should change the plan, any open question mid-flight. It is what the next session pastes first.
+### 2. Leave continuity behind: memory current; a `tmp/` handoff if mid-work *(Claude — only it can)*
+Claude's context does not survive, so whatever isn't written down is genuinely gone. **The designed
+continuity is memory + repo** — the open-items memory current (resolved items deleted, new items added),
+docs cadence honored, resume markers pushed. **Optionally, at the human's discretion** — worth it whenever
+the teardown lands mid-work — also write a handoff prompt **from `prompts/handoff-skeleton.md`** (every
+`⟨...⟩` filled) into a durable committed file in `tmp/`: an inline chat handoff would die with the context,
+so for a rebuild only a file survives.
 
 *(This checklist is for destroy/rebuild only. Ordinary session turnover on a running instance uses the
 skeleton's same-instance mode — the handoff is printed inline, no teardown machinery — see the skeleton's
 header.)*
 
-> **This step is gated.** The pre-flight NO-GOes unless a `tmp/*.md` handoff exists that names the current
-> `$LEG` and carries a `Written: YYYY-MM-DD` header; it warns when the date is old enough that the file may
-> describe an earlier state — confirm, don't assume. *Why gated:* with no durable file, a handoff can be
-> "written" into a chat message that dies with the context it exists to carry.
+> The pre-flight **warns** (never NO-GOes) when no dated `tmp/*.md` handoff names the current `$LEG`, and
+> when the newest one looks old — a reminder that the next session will start from memory + repo alone;
+> confirm that is intended rather than assuming.
 
 ### 3. Back up the memories, and prove the sync semantics *(Claude)*
 ```bash
@@ -86,7 +87,7 @@ It **re-verifies steps 3–4** (self-test, backup, contract — all idempotent, 
 then **commits and pushes** (the autonomous-git convention; `../CLAUDE.md`), fail-loud: an unpushed repo
 dies with this instance, and the push is what carries `runs/.leg-state/` — the resume markers — to the next
 build. It finishes by running `teardown-preflight.sh`, which prints **GO / NO-GO** after checking: nothing
-in flight · memories mirrored · **a dated `tmp/` handoff naming this leg** · git clean **and pushed** · contract
+in flight · memories mirrored · a `tmp/` handoff for this leg (warn-only — optional) · git clean **and pushed** · contract
 complete **and in S3** · **`env.sh` agreeing with the instance's own metadata** · **every local run dir's
 raw telemetry present in S3** · nothing else stranded on ephemeral storage · rebuild inputs recorded.
 
@@ -138,11 +139,13 @@ re-proven per boot); its EFA-vs-TCP gate is a hard stop (**D16**) enforced *befo
 Verify with `findmnt /mnt/lustre` + `journalctl -u wsi-lustre-phase2.service`; on failure the fs stays
 unmounted by design — triage per `LUSTRE-PROVISIONING.md` (manual fallback there).
 
-### 3. Paste the handoff the last session left in `tmp/`
-> Read the file `tmp/<the handoff the GO named>` and do everything it says, then report back.
+### 3. Paste the handoff, or start from memory + repo
+If the teardown left a `tmp/` handoff (the GO names it):
+> Read the file `tmp/<name>` and do everything it says, then report back.
 
-It carries the current state (written at the teardown, from `prompts/handoff-skeleton.md`) and drives the
-rest: verifying the bootstrap's
+Otherwise the session starts from the designed continuity — the open-items memory is the work list and
+`CLAUDE.md`'s fresh-session reading order applies. Either way the sequence is the same: verifying the
+bootstrap's
 work read-only (`scripts/verify-conda-env.sh` for the environments), the environment-contract `verify`
 against the previous leg (**a VIOLATION is a stop** — any head-to-head number from two non-matching
 environments attributes an environment difference to the filesystem, the one error this project exists to
@@ -162,14 +165,16 @@ as non-negotiable as the recording wrapper.
 
 ## Quick reference
 
-**Teardown:** *Claude, in order:* stop cleanly → write the handoff into `tmp/` (from
-`prompts/handoff-skeleton.md`; dated, leg named) → sync self-test + backup → write the contract →
+**Teardown:** *Claude, in order:* stop cleanly → memory current (+ optionally a `tmp/` handoff from
+`prompts/handoff-skeleton.md` if mid-work) → sync self-test + backup → write the contract →
 `scripts/teardown-prep.sh` (**commit+push** → **pre-flight**) → hand the human the GO with the rebuild
-inputs **and the tmp/ handoff named**. *Human:* destroy (instance, then filesystem; **never the bucket**).
+inputs (naming the tmp/ handoff if one was written). *Human:* destroy (instance, then filesystem; **never
+the bucket**).
 
-**Rebuild:** `terraform apply` → `claude /login` → paste the tmp/ handoff → contract **verify** →
-re-hydrate + byte-verify → Stage-0 proof → `run-leg.sh` resumes.
+**Rebuild:** `terraform apply` → `claude /login` → paste the tmp/ handoff if one exists, else start from
+memory + repo (the designed continuity) → contract **verify** → re-hydrate + byte-verify → Stage-0 proof →
+`run-leg.sh` resumes.
 
-**The three that are easiest to skip and most expensive to skip:** the tmp/ handoff (step 2), the
-environment contract (step 4 — and `env.sh` recovery depends on it), and the pre-flight telemetry check
-(inside step 5 — never `--quick` it before a real teardown).
+**The three that are easiest to skip and most expensive to skip:** the memory/docs currency (step 2 — the
+next session's only continuity), the environment contract (step 4 — and `env.sh` recovery depends on it),
+and the pre-flight telemetry check (inside step 5 — never `--quick` it before a real teardown).

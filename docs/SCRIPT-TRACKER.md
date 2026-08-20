@@ -404,8 +404,9 @@ first Leg-A build the contract cross-check reports itself skipped rather than si
 **Caveats.** Verification only — environment creation stays in the bootstrap.
 
 ### `teardown-preflight.sh` — prove nothing is lost, before tearing down ⭐ NEW
-**What.** Checks nine things and prints **GO / NO-GO**: nothing in flight · live memories mirrored · **a
-dated `tmp/` handoff naming the leg (written from `prompts/handoff-skeleton.md`; warns when old)** · git clean **and pushed** · environment contract complete
+**What.** Checks nine things and prints **GO / NO-GO**: nothing in flight · live memories mirrored · a
+`tmp/` handoff for the leg (**warn-only** — optional, the human's call; memory + repo are the designed
+continuity) · git clean **and pushed** · environment contract complete
 **and in S3** · **`env.sh` agreeing with instance metadata** · **every local run dir's raw telemetry present in
 S3** · nothing else stranded on ephemeral storage · rebuild inputs (AMI, type, region/AZ) recorded.
 **Why it VERIFIES rather than tears down.** Terminating the instance and deleting filesystems is irreversible,
@@ -492,9 +493,8 @@ archive, `git commit` + `git push` (fail-loud — an unpushed repo dies with the
 the preparation makes the steps unskippable, while the **destruction itself stays human** — this script
 never terminates anything.
 
-**Caveats.** Gated on the preflight, which demands a dated `tmp/` handoff naming the leg — so the
-handoff file must exist before this runs (same-instance session turnover hands off inline and never runs
-this machinery). Claude runs the whole prep including the commit + push (the
+**Caveats.** Gated on the preflight; a missing `tmp/` handoff only warns there (optional, the human's
+call — same-instance session turnover hands off inline and never runs this machinery at all). Claude runs the whole prep including the commit + push (the
 autonomous-git convention, ratified 2026-08-15); it also runs `sync-to-s3.sh --self-test` before relying on
 the sync. Only the destruction stays human.
 
