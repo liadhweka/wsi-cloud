@@ -42,7 +42,8 @@ Treat any failure as **a baking bug before an environment bug** (memory item B.1
    from the committed contract via the bootstrap merge); then
    `python3 scripts/env-contract.py write --leg lustre` (env sourced!) and `verify` against Leg A's
    committed contract — every MUST_MATCH must hold (kernel/AMI/driver: the D-17 tripwires); `aws_az`
-   MAY_DIFFER. The three `stage1_*` fields are still unverifiable — you fix that in Phase 2.
+   MAY_DIFFER. The verify must come back **fully clean** — the contract shipped 19/19 at the teardown, so
+   any unverifiable field here means the bootstrap merge dropped something (a baking bug).
 6. Public path via the EIP (you are logged in over it); conda envs (`verify-conda-env.sh` when the
    background build completes — do not block on it); S3 reachable; `backup.sh` exits 0.
 
