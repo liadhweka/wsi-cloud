@@ -5,6 +5,15 @@ storage-provisioning task**: take an FSx for Lustre file system and leave this i
 **EFA-mounted** Lustre filesystem plus every provisioning fact recorded. **You are not benchmarking here** — the
 WSI pipeline is irrelevant to this task and you do not need to read it.
 
+> **This walk is BAKED: `scripts/wsi-lustre-phase2.sh`** (validated by the 2026-08 gated walk; transcript in
+> `runs/2026-08-20-lustre-efa-walk-transcript.md`). On a rebuild, bootstrap arms it as a per-boot systemd
+> oneshot (`wsi-lustre-phase2.service`) — the normal path is that the filesystem is already mounted with
+> counter-proven EFA before any session starts. **This prompt is the manual fallback and the validation
+> reference**: run it (a) when the baked script fails, (b) after any AMI/kernel/client change — the bake is
+> only as valid as the environment it was walked on — or (c) when AWS's procedure changes. What remains
+> session work even on the baked path: the cost + ceiling values (human-ratified, dated), the environment
+> contract write/verify, and the decision register.
+
 **You will run this again** on every rebuild, so keep it repeatable: record commands and outputs rather than
 carrying judgements in your head.
 
@@ -143,57 +152,54 @@ throughput figure for this tier from the same AWS FSx performance page D7 cites,
 quotable as *measured versus documented per-client ceiling* — a single client cannot drive the aggregate
 maximum, and this is what makes that a table instead of an objection.
 
-## Step 3 — EFA software on the instance *(ask first; reboots)*
+## Step 3 — EFA driver on the instance *(read-only on the validated path)*
 
-Install the EC2 EFA software per AWS's current EFA getting-started guide, then verify the provider exists:
-
-```bash
-fi_info -p efa -t FI_EP_RDM        # must list an "efa" provider
-```
-
-**If no `efa` provider appears, STOP AND REPORT IMMEDIATELY** — do not continue to Step 4 or 5. Without the
-generic provider there is no EFA LND for Lustre to use, so continuing only arrives at the Step 5 gate having
-spent two installs and a reboot.
-
-If the kernel enables Yama, relax it for EFA's shared-memory path (skip if the sysctl does not exist):
+**The kernel Lustre data path does not use userspace libfabric** — the LND is `kefalnd`, a kernel module
+talking to the `efa` kernel driver directly. AWS's own FSx install script gates on `modinfo efa` ≥ **2.12.1**
+and installs nothing when the in-kernel driver satisfies it (AL2023 ships it in-kernel). So on this AMI the
+step is a verification, not an install — and `fi_info`/the generic EFA installer/the Yama sysctl are for
+userspace consumers (MPI/NCCL), not for this mount:
 
 ```bash
-sudo sysctl -w kernel.yama.ptrace_scope=0
-echo "kernel.yama.ptrace_scope = 0" | sudo tee /etc/sysctl.d/10-ptrace.conf
+modinfo efa | grep ^version          # must exist and be >= 2.12.1
+ls /sys/class/infiniband/            # must show an efa_* device (else the ENI is missing — terraform, not client)
 ```
 
-**This is the generic EFA stack, not the Lustre EFA configuration** — Step 5 is still required.
+**If either fails, STOP AND REPORT** — that is AMI/kernel drift (`D-17` tripwire) or a launch-time EFA-ENI
+omission; no client-side install fixes the second one.
 
-## Step 4 — Lustre client modules *(ask first; kernel-sensitive; reboots)*
+## Step 4 — Lustre client *(ask first; userspace-only on AL2023 — no kernel risk on the validated path)*
 
-**Settle the kernel question before running anything here.** The two options, and the human picks:
-
-- **Pin the kernel** — install a Lustre client build that matches the *running* kernel, checking
-  availability first against AWS's Lustre-client install page for this OS (Amazon Linux 2023). Keeps the
-  contract intact. **Preferred.**
-- **Accept a kernel change** — take the kernel the client packages require, then **re-baseline both legs**
-  and record that decision. Expensive; only if no matching client build exists.
-
-Add AWS's FSx Lustre client repository per the current AWS "installing the Lustre client" documentation, then
-install, then reboot, then:
+**On AL2023 the Lustre kernel modules ship IN the kernel package** (`staging/lustrefsx`: `lustre.ko`,
+`ksocklnd`, and critically **`kefalnd`, Amazon's EFA LND**), and `lustre-client` in the **base repo** is pure
+userspace (`lfs`, `lctl`, `lnetctl`, `mount.lustre`). There is **no FSx repo to add on AL2023** (that
+procedure is for RHEL/Rocky/CentOS/Ubuntu), no kmod install, no reboot — and therefore no kernel decision:
+the kernel-pin option holds by construction. Verify, then install:
 
 ```bash
-uname -r                           # compare against the value from Step 1
-modinfo lustre | head -3           # module present?
+modinfo kefalnd | head -3          # the EFA LND must exist for the RUNNING kernel — AWS's own support gate
+sudo dnf install -y lustre-client  # userspace only; record the exact NVR
+uname -r                           # MUST equal Step 1's value — any change is a D-17 stop
+lfs --version                      # must be >= 2.15 (metadata-IOPS client requirement)
 ```
 
-> **If the module will not load or does not exist for this kernel**, that is the known trap: the client packages
-> must match the kernel exactly. Surface it with the
-> package-search output for the Lustre client on this OS and let the human choose. **Do not** silently take the
-> kernel-upgrading path.
+> **If `kefalnd` is absent for the running kernel**, the AMI or kernel drifted from the validated one — that
+> is a `D-17` stop with the human, never a silent kernel upgrade. (The old trap — client packages pulling a
+> kernel — can only return if the install stops being userspace-only; the `uname -r` compare is the tripwire.)
 
 ## Step 5 — Configure the Lustre client for EFA — THE GATE *(ask first)*
 
 **This is the step whose absence silently invalidates Leg B.** AWS ships an FSx-Lustre-specific EFA client
-configuration; the generic EFA installer from Step 3 does not do it.
+configuration; nothing in Steps 3–4 does it.
 
-**Fetch the current procedure from AWS's FSx for Lustre client documentation** — this tooling has changed names
-and locations, so do not run a command remembered from anywhere, including this file. Then:
+**The validated procedure is AWS's official bundle, VENDORED at
+`scripts/vendor/configure-efa-fsx-lustre-client/`** (sha-pinned; provenance in its `VENDORED.md`; upstream:
+the "Configuring EFA clients" page's `configure-efa-fsx-lustre-client.zip`). `sudo ./setup.sh` from that
+directory: writes the modprobe tunables (`ksocklnd credits`, `ptlrpcd_per_cpt_max`, CPU-scaled), loads
+`lnet`/`kefalnd`/`ksocklnd`, configures **both** a `tcp` and an `efa` LNet net, sets a UDSP rule preferring
+EFA, and installs `configure-efa-fsx-lustre-client.service` — the systemd oneshot that re-arms all of it on
+every boot. Never pass `--optimized-for-gds` (P5/P6-only per the docs; this client is g6e — **D8**). If AWS's
+page has moved on from the vendored sha, fetch the current bundle, re-walk this gate, and re-vendor. Then:
 
 ```bash
 sudo lnetctl net show          # must list an `efa` net, not only `tcp`
@@ -216,16 +222,24 @@ Record what you did and what `lnetctl net show` printed — the next rebuild nee
 
 ## Step 6 — Mount *(ask first)*
 
-Get the mount command from the FSx console for **this** file system (**FSx → your file system → Attach**) rather
-than typing one from memory: the DNS name and short mount name are specific to it, and the network-transport
-portion of the device string changes once the EFA LND is in use.
+**The device string stays `@tcp:/<mountname>` even on an EFA-enabled file system** — that is the MGS NID
+(the management server speaks tcp); LNet peer discovery plus Step 5's UDSP rule route the **data** over EFA.
+Do not "fix" the mount string to `@efa`, and do not read the transport off the mount string in either
+direction — **the proof is LNet evidence**: after mounting, the OSS peers must show `@efa` NIDs
+(`sudo lnetctl peer show`), and a direct-I/O `dd` must move the **efa** net's `send_count` (one RPC per MiB),
+with tcp near-flat (`sudo lnetctl net show -v 4`). A mount that passes data over tcp despite an efa net being
+up is the D16 silent failure — unmount and stop.
 
 ```bash
 sudo mkdir -p "$FS_MOUNT"
-# ... the console's exact mount command, adjusted for the EFA transport ...
+sudo mount -t lustre -o relatime,flock "$FSX_DNS_NAME@tcp:/$FSX_MOUNT_NAME" "$FS_MOUNT"
 sudo chown "$USER:$USER" "$FS_MOUNT"
 mkdir -p "$FS_MOUNT/data"
 ```
+
+For boot persistence use the fstab shape from the vendored bundle's README —
+`…@tcp:/<mountname> <mnt> lustre defaults,relatime,flock,_netdev,x-systemd.automount,x-systemd.requires=configure-efa-fsx-lustre-client.service,x-systemd.after=configure-efa-fsx-lustre-client.service 0 0`
+— the systemd dependencies keep the automount from racing the EFA configuration.
 
 Then verify and capture the stripe layout:
 
@@ -242,15 +256,60 @@ consistency check derives this filesystem's expected wire-vs-application relatio
 exactly as the other leg's derives from its protection scheme. **The relation must be derived per filesystem and
 never ported across** (`D-5`).
 
-## Step 7 — Tuning is part of the fairness basis, not an optimisation *(propose; ask before applying)*
+## Step 7 — Tuning is part of the fairness basis, not an optimisation *(ratified; see the register below)*
 
 Leaving Lustre untuned would **understate** it and break the "provisioned at maximum" promise as surely as a TCP
-mount would. This is deferred item `D-11`.
+mount would (`D-11`). The ratified client configuration is **AWS's own documented set for this client class**
+(register entries L3–L4 below); the baked phase-2 applies it and installs `wsi-lustre-tuning.service` for
+persistence, because `lctl set_param` does not survive reboot. Any tuning **beyond** the vendor-documented set
+is a new methodology decision: propose it with sources, get it ratified, update register entry L4, and re-run
+every cell measured under the old values.
 
-Fetch AWS's current FSx for Lustre performance and client-tuning guidance plus `doc.lustre.org` on striping, then
-**propose** a stripe layout and client tunables suited to this workload — large-file sequential reads and writes
-alongside small-file metadata pressure — with the reasoning and the source for each. Apply only what the human
-approves, and **record every value applied**, because it is part of what was measured.
+## Leg-B provisioning decision register (ratified 2026-08-20 — whitepaper-bound)
+
+One entry per live decision — what, why, sources. Overwrite entries when a decision changes; never log history.
+
+- **L1 — Transport: EFA, proven by LNet counters, never by configuration.** `FS_TRANSPORT=efa` is written
+  only after a direct-I/O write moves the efa net's `send_count` (~1 RPC/MiB) with tcp near-flat. *Why:* an
+  EFA-enabled FS mounts and runs happily over tcp (the MGS NID is `@tcp`), producing plausible numbers for a
+  transport the project refuses to measure (**D16**); a flag is not proof of behaviour. *Source:* the walk
+  transcript; `docs.aws.amazon.com/fsx/latest/LustreGuide/configure-efa-clients.html`.
+- **L2 — Stripe layout: the AWS default 4-component PFL, unmodified**
+  (`[0,100M)c1 · [100M,10G)c8 · [10G,100G)c16 · [100G,EOF)c32 · stripe_size 1M`; 6 OSTs cap effective stripe
+  at 6). *Why:* the vendor's tuned default on a max-tier file system is the most defensible "as provisioned at
+  maximum" configuration (**D7**) — deviating in either direction invites the you-tuned-it objection; WSI
+  slides (0.5–4 GiB) land in the 8-stripe component and spread across all 6 OSTs. The D12 consistency relation
+  derives from the recorded layout verbatim. *Source:* `…/LustreGuide/performance.html` (striping).
+- **L3 — LNet/module config: AWS's official configure-efa bundle, vendored and sha-pinned.** tcp + efa nets,
+  UDSP preferring efa, `peer_credits 32`, `ksocklnd credits=2560`, `ptlrpcd_per_cpt_max=32` (its CPU-scaled
+  values for 96 vCPU), boot re-arm via its systemd oneshot. *Why:* the vendor's own supported path is the
+  citable fairness basis and carries the reboot re-arm the unattended-overnight rule requires; vendoring pins
+  exactly what the walk validated. *Source:* `scripts/vendor/configure-efa-fsx-lustre-client/VENDORED.md`.
+- **L4 — Client tunables: AWS's documented set for a >64-vCPU / >64-GiB client, exactly and only.**
+  `ldlm lru_max_age=600000`, `lru_size=100×nCPU`, `osc max_rpcs_in_flight=32`, `mdc max_rpcs_in_flight=64`,
+  `mdc max_mod_rpcs_in_flight=50`, `llite statahead_max=512`, `statahead_agl=1`, `statahead_xattr=1`;
+  persisted by `wsi-lustre-tuning.service`. *Why:* skipping the vendor's recommendations understates Lustre
+  (**D7**/`D-11`); going beyond them stops being citable as "the vendor's configuration."
+  *Source:* `…/LustreGuide/performance-tips.html` (fetched 2026-08-20).
+- **L5 — Per-client ceiling: 700 Gbps vendor-documented, with the 200 Gbps instance line rate named as the
+  binding bound in the basis string.** *Why:* the naming-doc rule records the documented per-client cap where
+  one exists (FSx documents 700 Gbps over EFA); the physically binding bound on this client is the g6e.24xlarge
+  line rate, which equals Leg A's recorded ceiling — the basis carries both so "measured vs ceiling" stays
+  honest in the whitepaper. *Sources:* `…/LustreGuide/performance.html`; `docs.aws.amazon.com/ec2/latest/instancetypes/ac.html`.
+- **L6 — Cost basis: FS rate from the official Price List file, metadata IOPS billed above the capacity-based
+  default.** `FS_USD_PER_HR` = 28,800 GiB × $0.673/GB-mo + (48,000 − 12,000 included) × $0.062/IOPS-mo, ÷730 h
+  = **$29.6088/hr** (Seoul, checked 2026-08-20); `SOFTWARE_USD_PER_HR=0` — the FSx rate is software-inclusive
+  (no software/license SKU exists for Lustre in the AmazonFSx price list); EFA carries no charge (no SKU).
+  *Why the included-IOPS reading:* the pricing page's "included based on storage capacity" plus the performance
+  page's "pay for IOPS above the default"; 28,800 GiB sits in the 12,000-included bracket. **Standing check:**
+  verify against the first invoice; if all 48,000 bill, the rate is $30.6279/hr — correct the value, dated, as
+  a provisioning-cost event. *Source:* `pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonFSx/current/ap-northeast-2/index.json`.
+- **L7 — One EFA interface, deliberately.** g6e.24xlarge has 2 network cards but **each card is documented at
+  200 Gbps baseline and peak** — one EFA interface on card 0 already reaches the full instance line rate, so a
+  second interface adds no documented headroom (`MaximumEfaInterfaces: 2` remains available). *Standing
+  trigger:* if this leg's knee/peak calibration plateaus below expectation with the efa net unsaturated,
+  attaching the second interface (instance stop required) is the first candidate — a ratified provisioning
+  event, not silent tuning. *Source:* `aws ec2 describe-instance-types g6e.24xlarge` (NetworkCards, 2026-08-20).
 
 ## Step 8 — Complete the configuration and re-verify
 

@@ -349,6 +349,39 @@ fi
 [ -n "$FS_TRANSPORT" ] && py_set FS_TRANSPORT "$FS_TRANSPORT"
 chown $U:$U "$ENV_SH"
 
+if [ "$LEG" = "lustre" ]; then
+step "6.1 baked lustre phase-2 (EFA config -> D16 gate -> counter-proven mount)"
+# Baked from the 2026-08 gated walk; scripts/wsi-lustre-phase2.sh is IDEMPOTENT and
+# runs as a per-boot oneshot deliberately: after any reboot it re-proves the EFA
+# data path with LNet counters and UNMOUNTS + fails loudly if data is moving over
+# tcp — the fstab automount alone would happily mount over a tcp-only lnet (the MGS
+# NID is @tcp), which is exactly the silent D16 failure. This unit is the 3am-
+# mechanical trigger for that.
+cat > /etc/systemd/system/wsi-lustre-phase2.service <<PHASE2UNIT
+[Unit]
+Description=WSI baked lustre phase-2 (EFA gate + counter-proven mount, D16)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=$REPO/scripts/wsi-lustre-phase2.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+PHASE2UNIT
+systemctl daemon-reload
+systemctl enable wsi-lustre-phase2.service
+if systemctl start wsi-lustre-phase2.service; then
+  echo "phase-2 oneshot: ran clean now, armed for every boot"
+else
+  warn "phase-2 FAILED (journalctl -u wsi-lustre-phase2.service) — fs left unmounted by design (D16); the gated walk prompt is the manual fallback"
+fi
+fi
+
 step "6.5 cuFile/GDS wiring (D-10 mechanical half)"
 # weka leg: ENA, no RDMA — kvikIO cells run libcufile in COMPAT mode by design
 # (D8 runs the kvikIO path on both legs); gdscheck reporting GDS unsupported is a
@@ -557,8 +590,9 @@ mkdir -p /etc/motd.d 2>/dev/null || true
   echo "     only if that fails: add ~/GITHUB-DEPLOY-KEY.pub as a repo deploy key with write access)"
   echo "  2. tmux; cd ~/wsi-cloud; claude  ->  /login"
   if [ "$LEG" = "lustre" ] && ! mountpoint -q "$WEKA_MNT"; then
-    echo "  3. Paste prompts/prompt-lustre-cluster-cloud.md FIRST (gated EFA + mount walk);"
-    echo "     the Leg-B handoff comes after the walk"
+    echo "  3. Lustre NOT mounted — baked phase-2 failed or was gated (D16). Triage:"
+    echo "     journalctl -u wsi-lustre-phase2.service; manual fallback: the gated walk,"
+    echo "     prompts/prompt-lustre-cluster-cloud.md"
   else
     echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
   fi

@@ -42,7 +42,7 @@ for a valid cell.
 | **D-10** | **cuFile config + env VALUES** | ~20 files reference conda/cuFile/CUDA paths. They now genuinely read documented variables (`$CONDA_ENVS_DIR`, `$LIBCUFILE_PRELOAD`, `$CUFILE_ENV_PATH_JSON`) and refuse if unset — audit items `A-4`/`A-5`; before that they were literals from another machine. What remains is the **values** | Leg A's values are set by the bootstrap (`LIBCUFILE_PRELOAD` located and exported; a compat-mode `cufile.json` generated per instance). Remaining: rewrite `../scripts/GDS-TUNING-CHECKLIST.md` (bannered) for the compat-mode reality, and Leg B's cufile config — **also compat per D8's documented client-class constraint (no true GDS on g6e on either leg; checked 2026-08-20)**; a GDS-side branch is needed only if a per-cell path split ever contradicts that |
 | **D-11** | **Lustre tuning** | Stripe layout + client tunables | Needs FSx (Leg B). **Part of "Lustre at maximum" (D7)** — skipping it would understate Lustre and break the fairness basis. AWS's documented client tunings for >64 GiB-RAM and >64-vCPU clients (ldlm LRU, ptlrpcd/ksocklnd module params, max_rpcs_in_flight, statahead) apply to this instance class — take them from the live FSx performance-tips page at Leg-B setup, never from a recalled copy |
 | **D-16** | **Lustre client-side EFA configuration** | `../prompts/prompt-lustre-cluster-cloud.md` | The documented Leg-B flow enables EFA on the instance and the file system and installs the generic EC2 EFA software, but nothing yet runs AWS's FSx-Lustre EFA client setup — so the client would mount over TCP, forfeiting the per-server-cap escape — the load-bearing EFA benefit on this client class (GDS is separately unreachable on g6e, **D8**) — while still producing numbers. That breaks the "Lustre at maximum" basis (**D7**) invisibly. Needs the current AWS FSx-Lustre client docs, plus a gate that `lnetctl net show` lists an `efa` net |
-| **D-17** | **Leg-B kernel-vs-contract policy — and the same "latest is not a pin" hazard in the NVIDIA stack** | `../prompts/prompt-lustre-cluster-cloud.md`, `bootstrap-instance.sh` | The documented Lustre client install can pull a newer kernel, and `kernel` is a `MUST_MATCH` contract field — so the Leg-B procedure can invalidate the comparison the contract exists to protect; any OS upgrade can too. Decide: pin the kernel and install a client build matching the running kernel (per AWS's install docs for this OS), or re-baseline both legs. **Same class, one layer down:** the client AMI is now pinned in terraform (`client_instance_ami_id`, 2026-08-15), but the bootstrap installs the NVIDIA driver via unpinned `dnf install nvidia-driver`, so `DRIVER_VERSION`/`NVIDIA_FS_VERSION` can drift between legs independently of the AMI. Before Leg B's rebuild: pin the driver package to Leg A's recorded versions (dnf versionlock or explicit package versions from the contract), or accept the contract verify as the tripwire and re-baseline deliberately if it fires |
+| **D-17** | **Kernel half RESOLVED on the validated path (2026-08-20); the NVIDIA-stack "latest is not a pin" hazard remains** | `bootstrap-instance.sh` | **Resolved by construction:** on AL2023 the Lustre kernel modules (incl. `kefalnd`) ship in the kernel itself and `lustre-client` is userspace-only from the base repo, so the client install cannot move the kernel — and `wsi-lustre-phase2.sh` asserts `uname -r` unchanged across the install (the tripwire if that ever stops being true; a firing is a stop-and-decide with the human, never a silent upgrade). **Still open, same class one layer down:** the client AMI is pinned in terraform (`client_instance_ami_id`, 2026-08-15), but the bootstrap installs the NVIDIA driver via unpinned `dnf install nvidia-driver`, so `DRIVER_VERSION`/`NVIDIA_FS_VERSION` can drift between legs independently of the AMI (both matched on the 2026-08-20 Leg-B build). Before any future rebuild: pin the driver package to the contract-recorded versions (dnf versionlock or explicit NVRs), or knowingly accept the contract verify as the tripwire |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 | **D-24** | **Cross-leg artifact fingerprints — three of four classes BUILT + CAPTURED (`dataset-bytes`, `coords-3.0`, `rawtiff-4d`); remaining: `features-6a`, once 6.A first produces output** | `fingerprint.py` `capture`/`compare`; definitions in `STAGES.md` **D19** + the `RUNBOOK.md` gates table | The four per-class definitions are decided (dataset bytes: hashed path/size/md5 list; coords: per-slide count + array-contents hash; raw-TIFF: byte count + tile grid; features: counts + shapes + dtype, never values) and fingerprints land in `runs/.leg-state/<leg>/fingerprints/` (git-tracked). Each class is built against its first real artifact, never imagined output — `features-6a` refuses until 6.A's features exist; build it right after, before 6.B.3/7.3 consume them |
 | **D-25** | **Stage 6.C's 4-GPU partition** | `orchestrate-concurrent-stage6c.sh` | 6.C pins MIL to GPU 0 "to stay out of the extract workload's GPUs" while extract requests 4 — an isolation that is arithmetically impossible on a 4-GPU instance. Decide the partition (extract on 3 + MIL on 1, or accept sharing and delete the isolation claim); either way the retention denominators change, so it is a methodology call, not a tuning one |
@@ -446,7 +446,10 @@ local-NVMe RAID0+XFS scratch, WEKA login via Secrets Manager and mount verificat
 `env.sh` generated from instance evidence (IMDS plus the client's own transport report → `FS_TRANSPORT`),
 `LIBCUFILE_PRELOAD` located and exported, the compat-mode `cufile.json`, both conda envs from
 `env-specs/` with smoke tests, HF token + model prefetch from SSM, memory restore, and the S3 dataset
-hydration guard.
+hydration guard. **On the lustre leg it additionally arms `wsi-lustre-phase2.service`** (step 6.1, after
+env.sh exists): a per-boot oneshot running the baked `wsi-lustre-phase2.sh` — EFA config, the D16 gate, the
+counter-proven mount — so a Leg-B rebuild mounts hands-off; a phase-2 failure is a `WSI-WARN` at build time
+(the fs stays unmounted by design) and the motd's step 3 flips to the triage path.
 
 **Why.** A rebuild is `terraform apply` plus `claude /login` and nothing else — every manual step in a
 rebuild is a place the two legs can silently diverge, and the environment contract can only verify what a
@@ -928,13 +931,32 @@ that is an ownership violation to report (`CLAUDE.md`, "Concurrent legs"), never
 
 ---
 
-### `wsi-lustre-phase2.sh` — the baked lustre mount automation (`D6`/`D16`/`D-17`) — **NOT YET BAKED**
-**What.** Ships as a loud refusal carrying the baked shape (six stages, every failure a WSI-FATAL that
-leaves the filesystem unmounted). Content comes from the first gated walk's validated transcript.
-**Why.** The FSx EFA client procedure cannot be safely automated before it has been validated once on the
-pinned AMI/kernel — the walk validates, this file inherits. Until baked, invoking it refuses.
-**Caveats.** The D16 gate is structural: `lnetctl net show` must evidence `efa` or there is no mount and no
-fallback — a TCP waiver is a human decision.
+### `wsi-lustre-phase2.sh` — the baked lustre mount automation (`D6`/`D16`/`D-17`) — **BAKED; from-scratch proof pending the next rebuild**
+**What.** Six idempotent stages from the 2026-08 gated walk's validated transcript
+(`../runs/2026-08-20-lustre-efa-walk-transcript.md`): preflight (FSx spec asserted against the ratified
+experiment, EFA ENI present, DNS + 988) → in-kernel EFA driver gate (≥ 2.12.1, AWS's own minimum) →
+userspace-only `lustre-client` install with a kernel-unchanged assertion → the vendored AWS configure-efa
+bundle (LNet tcp+efa, UDSP, boot re-arm oneshot) → the **D16 HARD GATE** (`lnetctl net show` must list an
+`efa` net, up) → mount + **counter-proof** (100 MiB direct `dd` must move efa `send_count` ~1 RPC/MiB, else
+UNMOUNT + FATAL) + chown/fstab + the ratified D-11 tuning with its persistence unit
+(`wsi-lustre-tuning.service`) + env.sh facts + motd. `--dry-run` prints every mutating command.
+**Why.** The walk validates once; this file inherits, so every rebuild after the first is hands-off — and the
+per-boot re-run re-proves the transport, because the fstab automount alone would mount happily over a
+tcp-only LNet (the MGS NID is `@tcp`): the exact silent failure D16 exists for.
+**I/O.** Reads `/etc/wsi-bootstrap.conf` (FSx facts from terraform — never retyped) + the vendored bundle;
+writes the mount, `/etc/fstab`, two systemd units, env.sh facts (`FS_TRANSPORT=efa` only after the counter
+proof), motd. Root-only.
+**Caveats.** **Proof-pending:** ran clean and idempotently on the walk box (2026-08-20) but has not yet built
+a box from scratch — on the first rebuild, treat a failure as a baking bug before an environment one. The
+D16 gate is structural: no efa net → no mount, no fallback — a TCP waiver is a human decision in writing.
+Cost/ceiling values and the environment contract stay session work (human-ratified numbers). Lustre-only by
+`LEG` guard; Leg A never executes any of it.
+
+### `vendor/configure-efa-fsx-lustre-client/` — AWS's official EFA-for-Lustre bundle, sha-pinned
+**What.** The unmodified upstream `setup.sh` + `configure-efa-fsx-lustre-client.py` + README the 2026-08-20
+walk validated; provenance and hash in `VENDORED.md`. **Why.** A rebuild must run *validated* code, not
+whatever the URL serves that day — pin versions that affect numbers. To upgrade: re-fetch, re-walk the D16
+gate, re-vendor with a new sha.
 
 ---
 
