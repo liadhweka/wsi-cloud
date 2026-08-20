@@ -20,12 +20,12 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 1. **Teardown checklist is mandatory before the destroy** (`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`):
    `scripts/teardown-prep.sh` gated by `scripts/teardown-preflight.sh` must GO first — its order is
    load-bearing; skipping a step loses work permanently.
-2. **Handoff rewrites are OFF for the two provisioning rebuilds (ratified 2026-08-20):** the R1/R2 session
-   prompts live in repo `tmp/` (`prompt-r1-validate-and-bake.md`, `prompt-r2-verify-and-benchmark.md`) —
-   the human pastes those; `prompts/handoff-cloud.md` is Leg A's live document and Leg B never edits it.
-   The living-handoff convention resumes for Leg B once benchmarking starts (post-R2). Caveat:
-   `teardown-preflight.sh` gates on the handoff's `Written:` date — expect and surface that warning at
-   teardown prep; do not "fix" it by editing Leg A's file.
+2. **Handoff SOP (ratified 2026-08-20, repo-wide):** `prompts/handoff-skeleton.md` is a TEMPLATE, never
+   pasted directly. Same-instance session turnover (the normal mode): the outgoing session prints the
+   filled handoff inline in its final message. Destroy/rebuild: the filled handoff goes into `tmp/` as a
+   durable committed file — `teardown-preflight.sh` gates on a dated tmp/ handoff naming the leg. The two
+   provisioning rebuilds already have theirs: `tmp/prompt-r1-validate-and-bake.md`,
+   `tmp/prompt-r2-verify-and-benchmark.md`.
 3. **[USER decided to include a 2nd EFA interface at reapply** (proposed tf: repo `tmp/lustre-main.tf`,
    2nd interface + the EIP it forces) **— if applied:** the rebuilt client gets 2 EFA
    NIs and AWS's configurator adds its CPT/CPU-partition options (register L7 covers both counts;

@@ -72,7 +72,7 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Create + mount a filesystem for a leg | Both automatic: Terraform + the bootstrap (Leg B via the baked `scripts/wsi-lustre-phase2.sh`; reasoning + fallback: **`docs/cloud-setup/LUSTRE-PROVISIONING.md`**) |
 | Know what every path / name / variable should be | **`docs/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
 | Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — Claude runs the whole prep (`scripts/teardown-prep.sh`, gated by `scripts/teardown-preflight.sh`) and hands over a GO; the human only destroys |
-| Pick up where the last session stopped | **`prompts/handoff-cloud.md`** — the living handoff, edited to current state at every teardown, because Claude's context does not survive one |
+| Pick up where the last session stopped | The handoff the previous session wrote from **`prompts/handoff-skeleton.md`** — inline in its final message (same-instance turnover, the normal mode) or as a durable `tmp/` file (rebuilds), because Claude's context does not survive the session |
 
 **A fresh Claude session continuing this work** starts with the `cloud-session-open-items` memory (the work
 list) → `PROJECT-THESIS.md` → `CLAUDE.md` → `docs/STAGES.md` → the relevant roadmap → `docs/RUNBOOK.md` before
@@ -98,7 +98,8 @@ docs/
   NAMING-AND-VARIABLES.md  every path/name/variable with its recommended value
   cloud-setup/         SPINUP-CHECKLIST.md (provisioning reasoning) + TEARDOWN-AND-REBUILD.md (the checklist)
                        + LUSTRE-PROVISIONING.md (Leg-B reasoning, decision register, manual fallback)
-prompts/               handoff-cloud.md (THE LIVING HANDOFF, edited to current state at each teardown)
+prompts/               handoff-skeleton.md (THE HANDOFF TEMPLATE — sessions hand off inline from it;
+                       rebuilds hand off via a durable tmp/ file)
 scripts/               the script library + manifests/ + env-specs/
 runs/                  one directory per run, plus INDEX.md, the per-leg resume markers, and sweep logs
 ```

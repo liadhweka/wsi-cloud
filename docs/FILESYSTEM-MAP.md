@@ -58,8 +58,9 @@ run and a Lustre run is which mount `$FS_MOUNT` points at.
 │       ├── SPINUP-CHECKLIST.md#     the reasoning behind the provisioning choices
 │       └── TEARDOWN-AND-REBUILD.md# THE ONE CHECKLIST: teardown · rebuild · leg switch
 │
-├── prompts/                   # handoff-cloud.md — THE LIVING HANDOFF, edited to current state at each
-│                              #   teardown (the pre-flight gates on its Written: date)
+├── prompts/                   # handoff-skeleton.md — THE HANDOFF TEMPLATE: sessions hand off inline
+│                              #   from it (same instance); rebuilds hand off via a durable tmp/ file
+│                              #   (the pre-flight gates on that file's Written: date + leg)
 │
 ├── tmp/                       # HUMAN-TRANSFER CHANNEL between machines via git (tmux blocks copy-paste):
 │                              #   proposed terraform for the laptop, carried snippets. Transient; never
@@ -240,7 +241,7 @@ else that is durable lives in the docs, not in memory.
 | **Start here / what do I do next** | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** — the one checklist |
 | Provisioning checklist | `cloud-setup/SPINUP-CHECKLIST.md` |
 | Leg-B filesystem setup | Automatic — baked `../scripts/wsi-lustre-phase2.sh`; reasoning/register/fallback: `cloud-setup/LUSTRE-PROVISIONING.md` (Leg A's mount is likewise bootstrap-automatic) |
-| Leg close-out / teardown | `../scripts/teardown-prep.sh` per `cloud-setup/TEARDOWN-AND-REBUILD.md`; the living handoff (`../prompts/handoff-cloud.md`) is edited to current state first |
+| Leg close-out / teardown | `../scripts/teardown-prep.sh` per `cloud-setup/TEARDOWN-AND-REBUILD.md`; the handoff is written into `../tmp/` first, from `../prompts/handoff-skeleton.md` |
 | The two mounts | `/mnt/weka` · `/mnt/lustre` — via `$FS_MOUNT` |
 | Datasets (per leg) | `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
 | Coords · raw-TIFF | `$FS_MOUNT/tissue-detection/3.0/…` · `$FS_MOUNT/data/<ds>-rawtiff/` |

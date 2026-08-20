@@ -41,21 +41,21 @@ pgrep -fa 'record-run.sh|sweep-stage|run-leg.sh'      # must be empty
 If a sweep is running, let the current cell finish (or note it and forensically rename the partial run dir
 with a `-FAILED-interrupted` suffix — **don't delete it**, per the data-preservation rule).
 
-### 2. Edit the living handoff to current state *(Claude — only it can)*
+### 2. Write the next-session handoff into `tmp/` *(Claude — only it can)*
 **This is the step most easily skipped and most expensive to skip** — Claude's context does not survive, so
-whatever isn't written down is genuinely gone. **`prompts/handoff-cloud.md` is the living handoff**: edit it
-to the state as of this teardown — update its `Written:` date and the leg it names, what completed, what's
-mid-stage, anything learned that should change the next leg's plan, and any open question mid-flight. It is
-what the next session pastes first.
+whatever isn't written down is genuinely gone. Write the handoff **from `prompts/handoff-skeleton.md`**
+(every `⟨...⟩` filled, durable sections carried) **into a durable file in `tmp/`**, committed — the state as
+of this teardown: `Written:` date, the leg named, what completed, what's mid-stage, anything learned that
+should change the plan, any open question mid-flight. It is what the next session pastes first.
 
-For the WEKA→Lustre switch specifically, the next session also needs what Leg A taught us that changes Leg B,
-and the corpus-size decision if it was made (the open-items memory, the 6.B corpus-sizing item).
+*(This checklist is for destroy/rebuild only. Ordinary session turnover on a running instance uses the
+skeleton's same-instance mode — the handoff is printed inline, no teardown machinery — see the skeleton's
+header.)*
 
-> **This step is gated.** The pre-flight NO-GOes unless `prompts/handoff-cloud.md` carries a
-> `Written: YYYY-MM-DD` header whose date is current — the file is git-tracked, so the *previous*
-> teardown's copy would otherwise pass a bare existence check. It also warns if the file never names the
-> current `$LEG`, so name it. *Why gated:* with no defined file, a handoff can be "written" into a chat
-> message that dies with the context it exists to carry.
+> **This step is gated.** The pre-flight NO-GOes unless a `tmp/*.md` handoff exists that names the current
+> `$LEG` and carries a `Written: YYYY-MM-DD` header; it warns when the date is old enough that the file may
+> describe an earlier state — confirm, don't assume. *Why gated:* with no durable file, a handoff can be
+> "written" into a chat message that dies with the context it exists to carry.
 
 ### 3. Back up the memories, and prove the sync semantics *(Claude)*
 ```bash
@@ -86,7 +86,7 @@ It **re-verifies steps 3–4** (self-test, backup, contract — all idempotent, 
 then **commits and pushes** (the autonomous-git convention; `../CLAUDE.md`), fail-loud: an unpushed repo
 dies with this instance, and the push is what carries `runs/.leg-state/` — the resume markers — to the next
 build. It finishes by running `teardown-preflight.sh`, which prints **GO / NO-GO** after checking: nothing
-in flight · memories mirrored · **the living handoff dated today** · git clean **and pushed** · contract
+in flight · memories mirrored · **a dated `tmp/` handoff naming this leg** · git clean **and pushed** · contract
 complete **and in S3** · **`env.sh` agreeing with the instance's own metadata** · **every local run dir's
 raw telemetry present in S3** · nothing else stranded on ephemeral storage · rebuild inputs recorded.
 
@@ -138,10 +138,11 @@ re-proven per boot); its EFA-vs-TCP gate is a hard stop (**D16**) enforced *befo
 Verify with `findmnt /mnt/lustre` + `journalctl -u wsi-lustre-phase2.service`; on failure the fs stays
 unmounted by design — triage per `LUSTRE-PROVISIONING.md` (manual fallback there).
 
-### 3. Paste the living handoff
-> Read the file `prompts/handoff-cloud.md` and do everything it says, then report back.
+### 3. Paste the handoff the last session left in `tmp/`
+> Read the file `tmp/<the handoff the GO named>` and do everything it says, then report back.
 
-It carries the current state (edited at the last teardown) and drives the rest: verifying the bootstrap's
+It carries the current state (written at the teardown, from `prompts/handoff-skeleton.md`) and drives the
+rest: verifying the bootstrap's
 work read-only (`scripts/verify-conda-env.sh` for the environments), the environment-contract `verify`
 against the previous leg (**a VIOLATION is a stop** — any head-to-head number from two non-matching
 environments attributes an environment difference to the filesystem, the one error this project exists to
@@ -161,14 +162,14 @@ as non-negotiable as the recording wrapper.
 
 ## Quick reference
 
-**Teardown:** *Claude, in order:* stop cleanly → edit the living handoff (`prompts/handoff-cloud.md`,
-dated, leg named) → sync self-test + backup → write the contract → `scripts/teardown-prep.sh`
-(**commit+push** → **pre-flight**) → hand the human the GO with the rebuild inputs. *Human:* destroy
-(instance, then filesystem; **never the bucket**).
+**Teardown:** *Claude, in order:* stop cleanly → write the handoff into `tmp/` (from
+`prompts/handoff-skeleton.md`; dated, leg named) → sync self-test + backup → write the contract →
+`scripts/teardown-prep.sh` (**commit+push** → **pre-flight**) → hand the human the GO with the rebuild
+inputs **and the tmp/ handoff named**. *Human:* destroy (instance, then filesystem; **never the bucket**).
 
-**Rebuild:** `terraform apply` → `claude /login` (Leg B: the Lustre prompt first) → paste the living
-handoff → contract **verify** → re-hydrate + byte-verify → Stage-0 proof → `run-leg.sh` resumes.
+**Rebuild:** `terraform apply` → `claude /login` → paste the tmp/ handoff → contract **verify** →
+re-hydrate + byte-verify → Stage-0 proof → `run-leg.sh` resumes.
 
-**The three that are easiest to skip and most expensive to skip:** the living-handoff edit (step 2), the
+**The three that are easiest to skip and most expensive to skip:** the tmp/ handoff (step 2), the
 environment contract (step 4 — and `env.sh` recovery depends on it), and the pre-flight telemetry check
 (inside step 5 — never `--quick` it before a real teardown).

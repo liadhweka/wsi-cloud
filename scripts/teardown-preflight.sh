@@ -79,29 +79,28 @@ fi
 
 # ── 2b. The next-session handoff prompt ──────────────────────────────────────────
 # WHY THIS IS A GATE. The teardown checklist calls this "the step most easily
-# skipped and most expensive to skip": prompts/handoff-cloud.md is THE living
-# handoff, edited to current state at every teardown — with no defined file, a
-# handoff "written" into the chat would die with the very context it exists to carry.
-hdr "Next-session handoff prompt"
-HANDOFF="$REPO/prompts/handoff-cloud.md"
-if [ ! -f "$HANDOFF" ]; then
-  bad "no prompts/handoff-cloud.md — the next session would start not knowing what this one did"
-else
-  # It is git-tracked, so the PREVIOUS teardown's copy would sail through a mere
-  # existence check. Require a dated header and refuse a stale one.
-  written=$(grep -m1 -oE '^Written:[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2}' "$HANDOFF" \
+# skipped and most expensive to skip": a rebuild handoff must be a DURABLE FILE
+# in tmp/, written from prompts/handoff-skeleton.md — with no defined file, a
+# handoff "written" into the chat would die with the very context it exists to
+# carry. (Same-instance session turnover hands off inline and never runs this.)
+hdr "Next-session handoff prompt (tmp/, from the skeleton)"
+newest=""; newest_epoch=0
+for f in "$REPO"/tmp/*.md; do
+  [ -f "$f" ] || continue
+  [ "$(basename "$f")" = "README.md" ] && continue
+  grep -qi "${LEG:-}" "$f" 2>/dev/null || continue
+  written=$(grep -m1 -oE 'Written:[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2}' "$f" \
             | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' || true)
-  w_epoch=""
-  [ -n "$written" ] && w_epoch=$(date -u -d "$written" +%s 2>/dev/null || true)
-  if [ -z "$w_epoch" ]; then
-    bad "handoff-cloud.md has no usable 'Written: YYYY-MM-DD' header — this teardown's state is indistinguishable from the last one's"
-  else
-    age=$(( ( $(date -u +%s) - w_epoch ) / 86400 ))
-    if [ "$age" -le 1 ]; then ok "handoff prompt written $written (${age}d old)"
-    else bad "handoff prompt is ${age}d old (Written: $written) — it describes an earlier teardown, not this one"; fi
-  fi
-  grep -qi "${LEG:-}" "$HANDOFF" 2>/dev/null \
-    || warn "handoff prompt never mentions leg '${LEG:-unset}' — confirm it is about this leg"
+  [ -n "$written" ] || continue
+  w_epoch=$(date -u -d "$written" +%s 2>/dev/null || echo 0)
+  if [ "$w_epoch" -gt "$newest_epoch" ]; then newest="$f"; newest_epoch=$w_epoch; newest_written=$written; fi
+done
+if [ -z "$newest" ]; then
+  bad "no tmp/*.md handoff with a 'Written: YYYY-MM-DD' header naming leg '${LEG:-unset}' — the next session would start not knowing what this one did (write it from prompts/handoff-skeleton.md)"
+else
+  age=$(( ( $(date -u +%s) - newest_epoch ) / 86400 ))
+  if [ "$age" -le 2 ]; then ok "handoff $(basename "$newest") written $newest_written (${age}d old)"
+  else warn "newest tmp/ handoff for this leg is ${age}d old ($(basename "$newest"), Written: $newest_written) — confirm it describes THIS teardown, not an earlier state"; fi
 fi
 
 # ── 3. Git clean and pushed ──────────────────────────────────────────────────────

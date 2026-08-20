@@ -594,7 +594,7 @@ mkdir -p /etc/motd.d 2>/dev/null || true
     echo "     journalctl -u wsi-lustre-phase2.service; manual fallback:"
     echo "     docs/cloud-setup/LUSTRE-PROVISIONING.md"
   else
-    echo "  3. Paste prompts/handoff-cloud.md (the living handoff)"
+    echo "  3. Paste the tmp/ handoff the last session wrote (convention: prompts/handoff-skeleton.md)"
   fi
   echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
   echo "Triage: grep WSI- /var/log/wsi-bootstrap.log"

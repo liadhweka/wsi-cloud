@@ -221,7 +221,9 @@ comparable; a mismatch is a fail-loud condition, not a footnote.
 docs/      what we decided — methodology, roadmaps, findings, provisioning procedure
 scripts/   what we run with — the library, manifests, environment specs
 runs/      what we got — INDEX.md, run directories, the per-leg resume markers, sweep logs, contracts
-prompts/   the living handoff (edited to current state at each teardown)
+prompts/   the handoff SKELETON — each session's handoff is written from it: inline in the final
+           message for same-instance session turnover (the normal mode), or into tmp/ as a durable
+           committed file when an instance is destroyed and rebuilt (preflight gates on it)
 ```
 
 Scripts derive their repo root from their own location and **never hardcode a path.**
