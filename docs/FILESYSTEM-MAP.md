@@ -61,6 +61,10 @@ run and a Lustre run is which mount `$FS_MOUNT` points at.
 ├── prompts/                   # handoff-cloud.md — THE LIVING HANDOFF, edited to current state at each
 │                              #   teardown (the pre-flight gates on its Written: date)
 │
+├── tmp/                       # HUMAN-TRANSFER CHANNEL between machines via git (tmux blocks copy-paste):
+│                              #   proposed terraform for the laptop, carried snippets. Transient; never
+│                              #   authoritative; no script reads it (rules in its README.md)
+│
 ├── scripts/                   # what we run with — the script library, the cuFile config template
 │   │                          #   and GDS-TUNING-CHECKLIST.md, plus:
 │   ├── manifests/             #   dataset manifests

@@ -23,7 +23,8 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 2. **The living handoff (`prompts/handoff-cloud.md`) must be edited to Leg-B-current state before teardown**
    (the rebuilt box's motd says "paste the living handoff") — explicitly NOT the provisioning session's
    deliverable; it is a teardown-checklist step.
-3. **[USER decided to include a 2nd EFA interface at reapply — if applied:** the rebuilt client gets 2 EFA
+3. **[USER decided to include a 2nd EFA interface at reapply** (proposed tf: repo `tmp/lustre-main.tf`,
+   2nd interface + the EIP it forces) **— if applied:** the rebuilt client gets 2 EFA
    NIs and AWS's configurator adds its CPT/CPU-partition options (register L7 covers both counts;
    `FS_CLIENT_RESERVED_CORES=none` still holds). Verify the phase-2 gate + counter-proof on the rebuilt box
    and record the count in the walk-evidence convention. **Known fail-loud possibility:** the configurator's
