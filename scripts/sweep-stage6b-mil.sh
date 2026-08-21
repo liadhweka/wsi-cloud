@@ -77,12 +77,17 @@ run_cell() {
   local approval_tag=""
   [ "$MODEL" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
 
+  # D-30/D13: the roadmap's regime row — the full-cohort feature corpus (~53 GB/model)
+  # fits host RAM, so the workload is memory-served steady-state by construction after
+  # the first pass, identically on both legs. The note wording below IS the reconciler's
+  # achieved-evidence for a warm declaration (wsi_agg_helper.reconcile_cache_state).
   CUDA_VISIBLE_DEVICES=2 \
+  RECORD_CACHE_STATE=warm \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.B.3 \
-    --note "${approval_tag}Stage 6.B.3 canonical CLAM MIL training cell — real features from 6.A. model=${MODEL} batch_size=1 num_workers=${num_workers}. WHY: grounds the Phase 2 metadata-stress story in actual production training context. Storage concurrency driven by DataLoader num_workers (each worker prefetches one slide); batch_size=1 matches mahmoodlab/CLAM canonical (collate_MIL + CLAM_SB.forward([N,D])). num_workers is the customer-quotable IO axis." \
+    --note "${approval_tag}Stage 6.B.3 canonical CLAM MIL training cell — real features from 6.A. model=${MODEL} batch_size=1 num_workers=${num_workers}. WHY: grounds the Phase 2 metadata-stress story in actual production training context. Storage concurrency driven by DataLoader num_workers (each worker prefetches one slide); batch_size=1 matches mahmoodlab/CLAM canonical (collate_MIL + CLAM_SB.forward([N,D])). num_workers is the customer-quotable IO axis. Regime: warm — the per-model feature corpus fits host RAM, so this is memory-served steady-state by construction after the first pass (Stage-6 roadmap regime row); it measures MIL throughput, not storage bandwidth — the cold storage number belongs to 6.B.2's synthetic corpus." \
     -- "$PY" "$TRAINER" \
        --features-dir "$FEATURES_DIR" \
        --embedding-dim "$EMBED_DIM" \

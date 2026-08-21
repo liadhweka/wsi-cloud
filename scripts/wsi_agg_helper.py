@@ -345,7 +345,7 @@ def reconcile_cache_state(run_dir):
         rc = re.search(r"^rc=(\d+)", txt, re.M)
         ok = bool(rc and rc.group(1) == "0")
         evidence.append(("cache-evidence.txt", ok))
-    for name in ("reader-summary.json", "extraction-summary.json"):
+    for name in ("reader-summary.json", "extraction-summary.json", "file-io-summary.json"):
         p = run_dir / name
         if p.exists():
             try:
@@ -359,6 +359,31 @@ def reconcile_cache_state(run_dir):
                 return out
             if v is not None:
                 evidence.append((name, bool(v)))
+
+    # Stage 7's inference worker emits per-cell discard COUNTERS, not a boolean
+    # (its per-slide discards can partially fail; a cold cell with any failed —
+    # or never-attempted — discard read those slides WARM, per the worker's own
+    # summary wording).
+    p = run_dir / "inference-summary.json"
+    if p.exists():
+        try:
+            d = json.loads(p.read_text())
+        except json.JSONDecodeError:
+            d = {}
+        att = d.get("n_client_page_cache_discards_attempted")
+        failed = d.get("n_client_page_cache_discards_failed") or 0
+        if att is not None:
+            if declared == "cold" and (att == 0 or failed > 0):
+                out["verdict"] = "CONTRADICTED"
+                out["detail"] = (f"inference-summary.json: discards attempted={att} failed={failed} — "
+                                 "slides whose discard failed or was never attempted read WARM")
+                return out
+            if declared == "warm" and att > 0:
+                out["verdict"] = "CONTRADICTED"
+                out["detail"] = (f"inference-summary.json: {att} per-slide discards attempted on a "
+                                 "declared-warm cell — the cell did not run its declared regime")
+                return out
+            evidence.append(("inference-summary.json", True))
 
     # A cold declaration whose one-touch construction is its evidence carries
     # it in the note (the drivers write the construction there); accept a

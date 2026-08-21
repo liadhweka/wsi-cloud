@@ -111,7 +111,24 @@ run_single_inference_cell() {
   local heatmap_dir="${FS_MOUNT}/heatmaps/${stage_tag}/${cell_name}"
   mkdir -p "$heatmap_dir"
 
-  local note="${approval_tag}Stage 7 single-process inference cell: backend=${backend} model=${model} cache=${cache} heatmap=${heatmap_format} N_slides=${max_slides}. WHY: per-slide inference latency baseline with per-phase decomposition (tissue/extract/MIL/heatmap-write). The clinical-deployment-decisive 'T seconds per inference' customer number."
+  # D-30/D13: the cell's declared regime IS its cache argument (the roadmap
+  # names each 7.1/7.3/7.6 cell's regime). Cold cells' achieved evidence is the
+  # worker's per-slide discard counters in inference-summary.json (the
+  # reconciler consumes them); warm cells' evidence is the construction wording
+  # in the note. kvikIO cells declare RECORD_KVIKIO_CELL=1, so a missing
+  # path_accounting split fails loud as INCOMPLETE (D8/D21) — the Stage-7
+  # worker's accounting wiring is tracked in D-6 and must land before this
+  # stage runs.
+  local regime_note
+  if [ "$cache" = "cold" ]; then
+    regime_note="Regime: cold — per-slide client page-cache discard, achieved counters recorded in inference-summary.json; the server-side cache is not clearable and its residual is stated, not hidden (D13)."
+  else
+    regime_note="Regime: warm — cache carries over across slides by design; re-inference on already-read slides is production steady-state."
+  fi
+  local kvik_env=()
+  [ "$backend" = "kvikio" ] && kvik_env=("RECORD_KVIKIO_CELL=1")
+
+  local note="${approval_tag}Stage 7 single-process inference cell: backend=${backend} model=${model} cache=${cache} heatmap=${heatmap_format} N_slides=${max_slides}. WHY: per-slide inference latency baseline with per-phase decomposition (tissue/extract/MIL/heatmap-write). The clinical-deployment-decisive 'T seconds per inference' customer number. ${regime_note}"
 
   echo ""
   echo "=========================================="
@@ -119,11 +136,13 @@ run_single_inference_cell() {
   echo "  backend=$backend model=$model cache=$cache heatmap=$heatmap_format gpu=$gpu N_slides=$max_slides"
   echo "=========================================="
 
+  env "${kvik_env[@]}" \
   CUDA_VISIBLE_DEVICES="$gpu" \
   LD_PRELOAD="$preload" \
   CUFILE_ENV_PATH_JSON="$CUFILE_JSON" \
   CONDA_PREFIX="$CONDA_ENV" \
   OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 \
+  RECORD_CACHE_STATE="$cache" \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
@@ -160,7 +179,26 @@ run_orchestrator_cell() {
   local approval_tag=""
   [ "${INFER_MODEL:-virchow2}" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
 
-  local note="${approval_tag}Stage 7 orchestrator cell: workloads={$workloads} N_concurrent=${n_concurrent} per-process bs=${bs} (per Q8 schedule) ramp=${ramp}s runtime=${runtime}s. WHY: per-slide latency under concurrent inference load — the clinical-deployment SLA number ('p99 latency stays under X sec at deployment concurrency Y'). bs scales DOWN with N to keep per-GPU memory bounded."
+  # D-30/D13 declaration: inference-only orchestrator cells run the stated
+  # INFER_CACHE_POLICY (roadmap: 7.2/7.6 warm — production-realistic; a clinical
+  # deployment processes many slides per shift). Mixed multi-workload cells
+  # (7.5) have NO roadmap-defined regime row — their declaration is an open
+  # methodology call (same class as 6.C's, tracked in the open-items memory);
+  # until it is ratified they stay undeclared, and the wrapper marks them
+  # INCOMPLETE by design rather than running under an invented label.
+  local declare_env=()
+  local regime_note=""
+  if [ "$workloads" = "inference" ]; then
+    local policy=warm
+    [[ "$extra_env" == *INFER_CACHE_POLICY=cold* ]] && policy=cold
+    declare_env+=("RECORD_CACHE_STATE=$policy")
+    regime_note=" Regime: ${policy} — cache carries over across slides and processes by design; production steady-state (a clinical deployment processes many slides per shift)."
+  fi
+  # The inference workload's backend defaults to kvikio (Table 5); only an
+  # explicit cucim override makes this a non-kvikIO cell.
+  [[ "$extra_env" != *INFER_BACKEND=cucim* ]] && declare_env+=("RECORD_KVIKIO_CELL=1")
+
+  local note="${approval_tag}Stage 7 orchestrator cell: workloads={$workloads} N_concurrent=${n_concurrent} per-process bs=${bs} (per Q8 schedule) ramp=${ramp}s runtime=${runtime}s. WHY: per-slide latency under concurrent inference load — the clinical-deployment SLA number ('p99 latency stays under X sec at deployment concurrency Y'). bs scales DOWN with N to keep per-GPU memory bounded.${regime_note}"
 
   echo ""
   echo "=========================================="
@@ -170,6 +208,7 @@ run_orchestrator_cell() {
 
   # Per-cell env (caller may override INFER_* via $extra_env)
   env $extra_env \
+  "${declare_env[@]}" \
   RECORD_RUN_DIR="$run_dir" \
   INFERENCE_BATCH_SIZE="$bs" \
   N_CONCURRENT="$n_concurrent" \
@@ -253,9 +292,11 @@ tier4_streaming() {
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s7-7.4.a-streaming-loop-virchow2-kvikio"
   echo "[$now_utc] cell: 7.4.a-streaming-loop-virchow2-kvikio"
+  RECORD_CACHE_STATE=warm \
+  RECORD_KVIKIO_CELL=1 \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" --run-name "7.4.a-streaming-loop-virchow2-kvikio" --stage 7.4 \
-    --note "Stage 7.4.a streaming clinical loop — 10 slides emitted @ 60s cadence (~1500 slides/day rate). Captures end-to-end 'scanner-to-pathologist-visibility' wallclock per slide + cross-slide queueing if inference falls behind scanner. WHY: the end-to-end workflow bookend — it also captures cross-slide queueing if inference falls behind the emitter, which a per-slide latency number alone hides." \
+    --note "Stage 7.4.a streaming clinical loop — 10 slides emitted @ 60s cadence (~1500 slides/day rate). Captures end-to-end 'scanner-to-pathologist-visibility' wallclock per slide + cross-slide queueing if inference falls behind scanner. WHY: the end-to-end workflow bookend — it also captures cross-slide queueing if inference falls behind the emitter, which a per-slide latency number alone hides. Regime: warm — cache carries over across the loop by design; production steady-state (roadmap 7.4.a)." \
     -- "$STREAMING" --run-dir "$run_dir" --n-slides 10 --cadence-s 60 \
        --model virchow2 --backend kvikio --manifest "$BRCA_SUBSET_MANIFEST"
   _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi
@@ -263,10 +304,11 @@ tier4_streaming() {
   now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   run_dir="$REPO/runs/${now_utc}-${LEG}-s7-7.4.b-read-after-write"
   echo "[$now_utc] cell: 7.4.b-read-after-write"
+  RECORD_CACHE_STATE=na-visibility-consistency-cell \
   RECORD_RUN_DIR="$run_dir" \
   CONDA_PREFIX="$CONDA_ENV" \
   "$RECORD" --run-name "7.4.b-read-after-write" --stage 7.4 \
-    --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: read-after-write visibility is a CONSISTENCY property, not a bandwidth one, and the two filesystems have different metadata architectures — so there is no reason to assume they behave the same. SCOPE: single-client (writer and reader are processes on one instance); cross-client consistency would need a second instance and is out of scope." \
+    --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: read-after-write visibility is a CONSISTENCY property, not a bandwidth one, and the two filesystems have different metadata architectures — so there is no reason to assume they behave the same. SCOPE: single-client (writer and reader are processes on one instance); cross-client consistency would need a second instance and is out of scope. Regime: na — the cold/warm axis deliberately does not apply: the measured quantity is visibility latency, and the reader's first read is warm by construction (bytes written milliseconds earlier), labelled cache-served and never quoted as a storage read (D13)." \
     -- "$PY" "$RAW_HELPER" \
        --output-dir "${FS_MOUNT}/heatmaps/7.4b" \
        --n-slides 20 --bytes-per-write 50000000 \

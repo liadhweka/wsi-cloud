@@ -80,7 +80,35 @@ run_cell() {
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.2-${cell_name}"
 
-  local note="Stage 6.B.2 cell on fs=${LEG}: corpus=${corpus_name} pattern=${pattern} n_processes=${n_processes} ramp=${ramp}s steady=${runtime}s. WHY: the small-file/metadata substage — structurally NOT bandwidth-bound, so it stays discriminating even under a client-capped ceiling, and it exercises whichever metadata architecture this leg's filesystem uses. Per-file-load latency CSV is the PRIMARY headline source. Cache state recorded as achieved, not asserted (D13)."
+  # D-30/D13: per-cell regime from the ratified corpus-vs-cache arithmetic
+  # (Stage-6 register + cold-cache section, 2026-08-16): a corpus exceeding
+  # client RAM (768 GiB) + the LARGER of the two server-side caches (WEKA
+  # backends 1536 GiB vs FSx ~768 GiB at 28,800 GiB) = 2304 GiB is cold by
+  # construction; anything smaller is server-cache-servable and is labelled and
+  # reported as CACHE-SERVED (RUNBOOK pre-cell canary rule), never as cold
+  # storage throughput. The threshold is one fixed value on both legs — the
+  # identical-corpus-definition rule — so the label derives from the corpus
+  # NAME, never from per-leg state. The reader's client-side discard still runs
+  # on every cell (uniform client-cold entry; achieved recorded in
+  # file-io-summary.json) — the label reflects the server side, which no client
+  # action clears.
+  local n_files size_mb corpus_gib cache_state regime_note
+  n_files=$(sed -n 's/^syn.*-N\([0-9]\+\)-.*$/\1/p' <<<"$corpus_name")
+  size_mb=$(sed -n 's/^syn.*-sz\([0-9]\+\)MB-.*$/\1/p' <<<"$corpus_name")
+  if [ -z "$n_files" ] || [ -z "$size_mb" ]; then
+    echo "[ERR] cannot derive corpus size from name '$corpus_name' — refusing to run an unlabelable cell (D13/D21)" >&2
+    return 2
+  fi
+  corpus_gib=$(( n_files * size_mb / 1024 ))
+  if (( corpus_gib > 2304 )); then
+    cache_state=cold
+    regime_note="Regime: cold by construction — corpus ${corpus_gib} GiB exceeds client RAM + the larger server-side cache (2304 GiB floor, Stage-6 register); client page cache additionally discarded at cell start, achieved recorded in file-io-summary.json."
+  else
+    cache_state=warm
+    regime_note="Regime: warm (cache-served) — corpus ${corpus_gib} GiB sits under the 2304 GiB cold floor (Stage-6 register), so server-side residency can serve the steady-state window regardless of the client-side discard at entry; reported as cache-served, never as cold storage throughput."
+  fi
+
+  local note="Stage 6.B.2 cell on fs=${LEG}: corpus=${corpus_name} pattern=${pattern} n_processes=${n_processes} ramp=${ramp}s steady=${runtime}s. WHY: the small-file/metadata substage — structurally NOT bandwidth-bound, so it stays discriminating even under a client-capped ceiling, and it exercises whichever metadata architecture this leg's filesystem uses. Per-file-load latency CSV is the PRIMARY headline source. Cache state recorded as achieved, not asserted (D13). ${regime_note}"
 
   echo ""
   echo "=========================================="
@@ -88,6 +116,7 @@ run_cell() {
   echo "  corpus=$corpus_dir n=$n_processes pattern=$pattern ramp=${ramp}s steady=${runtime}s"
   echo "=========================================="
 
+  RECORD_CACHE_STATE="$cache_state" \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
@@ -116,11 +145,12 @@ prep() {
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.1-${cell_name}"
 
+  RECORD_CACHE_STATE=na-write-cell \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.B.1 \
-    --note "Stage 6.B.1 prep: generate the standard synthetic corpus suite for 6.B.2/B.3. WHY: corpus generation is itself a real recordable write workload against $FS_MOUNT — a sustained-write data point worth capturing per CLAUDE.md recording philosophy. ⏳ Corpus size is open item 5b: it must exceed the client page cache PLUS the larger of the two filesystems' server-side caches, using ONE identical definition on both legs." \
+    --note "Stage 6.B.1 prep: generate the standard synthetic corpus suite for 6.B.2/B.3. WHY: corpus generation is itself a real recordable write workload against $FS_MOUNT — a sustained-write data point worth capturing per CLAUDE.md recording philosophy. Corpus sizing is the ratified Stage-6 register decision (production-scale corpus past the 2304 GiB cold floor; one identical definition on both legs); the per-(N_files, file_size, dtype) grid is fixed at substage entry against the measured 6.A Tier-2 file-size distribution." \
     -- "$PY" "$GENERATOR" \
        --standard-suite \
        --output-base "$CORPUS_BASE" \
@@ -148,11 +178,12 @@ smoke() {
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.2-${cell_name}"
 
+  RECORD_CACHE_STATE=warm \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
     --stage 6.B.2 \
-    --note "Stage 6.B.2 smoke cell — validates reader + recording infra end-to-end." \
+    --note "Stage 6.B.2 smoke cell — validates reader + recording infra end-to-end. Regime: warm (cache-served) — the smoke corpus is far under the 2304 GiB cold floor; steady-state cache-served by construction. Diagnostic only, never quote." \
     -- "$PY" "$READER" \
        --corpus-dir "$smoke_dir" \
        --pattern random \

@@ -165,23 +165,77 @@ def capture_rawtiff(fs_mount):
     return out
 
 
+def capture_features(fs_mount):
+    import torch
+    out = {"class": "features-6a", "groups": {}}
+    # The model set is a held-constant contract input; the dataset tags are the
+    # three 6.A tiers' output dirs. Slides enumerate from the same manifests the
+    # extraction cells consumed — a missing .pt refuses rather than
+    # fingerprinting a partial corpus.
+    manifests = {
+        "brca50": REPO / "scripts" / "manifests" / "tcga-brca-stage4a-subset.tsv",
+        "brca_full": REPO / "scripts" / "manifests" / "tcga-brca-full40x-stage4a-format.tsv",
+        "cam16": REPO / "scripts" / "manifests" / "camelyon16-stage4a-subset.tsv",
+    }
+    for model in ("virchow2", "gigapath", "uni2-h"):
+        for ds, manifest in manifests.items():
+            root = Path(fs_mount) / "features" / "6.A" / model / ds
+            slides = {}
+            for sid in _manifest_ids(manifest):
+                p = root / f"{sid}.pt"
+                if not p.is_file() or p.stat().st_size == 0:
+                    sys.exit(f"fingerprint: MISSING/empty feature file {p} — refuse to fingerprint a partial corpus")
+                try:
+                    obj = torch.load(p, map_location="cpu", weights_only=True, mmap=True)
+                except (TypeError, RuntimeError):
+                    obj = torch.load(p, map_location="cpu", weights_only=True)
+                feats, coords, n_tiles = obj["features"], obj["coords"], int(obj["n_tiles"])
+                # Internal consistency: the header count and both tensors must
+                # agree, or the file is corrupt in a way downstream cannot see.
+                if not (feats.shape[0] == coords.shape[0] == n_tiles):
+                    sys.exit(f"fingerprint: INTERNAL MISMATCH in {p}: n_tiles={n_tiles}, "
+                             f"features={tuple(feats.shape)}, coords={tuple(coords.shape)}")
+                slides[sid] = {
+                    "n_tiles": n_tiles,
+                    "feat_shape": list(feats.shape),
+                    "feat_dtype": str(feats.dtype),
+                    "coords_shape": list(coords.shape),
+                    "coords_dtype": str(coords.dtype),
+                }
+            if not slides:
+                sys.exit(f"fingerprint: no manifest ids for {model}/{ds} — nothing to fingerprint")
+            dims = {s["feat_shape"][1] for s in slides.values()}
+            if len(dims) != 1:
+                sys.exit(f"fingerprint: {model}/{ds} carries mixed embedding dims {sorted(dims)}")
+            out["groups"][f"{model}/{ds}"] = {
+                "basis": "per (model, dataset): file count, per-slide tile count, tensor shape + dtype — "
+                         "never tensor values (D19: GPU reduction order breaks bitwise equality; shapes "
+                         "are the storage-independent invariant)",
+                "file_count": len(slides),
+                "total_tiles": sum(s["n_tiles"] for s in slides.values()),
+                "embedding_dim": dims.pop(),
+                "aggregate_sha256": sha(sorted(
+                    (k, v["n_tiles"], v["feat_shape"][1], v["feat_dtype"]) for k, v in slides.items())),
+                "slides": slides,
+            }
+    return out
+
+
 def capture(cls):
     fs_mount, leg = env("FS_MOUNT"), env("LEG")
     fn = {"dataset-bytes": capture_dataset_bytes, "coords-3.0": capture_coords,
-          "rawtiff-4d": capture_rawtiff}.get(cls)
+          "rawtiff-4d": capture_rawtiff, "features-6a": capture_features}.get(cls)
     if fn is None:
-        # features-6a: built when its artifact first exists — a fingerprint
-        # format designed against imagined output gets rewritten (D-24).
-        sys.exit(f"fingerprint: class {cls!r} not implemented yet — build it against the real artifact "
-                 "when 6.A first produces output (D-24)")
+        sys.exit(f"fingerprint: unknown class {cls!r}")
     data = fn(fs_mount)
     data["leg"] = leg
     out = REPO / "runs" / ".leg-state" / leg / "fingerprints" / f"{cls}.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
-    view = {k: v for k, v in data.items() if k != "datasets"}
-    for ds, d in data.get("datasets", {}).items():
-        view[ds] = {k: v for k, v in d.items() if k != "slides"}
+    view = {k: v for k, v in data.items() if k not in ("datasets", "groups")}
+    for grp_key in ("datasets", "groups"):
+        for ds, d in data.get(grp_key, {}).items():
+            view[ds] = {k: v for k, v in d.items() if k != "slides"}
     print(json.dumps(view, indent=2, sort_keys=True))
     print(f"fingerprint: wrote {out}")
     return 0

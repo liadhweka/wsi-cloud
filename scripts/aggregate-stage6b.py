@@ -397,6 +397,8 @@ def main():
     for p in sorted(glob.glob(pattern_b2)):
         d = Path(p)
         if not d.is_dir(): continue
+        if "FAILED" in d.name:
+            print(f"  skip forensic-renamed: {d.name}", file=sys.stderr); continue
         if "smoke" in d.name:
             print(f"  skip smoke: {d.name}", file=sys.stderr); continue
         row = extract_b2_summary(d)
@@ -414,6 +416,8 @@ def main():
     for p in sorted(glob.glob(pattern_b3)):
         d = Path(p)
         if not d.is_dir(): continue
+        if "FAILED" in d.name:
+            print(f"  skip forensic-renamed: {d.name}", file=sys.stderr); continue
         if "smoke" in d.name: continue
         row = extract_b3_summary(d)
         if row is None: continue

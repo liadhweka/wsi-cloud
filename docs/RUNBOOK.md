@@ -411,8 +411,8 @@ visible in the throughput data.
 | 6.A features | Per (model, dataset): file count, per-slide tile count, tensor shape + dtype — never tensor values (GPU reduction order breaks bitwise equality) | 6.B.3 and 7.3 |
 
 Fingerprints are captured into `runs/.leg-state/<leg>/fingerprints/<class>.json` (git-tracked, so the
-second leg compares against the first's committed capture); the `capture`/`compare` CLI is built once 3.0
-has real output (tracker `D-24`).
+second leg compares against the first's committed capture) by `fingerprint.py capture <class>`;
+`fingerprint.py compare` exits non-zero on any mismatch. All four classes are built and captured on Leg A.
 
 ---
 

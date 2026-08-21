@@ -548,8 +548,9 @@ tile-grid dimensions; pixel content is not hashed because it follows from source
 and count + grid catch every truncation or mis-magnification failure mode at a fraction of the read cost.
 **(4) 6.A features** — per (model, dataset): file count, per-slide tile count, tensor shape and dtype —
 **deliberately not tensor values**: GPU reduction order makes bitwise equality a false gate, and shapes are
-the storage-independent invariant. *Build timing:* the `capture`/`compare` CLI is built once 3.0 has real
-output (tracker `D-24`); a fingerprint format designed against imagined output would be rewritten anyway.
+the storage-independent invariant. *Build timing:* each class is built against its first real artifact,
+never imagined output — a format designed against imagined output would be rewritten anyway
+(`fingerprint.py`; all four classes built + captured on Leg A).
 
 **D18 — Run-to-run variance is measured, and deltas must clear the noise band.** *Why:* every cell is
 single-shot by default and the two legs run days apart on rebuilt hardware in a shared cloud — without a

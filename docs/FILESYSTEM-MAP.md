@@ -241,7 +241,7 @@ else that is durable lives in the docs, not in memory.
 | **Start here / what do I do next** | **`cloud-setup/TEARDOWN-AND-REBUILD.md`** — the one checklist |
 | Provisioning checklist | `cloud-setup/SPINUP-CHECKLIST.md` |
 | Leg-B filesystem setup | Automatic — baked `../scripts/wsi-lustre-phase2.sh`; reasoning/register/fallback: `cloud-setup/LUSTRE-PROVISIONING.md` (Leg A's mount is likewise bootstrap-automatic) |
-| Leg close-out / teardown | `../scripts/teardown-prep.sh` per `cloud-setup/TEARDOWN-AND-REBUILD.md`; the handoff is written into `../tmp/` first, from `../prompts/handoff-skeleton.md` |
+| Leg close-out / teardown | `../scripts/teardown-prep.sh` per `cloud-setup/TEARDOWN-AND-REBUILD.md`; a durable handoff into `../TEMP/` from `../prompts/handoff-skeleton.md` is optional — the preflight warns, never blocks |
 | The two mounts | `/mnt/weka` · `/mnt/lustre` — via `$FS_MOUNT` |
 | Datasets (per leg) | `$FS_MOUNT/data/{tcga-brca,camelyon16}/` |
 | Coords · raw-TIFF | `$FS_MOUNT/tissue-detection/3.0/…` · `$FS_MOUNT/data/<ds>-rawtiff/` |

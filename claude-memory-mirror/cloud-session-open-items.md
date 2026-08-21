@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-20T21:45:24.536Z
+  modified: 2026-08-21T15:38:15.034Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -28,10 +28,6 @@ These change what the numbers mean, so resolving them after cells have run means
    ~10 Hz, identically on both legs; Stage-2 register). Remaining: the implementation (tracker `D-34`,
    `record-run.sh`'s recorder set) plus its does-the-rate-perturb verification — must land before the first
    Stage 2/3 cell.** Detail: `docs/Stage-2-Cataloging.md`.
-2. **(resolved 2026-08-16 — WEKA-on-AWS does NOT do true GDS; cuFile path = compat/bounce, strict-GDS open
-   refused. Evidence + consequences recorded in `docs/Stage-4-Patching.md` § GPU-direct design; determination
-   run dirs `…-d8gds-*`. No mode-controlled paired cell on Leg A.)** Delete this entry once the Stage-4/5/6
-   drivers' best-available-mode settings are confirmed against it at their gates.
 3. **Consistency relation — WEKA bands CALIBRATED on the 6xlarge cluster (2026-08-16:
    `calibrate-canary-bands.sh`, 12 cells; anchors reproduce — write 1.456 vs 1.455, read 1.042 vs 1.034;
    4K derived separately: read 1.424, write 1.372 → smallbs_widening 1.366; `check` PASSES end-to-end).
@@ -81,8 +77,10 @@ These change what the numbers mean, so resolving them after cells have run means
     slides — measured work, not dead time, but plan the leg's schedule with it.
 13. **Worker measurement-correctness remainders — the 4.C half is DONE (2026-08-15):** `gds_engaged` now
     carries the recorded three-layer path-accounting verdict via the new `wsi_cufile_accounting.py` +
-    `read-tiles-kvikio.py` wiring (see tracker **D-6** for what remains: Stage-5/6 worker wiring before
-    Stage 5 runs; the recorded Phase-0 cell post-switch; the INCOMPLETE wiring with D-30). Still open here:
+    `read-tiles-kvikio.py` wiring (see tracker **D-6** for what remains: the nvidia-fs block parser; the
+    pre-cuFile-cell canary with D-7; Leg B's Phase-0 cell; and the **Stage-7 worker's path-accounting
+    wiring** — `inference-per-slide-stage7.py` records no split, found 2026-08-21; wire before Stage 7
+    runs or every kvikIO 7.x cell goes INCOMPLETE by design). Still open here:
     - **`read-after-write-stage7.py`'s 10 ms poll.** The interval is now reported as the visibility-latency
       resolution floor, so quantisation is visible rather than silent. Whether to *tighten* it is a tuning
       judgment against CPU cost and is unmade. Verified on the build machine: measured latencies fell
@@ -95,10 +93,15 @@ These change what the numbers mean, so resolving them after cells have run means
     entry; the reader now emits `client_page_cache_discarded` for the reconciler)**, and **5 (`warm` —
     steady-state by construction, note-worded)**. Also done: **6.A Tier 1/3
     (kvikio `cold` per-slide-discard / cucim `warm` steady-state; cuCIM cache-size line in the cucim notes —
-    item 14 fully implemented, delete on the next hygiene pass)**. Remaining at each stage's gate (read the
-    reader's achieved-evidence emission first, don't invent labels): 6.A Tier 2's chunked orchestrators
-    (regime = reads of just-converted server-resident chunks — surface at the Tier-2/CHUNK_SIZE gate),
-    6.B-mil/stress, 6.C, 7 — tracker **D-30**'s list.
+    item 14 fully implemented, delete on the next hygiene pass)**, 6.A Tier 2 (`na-mixed-rw-chunk-resident`,
+    Stage-6 register), and **2026-08-21: 6.B** (generation `na-write-cell`; 6.B.2 per-cell cold/warm derived
+    mechanically from corpus-vs-cache arithmetic against the 2304 GiB floor; 6.B.3 `warm` steady-state) **and
+    7.1–7.4/7.6** (roadmap-named regimes; kvikIO cells declare `RECORD_KVIKIO_CELL=1` — INCOMPLETE by design
+    until the Stage-7 worker wiring lands, item 13 / tracker D-6). **REMAINING — an OPEN methodology call,
+    surfaced 2026-08-21: 6.C cells and 7.5's mixed multi-workload cells declare nothing; neither roadmap
+    defines a cache-discipline row.** Recommendation with the human: `na-mixed-concurrent-…` by construction
+    (a concurrent QoS cell has no cold/warm axis; retention compares same-fs). Wire `sweep-stage6c.sh` + the
+    7.5 cells in the ratifying edit, before 6.C launches — tracker **D-30**.
 14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Implementation:
     4.B and 5.B cell notes carry the configured size (512 MiB library default). Remaining: the 6.A cuCIM
     cells' notes, at the 6.A gate — then delete this item.**

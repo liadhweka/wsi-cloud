@@ -48,8 +48,8 @@ TABLE="
 6.A|s6.A-*brca50|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.A Tier 1
 6.A.3|s6.A-*cam16|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.A Tier 3
 6.A.2|s6.A-*brca_full|runs/s6.A-extract-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.A Tier 2
-6.B.3|s6.B.3-|runs/s6.B-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.B.3
-6.B.2|s6.B.2-|runs/s6.B-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.B.2
+6.B.3|s6.B.3-|runs/s6.B-mil-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.B.3
+6.B.2|s6.B.2-|runs/s6.B-stress-summary.csv|docs/Stage-6-Feature-Extraction.md|#### 6.B.2
 6.C|s6.C-|runs/s6.C-concurrent-summary.csv|docs/Stage-6-Feature-Extraction.md|### 6.C
 7|s7|runs/s7-clinical-summary.csv|docs/Stage-7-Clinical-Inference-Deployment.md|### 7.1
 "
