@@ -46,7 +46,7 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-24** | **Cross-leg artifact fingerprints — three of four classes BUILT + CAPTURED (`dataset-bytes`, `coords-3.0`, `rawtiff-4d`); remaining: `features-6a`, once 6.A first produces output** | `fingerprint.py` `capture`/`compare`; definitions in `STAGES.md` **D19** + the `RUNBOOK.md` gates table | The four per-class definitions are decided (dataset bytes: hashed path/size/md5 list; coords: per-slide count + array-contents hash; raw-TIFF: byte count + tile grid; features: counts + shapes + dtype, never values) and fingerprints land in `runs/.leg-state/<leg>/fingerprints/` (git-tracked). Each class is built against its first real artifact, never imagined output — `features-6a` refuses until 6.A's features exist; build it right after, before 6.B.3/7.3 consume them |
 | **D-25** | **Stage 6.C's 4-GPU partition** | `orchestrate-concurrent-stage6c.sh` | 6.C pins MIL to GPU 0 "to stay out of the extract workload's GPUs" while extract requests 4 — an isolation that is arithmetically impossible on a 4-GPU instance. Decide the partition (extract on 3 + MIL on 1, or accept sharing and delete the isolation claim); either way the retention denominators change, so it is a methodology call, not a tuning one |
 | **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
-| **D-30** | **Verdict semantics DECIDED + wrapper half DONE (ratified 2026-08-16; register D21): cache_state undeclared on a stage≥1 cell → INCOMPLETE; `RECORD_KVIKIO_CELL=1` without a recorded `path_accounting` split → INCOMPLETE; missing cost inputs → warn only (re-derivable arithmetic); contract-verified marker absent at leg start → refuse (was D-21). Remaining: the driver declarations** | stage 3–7 sweep drivers | The wrapper now refuses undeclared cells, so **every stage 3–7 driver must set `RECORD_CACHE_STATE` per cell (and `RECORD_KVIKIO_CELL=1` on kvikIO cells) before its stage runs, or the chain aborts on a mislabelled-as-INCOMPLETE cell**. Done: stage-3, 4.A, 4.D, **4.C** (`cold` — client-cold at read/window entry with the reader's `client_page_cache_discarded` as the reconciler evidence; `warm` on a `--warm-cache` cell), **5** (`warm` — steady-state by construction, note-worded for the reconciler). Remaining, at each stage's gate: **6.A Tier 2's chunked orchestrators** (their regime — reads of just-converted, server-cache-resident chunks — is a methodology call to surface at the Tier-2/CHUNK_SIZE gate; Tier 1/3 cells are done: kvikio `cold` per-slide-discard, cucim `warm` steady-state), `sweep-stage6b-{mil,stress}.sh`, `sweep-stage6c.sh`, `sweep-stage7-clinical.sh`. Regimes follow each roadmap's cache-discipline row; surface any stage whose roadmap defines none |
+| **D-30** | **Verdict semantics DECIDED + wrapper half DONE (ratified 2026-08-16; register D21): cache_state undeclared on a stage≥1 cell → INCOMPLETE; `RECORD_KVIKIO_CELL=1` without a recorded `path_accounting` split → INCOMPLETE; missing cost inputs → warn only (re-derivable arithmetic); contract-verified marker absent at leg start → refuse. Remaining: the driver declarations** | stage 3–7 sweep drivers | The wrapper now refuses undeclared cells, so **every stage 3–7 driver must set `RECORD_CACHE_STATE` per cell (and `RECORD_KVIKIO_CELL=1` on kvikIO cells) before its stage runs, or the chain aborts on a mislabelled-as-INCOMPLETE cell**. Done: stage-3, 4.A, 4.D, **4.C** (`cold` — client-cold at read/window entry with the reader's `client_page_cache_discarded` as the reconciler evidence; `warm` on a `--warm-cache` cell), **5** (`warm` — steady-state by construction, note-worded for the reconciler). Remaining, at each stage's gate: **6.A Tier 2's chunked orchestrators** (their regime — reads of just-converted, server-cache-resident chunks — is a methodology call to surface at the Tier-2/CHUNK_SIZE gate; Tier 1/3 cells are done: kvikio `cold` per-slide-discard, cucim `warm` steady-state), `sweep-stage6b-{mil,stress}.sh`, `sweep-stage6c.sh`, `sweep-stage7-clinical.sh`. Regimes follow each roadmap's cache-discipline row; surface any stage whose roadmap defines none |
 | **D-31** | **The environment contract omits the 20 workload-shape variables** | `env-contract.py:48-72` | `docs/NAMING-AND-VARIABLES.md` Table 5 declares them identical-across-legs, but the contract records none. **Do not simply append them to `MUST_MATCH`:** `verify()` pushes a null-vs-null pair into `unrecorded` and returns FAILED, so the normal case (both legs on defaults) would fail. Needs a tri-state or a defaults-aware comparison |
 | **D-32** | **`dataset_manifest_sha` hashes the manifest, not the dataset bytes** | `env-contract.py:174-175` | The held-constant field "the datasets and their byte contents" is therefore asserted, never verified. Full rehashing costs hours of leg wallclock, so the cheaper options (file count + total bytes + newest mtime; or a sampled hash) are a methodology call |
 | **D-33** | **Stage 7's `## 7.1` headline grid is structurally always empty** | `aggregate-stage7-clinical.py` | The grid filters on `cell_name.startswith('7.1')`, but `RUN_NAME_RE` strips the stage segment, so a `record-run.sh`-named dir `…-s7.1-baseline-…` yields `cell_name='baseline-…'` and never matches. 7.2 only appears because its driver pre-computes a `-s7-7.2-…` dir, leaving the sub-tier inside the name. Either match on the recorded `stage` field or stop stripping the segment — but the two naming shapes must be reconciled first, which is why this is not a one-line fix. **Also found 2026-08-21:** its RDMA extraction hardcodes device `mlx5_0`, which exists on neither leg (no RDMA devices on WEKA-on-AWS; `efa_0`/`efa_1` on Lustre) — the column reads empty on every cell; point it at the recorded devices when the grid fix lands |
@@ -148,11 +148,11 @@ The stats live in root-only debugfs and lnetctl needs `/dev/lnet`, so each lustr
 `sudo -n` and stops on a sentinel file (an unprivileged cleanup cannot signal a root process; the loop also
 exits if the wrapper dies, so a kill -9 cannot orphan a root writer). Lustre snapshots add `lfs df`,
 `getstripe -d` (the D12 layout), `lctl dl`, health, cumulative stats / rpc_stats / read_ahead_stats
-(whole-run deltas as defence in depth), the D-11 tunables, and the LNet state.
+(whole-run deltas as defence in depth), the L4 tunables, and the LNet state.
 **⏳ DEFER:** cuFile path accounting's reader half + the kvikIO-cell
 requirement wiring (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
 
-### `wsi_agg_helper.py` — the shared per-leg aggregation helper (D-4 remainder, D-5, D-13, D-18)
+### `wsi_agg_helper.py` — the shared per-leg aggregation helper (D-4 remainder, D-5, register D13/D18)
 **What.** One importable module (stdlib-only, same directory as the aggregators) holding the per-leg logic:
 the **consistency relation** (WEKA: (D+P)/D writes, 1.0 reads, from `WEKA_EC_SCHEME`; Lustre: derived from
 the RECORDED stripe layout via `parse_stripe_layout` — raid0-only components, so wire/app = mirror_count = 1.0
@@ -322,13 +322,13 @@ newer) is what handles growing files. Documented in the script header so it isn'
 **Caveats.** Fails early and loudly on missing credentials or an unreachable bucket, so a sweep does not
 discover at 4am that hours of telemetry had nowhere to land. **Every guard path exits non-zero**, which is
 what lets a sweep chain abort on a failed sync. Verifies object count after syncing rather than assuming
-success (Rule 11). **Verified against the real bucket 2026-08-15**, including `--self-test` (was `D-23`):
+success (Rule 11). **Verified against the real bucket 2026-08-15**, including `--self-test`:
 the mechanised semantics proof under `s3://$S3_BUCKET/_selftest/` — mirror probe must disappear on a local
 delete, archive probe must survive it — with a named non-zero exit per failed assertion and the leftover
 cleanup command **printed, never run** (removing anything from S3 stays a manual act, per the semantics it
 proves). **Re-run `--self-test` before every teardown.**
 
-### `env-contract.py` — cross-leg comparability enforcement ⭐ NEW (`D-12`)
+### `env-contract.py` — cross-leg comparability enforcement ⭐ NEW
 **What.** `write` collects every environment fact into JSON at the end of a leg; `verify` compares the current
 environment against a reference contract before the next leg's first cell; `show` prints one readably; **`env`
 emits it back as `env.sh`-shaped `export` lines** for the rebuild.
@@ -362,7 +362,7 @@ python at boot), so the identical environment "failed" verify under a different 
 final commit+push, so HEAD is legitimately ahead on every rebuild; the recorded commit must be an
 **ancestor** of HEAD (reported as *advanced, ancestor-ok* with the auditable diff range), and divergence
 stays a VIOLATION. **`verify` writes `runs/.leg-state/$LEG/contract-verified` on PASS** (with the contract's
-sha256) and unlinks it on FAIL — the marker `run-leg.sh` refuses without (D-21, ratified). The contract also
+sha256) and unlinks it on FAIL — the marker `run-leg.sh` refuses without (ratified; now part of D-30's verdict semantics). The contract also
 carries the per-leg **recovery fields** (prices + dates, ceiling, `FS_CLIENT_RESERVED_CORES`, backend AMI)
 and the held-constant **`STAGE1_*` corpus definition**, because the 2026-08 rebuild lost every value that
 lived only in the gitignored env.sh. `env --for-leg <leg>` matching the contract's leg emits the
@@ -379,7 +379,7 @@ bucket to have fetched the contract — but without it the recovery artifact cou
 recovery source for. It is invisible to `verify` and to `write`'s completeness check, which both iterate the
 other two lists.
 
-### `run-leg.sh` — unattended leg orchestrator ⭐ NEW (`D-14`)
+### `run-leg.sh` — unattended leg orchestrator ⭐ NEW
 **What.** Drives one whole leg's sweeps in dependency order: **32 steps** (22 sweeps + the `1.0r-prep`
 corpus-staging step + the 9 interleaved stability-canary invocations `C0`–`C8`, **D18**), `--dry-run`,
 `--list`, `--from`, `--only`. Each step carries its driver **and that driver's target** where the driver dispatches on `$1`
@@ -400,7 +400,7 @@ unrecorded transport cannot be shown to be the right one. Overridable only by a 
 `runs/.leg-state/$LEG/transport-waiver`, which is then echoed into the log. *Why here:* this is the unattended
 entry point, and the fallback transports (UDP / TCP) mount cleanly and report plausible numbers, so an
 instruction followed hours earlier is not evidence; (6) **refuse a leg whose environment contract was never
-verified** (ratified, was D-21): when `runs/env-contract-leg-$LEG.json` exists, the `contract-verified`
+verified** (ratified): when `runs/env-contract-leg-$LEG.json` exists, the `contract-verified`
 marker written by `env-contract.py verify` must exist and its recorded sha256 must match the current
 contract file — "the procedure says verify ran" is an instruction, and this converts it into a checkable
 fact. `--dry-run` is exempt (it executes nothing).
@@ -409,7 +409,7 @@ fact. `--dry-run` is exempt (it executes nothing).
 skipped — *a leg with a hole in it looks complete in `INDEX.md`*, which is the failure this prevents. One
 step is currently MISSING by design: 6.B.1 (needs the corpus-size decision, the open-items memory).
 
-### `prove-recording.sh` — the scripted Stage-0 recording proof (was `D-20`)
+### `prove-recording.sh` — the scripted Stage-0 recording proof
 **What.** Runs one real ~15 s fio cell through `record-run.sh` and asserts, each with a named non-zero
 exit: the cell recorded and `INDEX.md` says OK; the leg's core streams carry data (per-`$LEG` list — the
 lustre list adds `lustre-stats.log`, `lnet-stats.log` and `rdma-counters.csv`); `results.json` has a
@@ -425,7 +425,7 @@ canary (`D-7`), the post-cell consistency canary (`D-5`), and the fs-pivoted agg
 helper). **Extend this script when each lands** — a proof that silently proves less than the checklist
 promises is the failure it exists to prevent. Its run dir is a real Stage-0 run dir; never delete it.
 
-### `verify-conda-env.sh` — fail-loud environment verification (was `D-22`)
+### `verify-conda-env.sh` — fail-loud environment verification
 **What.** Real imports per env (main: torch/cupy/cucim/kvikio/openslide/tifffile/h5py/timm/transformers;
 alt: torch/cucim/openslide/tifffile/h5py/numpy), CUDA availability and visible-GPU count vs `nvidia-smi`,
 and — when a reference environment contract exists — `python_version` against it. Non-zero on any drift.
@@ -492,8 +492,8 @@ rebuild is a place the two legs can silently diverge, and the environment contra
 build records mechanically.
 
 **Caveats.** The env smoke tests are **import-only and warn-only** (`WSI-WARN`; the boot continues) —
-fail-loud verification is `D-22`. The re-hydration guard keys on
-`runs/.leg-state/$LEG/hydration-complete`, which only the `D-13` hydrate driver will write. Boot progress
+fail-loud verification is `verify-conda-env.sh`, run on every rebuild. The re-hydration guard keys on
+`runs/.leg-state/$LEG/hydration-complete`, which only the Stage-1.7 hydrate driver (`sweep-stage1-hydrate.sh`) will write. Boot progress
 lands in the instance log; the SSM deploy-key step must report the fixed key installed (next-rebuild
 verification, open-items memory). **The step-6 boot-time contract verify runs on the WEKA leg
 only** — on lustre that point precedes phase-2's facts and the conda envs (a healthy build would fail it),
@@ -579,7 +579,7 @@ corpora must pre-exist the sweeps, and the staging warmth itself must be gone.
 marker — the corpora themselves are **retained** deliberately (capacity inputs, SPINUP-CHECKLIST item 12).
 `run-leg.sh` runs it as step `1.0r-prep`, between 1.0a and 1.0b.
 
-### `sweep-stage1-hydrate.sh` — Stage 1.7 S3 → filesystem hydration (was `D-13`)
+### `sweep-stage1-hydrate.sh` — Stage 1.7 S3 → filesystem hydration
 **What.** The head-to-head ingest sweep: `max_concurrent_requests ∈ {4, 16, 64, 256}` = 4 cells, each a
 **full `aws s3 sync` of both dataset prefixes** with the target wiped before it (same-region transfer is
 free; the write workload is the measurement). The **final cell's data is kept and byte-verified** — TCGA
@@ -599,7 +599,7 @@ explicitly. Identical grid verbatim on both legs; FSx's native import is 1.8, a 
 
 ### `chain-stage1-bcd.sh` — sweep chainer
 **What.** Runs several Stage-1 sweeps back to back unattended.
-**Why.** The precedent for leg-level chaining (D-14) — cells are already isolated, so chaining is safe.
+**Why.** The precedent for leg-level chaining (`run-leg.sh`) — cells are already isolated, so chaining is safe.
 
 ### `fe-core-fio.sh` · `fe-core-kvikio.sh` — shared cell helpers
 **What.** Single-cell helpers for a `fio` cell and a kvikIO cell, used for baselines and quick checks.
@@ -712,7 +712,7 @@ read path; **fail-loud mpp guard** rejecting off-magnification slides.
 Keeping a 40× artifact and reading pyramid level-1 would be ~4× larger, ~4× slower to produce, and — the
 decisive point — **not the artifact a 20× GPU-direct customer stores** (**D4**). Matching the readers'
 resize interpolation means both backends see the same pixels.
-**Recording (was D-15, owner's nod 2026-08-17).** The driver runs **one `record-run.sh` cell per dataset**
+**Recording (owner's nod 2026-08-17).** The driver runs **one `record-run.sh` cell per dataset**
 (`s4.D-rawtiff-{brca,cam16}-par<N>`, cache `na-mixed-rw-unmanaged`) via a `--inner` self-reinvocation, so
 the recorded command is explicit in `cmd.txt`; each cell's verdict counts **only its own invocation's**
 conversion rows (`conversion-log.tsv` in the run dir; the global append-only TSV gets them folded in once,
@@ -721,8 +721,7 @@ manifest id resolves to no source** (an unresolved id silently shrinks the cohor
 cell aborts before the next dataset (downstream consumes the artifact).
 **Caveats.** **Idempotent skip on existing non-empty output** — so a stale artifact from another magnification
 or converter version is **silently reused**. Delete before regenerating. The output is a large capacity cost
-on both filesystems (order ~7 TB) and thus a sizing input to **D7**. **Scope (ratified 2026-08-15, was
-D-28): full BRCA cohort (1064, retained at rest — 7.2's disjoint-chunk N=64 cell needs it) + the CAM16
+on both filesystems (order ~7 TB) and thus a sizing input to **D7**. **Scope (ratified 2026-08-15): full BRCA cohort (1064, retained at rest — 7.2's disjoint-chunk N=64 cell needs it) + the CAM16
 50-slide subset.** Manifests are parsed comment-aware (the full-cohort manifest carries commented excluded
 IDs at its tail; a fixed line offset would ingest them), and the driver refuses without ~8 TB free headroom
 (ENOSPC mid-cohort wastes hours).
@@ -981,7 +980,7 @@ experiment, EFA ENI present, DNS + 988) → in-kernel EFA driver gate (≥ 2.12.
 userspace-only `lustre-client` install with a kernel-unchanged assertion → the vendored AWS configure-efa
 bundle (LNet tcp+efa, UDSP, boot re-arm oneshot) → the **D16 HARD GATE** (`lnetctl net show` must list an
 `efa` net, up) → mount + **counter-proof** (100 MiB direct `dd` must move efa `send_count` ~1 RPC/MiB, else
-UNMOUNT + FATAL) + chown/fstab + the ratified D-11 tuning with its persistence unit
+UNMOUNT + FATAL) + chown/fstab + the ratified L4 tuning with its persistence unit
 (`wsi-lustre-tuning.service`) + env.sh facts + motd. `--dry-run` prints every mutating command.
 **Why.** The walk validates once; this file inherits, so every rebuild after the first is hands-off — and the
 per-boot re-run re-proves the transport, because the fstab automount alone would mount happily over a
