@@ -420,7 +420,12 @@ fi
 # --check runs HERE, after 6.5, so the boot log shows the finished env.sh
 # (LIBCUFILE_PRELOAD and cufile.json included) rather than second-old pendings.
 as_u bash "$ENV_SH" --check || warn "env.sh --check reported missing items (expected pre-env-build; see above)"
-if [ $REBUILD -eq 1 ]; then
+# WEKA leg only: on lustre this point is too early — phase-2 (mount facts) and the
+# env build (python/conda fields) finish later, so the leg's live fields compute as
+# None and the verify fails on a healthy build (and unlinks the marker of whatever
+# --leg it was told). The lustre contract step runs at the end of wsi-build-envs.sh
+# instead, once every input it verifies actually exists.
+if [ $REBUILD -eq 1 ] && [ "$LEG" = "weka" ]; then
   ( cd "$REPO" && as_u python3 scripts/env-contract.py verify --against "$CONTRACT" --leg weka ) \
     || { warn "CONTRACT VERIFY FAILED — held-constant drift on this rebuild"; touch /var/lib/wsi-CONTRACT-VIOLATION-CHECK-ME; }
 fi
@@ -508,6 +513,25 @@ for e in wsi-cucim-2604 wsi-cucim; do
 done
 echo "env builds finished \$(date -u)"
 EOS
+  if [ "$LEG" = "lustre" ]; then
+    cat >> /usr/local/bin/wsi-build-envs.sh <<EOSC
+# Contract-at-boot (D6): now that the envs exist (the python/conda fields compute
+# live from them) and only if phase-2 counter-proved the mount, write this leg's
+# contract and verify it against Leg A's committed one. A clean verify writes
+# runs/.leg-state/lustre/contract-verified; any failure leaves NO marker and
+# run-leg.sh refuses the leg (D-30) — refuse-loud, nothing to remember at 3am.
+if systemctl is-active --quiet wsi-lustre-phase2.service; then
+  { set +x; } 2>/dev/null
+  cd $REPO && source env.sh >/dev/null 2>&1 \
+    && python3 scripts/env-contract.py write --leg lustre \
+    && python3 scripts/env-contract.py verify --against runs/env-contract-leg-weka.json --leg lustre \
+    || echo "WSI-WARN: contract-at-boot verify FAILED — no verified marker; run-leg.sh refuses this leg until a session resolves it"
+  set -x
+else
+  echo "WSI-WARN: phase-2 not active — contract-at-boot SKIPPED; no verified marker, run-leg.sh refuses this leg"
+fi
+EOSC
+  fi
   chmod +x /usr/local/bin/wsi-build-envs.sh
   nohup runuser -u $U -- /usr/local/bin/wsi-build-envs.sh > /var/log/wsi-env-build.log 2>&1 &
   echo "env builds launched in background -> /var/log/wsi-env-build.log"

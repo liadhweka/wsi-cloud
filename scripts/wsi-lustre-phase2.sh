@@ -2,9 +2,8 @@
 # wsi-lustre-phase2.sh — the BAKED lustre mount automation.
 #
 # BAKED FROM THE 2026-08 GATED WALK (runs/2026-08-20-lustre-efa-walk-transcript.md,
-# human-approved throughout). Ran idempotently on the walk box the same day; a full
-# from-scratch run is PROVEN ON THE NEXT REBUILD — until then treat a first failure
-# as a baking bug before suspecting the environment.
+# human-approved throughout) and PROVEN FROM SCRATCH on the 2026-08-21 rebuild:
+# unattended per-boot run, D16 gate passed, counter-proof +100/100MiB, no human step.
 #
 # What the walk established, which this script encodes (sources fetched 2026-08-20):
 #   - AL2023 ships the Lustre kernel modules IN-KERNEL (staging/lustrefsx), including

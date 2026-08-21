@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-20T20:26:44.504Z
+  modified: 2026-08-21T02:43:21.545Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -27,42 +27,35 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    designed continuity and the preflight only warns, never blocks, without one. The two provisioning
    rebuilds already have theirs: `tmp/prompt-r1-validate-and-bake.md`,
    `tmp/prompt-r2-verify-and-benchmark.md`.
-3. **[USER decided to include a 2nd EFA interface at reapply** (proposed tf: repo `tmp/lustre-main.tf`,
-   2nd interface + the EIP it forces) **— if applied:** the rebuilt client gets 2 EFA
-   NIs and AWS's configurator adds its CPT/CPU-partition options (register L7 covers both counts;
-   `FS_CLIENT_RESERVED_CORES=none` still holds). Verify the phase-2 gate + counter-proof on the rebuilt box
-   and record the count in the walk-evidence convention. **Known fail-loud possibility:** the configurator's
-   CPT path requires ≥1 EFA device per NUMA node (2 nodes on g6e.24xlarge); if EC2 wires both network cards
-   to one node, its precheck raises "No EFA devices found for NUMA node" and phase-2 stops unmounted —
-   recovery is dropping the second interface block and reapplying, or a human-ratified manual LNet config.
-   Also: with >1 interface the primary loses auto-assign public IP (EC2 rule) — the terraform must carry an
-   EIP or the bootstrap has no internet path.]
+3. **2nd EFA interface: APPLIED and verified on the 2026-08-21 rebuild** — 2 devices, 2 efa NIs up, CPT
+   options landed, `FS_CLIENT_RESERVED_CORES=none` holds; count-as-built recorded in register L7. The
+   feared per-NUMA CPT failure did not fire (the configurator saw 1 NUMA node). Nothing left to do; delete
+   this line at the next memory pass if R2's boot re-proves clean.
 
 ## B. Before the first measured cell on this leg
 
-1. **The rebuild is phase-2's from-scratch proof.** `scripts/wsi-lustre-phase2.sh` ran clean + idempotent on
-   the walk box only; on the rebuilt box treat a failure as a baking bug first
-   (`journalctl -u wsi-lustre-phase2.service`). After it passes once: delete this item and the
-   "proof-pending" notes in the script header + tracker entry.
-2. **Contract is FULLY CLEAN as of the 2026-08-20 teardown** (19/19 captured; stage1_* = 3072/256/26,
-   D13 re-verified vs FSx's documented 27.3 GiB RAM/TiB — WEKA's 1536 GiB is the larger cache, 2×1536=3072).
-   After each rebuild: re-run write+verify on the new instance (instance_id/hostname refresh; kernel/AMI
-   must still MATCH) and it must reproduce the clean result before the first measured cell (**D6**).
-3. **No true GDS on this leg either — documented, not measured (STAGES.md D8, checked 2026-08-20):** GDS on
+1. **Contract-at-boot is BAKED (2026-08-21, R1):** the bootstrap appends a lustre-only step to the end of
+   `wsi-build-envs.sh` — gated on `wsi-lustre-phase2.service` active — that writes the leg contract and
+   verifies it against Leg A's committed one; a clean verify arms
+   `runs/.leg-state/lustre/contract-verified`, any failure leaves NO marker and `run-leg.sh` refuses the
+   leg. **R2 must confirm the bake fired unattended** (`grep -A3 contract /var/log/wsi-env-build.log`;
+   marker present without a session step) before the first measured cell (**D6**). Manually reproduced
+   clean on this rebuild: 18 match + script_commit ancestor-ok, 0 violations, 0 unverifiable.
+2. **No true GDS on this leg either — documented, not measured (STAGES.md D8, checked 2026-08-20):** GDS on
    FSx requires a P5-class client; this client is g6e. Expect compat/bounce like Leg A; do NOT chase GDS
    wiring. The leg's Phase-0 determination cell and every kvikIO cell's path split still verify — a split
    contradicting the docs is a finding to surface immediately.
-4. **Metadata IOPS is provisioned at the placeholder (48,000)** — before this leg's metadata-heavy stages,
+3. **Metadata IOPS is provisioned at the placeholder (48,000)** — before this leg's metadata-heavy stages,
    verify against Leg A's measured Stage-2/6.B metadata peaks + margin and **raise online if needed** (a
    recorded provisioning event, human-ratified, priced into `FS_USD_PER_HR`).
-5. **Calibrate this leg's canary bands** (**D18**/**D-5**) on the Lustre client before the baseline. The
+4. **Calibrate this leg's canary bands** (**D18**/**D-5**) on the Lustre client before the baseline. The
    Lustre consistency relation derives from the recorded stripe layout (register L2), never ported from WEKA.
-6. **D-4 Lustre recorder schemas are live-derived here** — `/proc/fs/lustre`, `lctl get_param` shapes from
+5. **D-4 Lustre recorder schemas are live-derived here** — `/proc/fs/lustre`, `lctl get_param` shapes from
    the real client, never a recalled format. The mount is live, so this is unblocked.
-7. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
+6. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
    included IOPS (register L6 has both readings + sources). Verify against the first invoice / Cost
    Explorer; if all 48,000 bill, correct to $30.6279/hr, dated, as a provisioning-cost event.
-8. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
+7. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
    (a) docstring/comment headers describing the kvikio backend as "kvikIO+GDS" in
    `train-resnet50-stage5.py`, `extract-features-foundation-stage6.py`, `read-tiles-kvikio.py` — the
    backend is kvikIO/cuFile (compat on both legs per D8); (b) `cufile-full-rdma.template.json`'s header
@@ -72,9 +65,9 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 
 0. **Stage-lag check before every stage start** — Leg A's `.leg-state/weka/` markers are the evidence.
 1. **D18 knee repeats after each Tier-1** — REP=2/3, same as Leg A.
-2. **EFA-interface plateau trigger (register L7):** if knee/peak calibration plateaus below expectation with
-   the efa net unsaturated, the interface count is the first candidate — a ratified provisioning event
-   (instance stop), not silent tuning.
+2. **Plateau trigger (register L7):** the interface count is 2 as built, so a knee/peak plateau below
+   expectation with the efa net unsaturated no longer points there — next candidates are the CPT/LNet
+   config and FSx-side limits; surface to the human as a provisioning question, never silent tuning.
 3. **Push only via `scripts/push-safe.sh`**; structural doc changes are proposed as numbered items to the
    human, never edited from this session (the ratified Phase-4 baking scope was the one exception, spent).
 4. **Reboot hygiene:** phase-2 re-proves the EFA data path per boot and UNMOUNTS on a failed counter-proof

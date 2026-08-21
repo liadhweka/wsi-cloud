@@ -63,16 +63,20 @@ One entry per live decision — what, why, sources. Overwrite entries when a dec
   (open-items memory):** verify against the first invoice; if all 48,000 bill, the rate is $30.6279/hr —
   correct the value, dated, as a provisioning-cost event.
   *Source:* `pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonFSx/current/ap-northeast-2/index.json`.
-- **L7 — EFA interface count.** g6e.24xlarge has 2 network cards, **each documented at 200 Gbps baseline and
-  peak** — one EFA interface already reaches the full instance line rate, so a second adds no *documented*
-  headroom; AWS's own configurator treats 2-per-multi-card as its default posture and handles either count
-  (with 2 it also applies its documented CPT/CPU-partition options — LNet work partitioning, no cores reserved
-  from applications: `FS_CLIENT_RESERVED_CORES=none` holds). The count is a launch-time terraform property;
-  changing it mid-leg costs an instance stop. Whichever count the current terraform launched is recorded by
-  the walk/rebuild evidence; a plateau below expectation with the efa net unsaturated during calibration makes
-  the second interface the first candidate — a ratified provisioning event, not silent tuning.
+- **L7 — EFA interfaces: 2, as built.** Evidence from the 2026-08-21 from-scratch rebuild: `efa_0` + `efa_1`
+  in `/sys/class/infiniband`, two efa NIs up in `lnetctl net show`, and AWS's CPT/CPU-partition options
+  (`cpu_npartitions=2`, 2×48-CPU pattern) landed in `/etc/modprobe.d/modprobe.conf` — LNet work partitioning
+  only, no cores reserved from applications: `FS_CLIENT_RESERVED_CORES=none` holds. *Why 2:* g6e.24xlarge has
+  2 network cards, **each documented at 200 Gbps baseline and peak**, so the second interface adds no
+  *documented* headroom past the instance line rate — it is attached because it is free at launch and removes
+  the interface count as the standing first-candidate explanation if calibration plateaus below expectation
+  with the efa net unsaturated; AWS's configurator treats 2-per-multi-card as its default posture. The second
+  interface costs the primary its auto-assigned public IP (EC2 rule), so the terraform's EIP is load-bearing.
+  The count is a launch-time terraform property; changing it costs an instance stop — a ratified provisioning
+  event, never silent tuning.
   *Sources:* `aws ec2 describe-instance-types g6e.24xlarge` (NetworkCards, 2026-08-20);
-  `docs.aws.amazon.com/fsx/latest/LustreGuide/configure-efa-clients.html` (interface table).
+  `docs.aws.amazon.com/fsx/latest/LustreGuide/configure-efa-clients.html` (interface table);
+  `journalctl -u wsi-lustre-phase2.service` (2026-08-21 boot).
 
 ## Manual fallback — when the baked path fails
 
