@@ -28,6 +28,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${LEG:?LEG is unset -- source env.sh}"
 : "${S3_BUCKET:?S3_BUCKET is unset -- source env.sh}"
 : "${AWS_REGION:?AWS_REGION is unset -- source env.sh}"
+# D-7 watchdog: Leg A's slowest full hydration cell ran 5729 s (S3-bound);
+# 4 h is generous headroom before "slow" becomes "hung".
+export RECORD_TIMEOUT_S=${RECORD_TIMEOUT_S:-14400}
 
 MANIFESTS="$REPO/scripts/manifests"
 TCGA_MANIFEST="$MANIFESTS/tcga-brca-full.tsv"

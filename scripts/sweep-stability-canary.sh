@@ -19,6 +19,8 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${FS_MOUNT:?FS_MOUNT is unset -- source env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
+# D-7 watchdog: the io pair is ~3 min; past 15 min it is hung, not slow.
+export RECORD_TIMEOUT_S=${RECORD_TIMEOUT_S:-900}
 
 CANARY_DIR=${FS_MOUNT}/benchmarks/stability-canary
 mkdir -p "$CANARY_DIR"

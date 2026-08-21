@@ -309,7 +309,10 @@ primary forensic record of what happened while nobody was watching.
 
 1. **Telemetry syncs to S3 during the run**, not only at the end — a crash at 4am must not lose the night.
 2. **The canary aborts the chain** on failure.
-3. **Each cell has a watchdog timeout** — a hung cell wastes both time and money.
+3. **Each cell has a watchdog timeout** — a hung cell wastes both time and money. Built into
+   `record-run.sh`: the command runs in its own process group and is group-TERM/KILLed at
+   `RECORD_TIMEOUT_S` (set per driver from the cell's own runtime; the 86400 s default is only the
+   hung-forever backstop), with the fire recorded in `raw/watchdog.log` and the rc flowing to the verdict.
 4. **The chain resumes from checkpoint**, re-running only what is missing.
 
 > **Mixed-backend sweeps: scope `LD_PRELOAD` per cell.** Set it on kvikIO cells, never on cuCIM cells — the ABI

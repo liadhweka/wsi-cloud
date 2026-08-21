@@ -1,0 +1,199 @@
+llite.krvlrbev-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.868960507 secs.nsecs
+start_time                1787270564.644838810 secs.nsecs
+elapsed_time              72713.224121697 secs.nsecs
+read_bytes                64 samples [bytes] 1048576 1048576 67108864 70368744177664
+write_bytes               4460 samples [bytes] 1048576 1048576 4676648960 4903821859880960
+read                      64 samples [usec] 938 3178 76868 98724418
+write                     4460 samples [usec] 811 9937 4354138 4523881138
+ioctl                     1676 samples [reqs]
+open                      118 samples [usec] 1 955 21688 8857614
+close                     116 samples [usec] 98 577 31328 10990128
+seek                      1 samples [usec] 0 0 0 0
+fsync                     8 samples [usec] 25067 29157 219768 6048525106
+readdir                   2 samples [usec] 0 4 4 16
+setattr                   1 samples [usec] 285 285 285 81225
+truncate                  8 samples [usec] 2140 8306 28429 129476973
+getattr                   339 samples [usec] 2 793 45694 18361510
+unlink                    44 samples [usec] 198 585 12138 3813368
+mkdir                     4 samples [usec] 330 6303 12249 55884695
+mknod                     60 samples [usec] 148 1186 16806 7295660
+statfs                    11 samples [usec] 14 327 796 213030
+getxattr                  2 samples [usec] 214 247 461 106805
+inode_permission          1618 samples [usec] 0 517 7163 1780175
+opencount                 176 samples [reqs] 1 2 232 344
+openclosetime             56 samples [usec] 136354 2594644 18880659 22100821045905
+osc.krvlrbev-OST0000-osc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869184731 secs.nsecs
+start_time                1787270564.653836681 secs.nsecs
+elapsed_time              72713.215348050 secs.nsecs
+req_waittime              166176 samples [usec] 59 68680454 20660578317 244930657225600701
+req_active                166235 samples [reqs] 1 53 2372493 67724101
+ldlm_glimpse_enqueue      20958 samples [reqs] 1 1 20958 20958
+ldlm_extent_enqueue       10 samples [reqs] 1 1 10 10
+read_bytes                32392 samples [bytes] 1048576 1048576 33965473792 35615380646920192
+write_bytes               96460 samples [bytes] 262144 1048576 101144592384 106057379786784768
+ost_read                  32392 samples [usec] 483 1556 24905203 19443349403
+ost_write                 96460 samples [usec] 457 68680454 20629832002 244930627332505592
+ost_connect               14 samples [usec] 613 19871 61942 585793150
+ost_disconnect            8 samples [usec] 216 5962 11732 48810014
+ost_punch                 8 samples [usec] 196 518 2474 907986
+ost_statfs                12 samples [usec] 167 3267 20280 58812276
+ost_sync                  10 samples [usec] 10842 22534 154102 2651619440
+ldlm_cancel               16266 samples [usec] 59 6825 2398457 1037597875
+obd_ping                  38 samples [usec] 215 38847 277649 5359949103
+osc.krvlrbev-OST0001-osc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869353535 secs.nsecs
+start_time                1787270564.652803268 secs.nsecs
+elapsed_time              72713.216550267 secs.nsecs
+req_waittime              157532 samples [usec] 60 70619940 19542427601 200521286066105577
+req_active                157557 samples [reqs] 1 47 2262449 64472741
+ldlm_glimpse_enqueue      20917 samples [reqs] 1 1 20917 20917
+ldlm_extent_enqueue       9 samples [reqs] 1 1 9 9
+read_bytes                27993 samples [bytes] 1048576 1048576 29352787968 30778628996333568
+write_bytes               92155 samples [bytes] 1048576 1048576 96631521280 101325494057697280
+ost_read                  27993 samples [usec] 503 13338 21403657 16771711099
+ost_write                 92155 samples [usec] 469 70619940 19515101268 200521259249704032
+ost_connect               11 samples [usec] 406 10313 49345 324058039
+ost_disconnect            7 samples [usec] 365 4047 9643 29070061
+ost_punch                 8 samples [usec] 191 557 2729 1071479
+ost_statfs                12 samples [usec] 177 3152 17481 46411361
+ost_sync                  9 samples [usec] 11027 20626 133345 2075338359
+ldlm_cancel               16358 samples [usec] 62 6882 2437823 1150298053
+obd_ping                  53 samples [usec] 201 29515 372997 5982376011
+osc.krvlrbev-OST0002-osc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869520129 secs.nsecs
+start_time                1787270564.653648377 secs.nsecs
+elapsed_time              72713.215871752 secs.nsecs
+req_waittime              157478 samples [usec] 61 72651474 20083185351 186562686769288809
+req_active                157519 samples [reqs] 1 46 2291466 66174272
+ldlm_glimpse_enqueue      20880 samples [reqs] 1 1 20880 20880
+ldlm_extent_enqueue       9 samples [reqs] 1 1 9 9
+read_bytes                28155 samples [bytes] 1048576 1048576 29522657280 30956749880033280
+write_bytes               92120 samples [bytes] 1048576 1048576 96594821120 101287011150725120
+ost_read                  28155 samples [usec] 490 20195 21588123 17187272443
+ost_write                 92120 samples [usec] 456 72651474 20055721483 186562659684499477
+ost_connect               13 samples [usec] 533 20479 67573 664136993
+ost_disconnect            8 samples [usec] 343 599 3311 1419693
+ost_punch                 8 samples [usec] 165 397 2137 616157
+ost_statfs                12 samples [usec] 134 3069 17307 46547215
+ost_sync                  9 samples [usec] 11486 22221 138036 2249946662
+ldlm_cancel               16218 samples [usec] 63 6777 2399594 1081172106
+obd_ping                  46 samples [usec] 198 23629 362918 5422373674
+osc.krvlrbev-OST0003-osc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869593020 secs.nsecs
+start_time                1787270564.654243850 secs.nsecs
+elapsed_time              72713.215349170 secs.nsecs
+req_waittime              157556 samples [usec] 60 69712706 20690841861 250379981353771931
+req_active                157578 samples [reqs] 1 48 2315880 67373428
+ldlm_glimpse_enqueue      20906 samples [reqs] 1 1 20906 20906
+ldlm_extent_enqueue       9 samples [reqs] 1 1 9 9
+read_bytes                28136 samples [bytes] 1048576 1048576 29502734336 30935859159105536
+write_bytes               92099 samples [bytes] 1048576 1048576 96572801024 101263921406541824
+ost_read                  28136 samples [usec] 512 1544 21533562 16734460594
+ost_write                 92099 samples [usec] 461 69712706 20663522622 250379956381147818
+ost_connect               13 samples [usec] 215 15368 57940 455020234
+ost_disconnect            8 samples [usec] 327 13871 27414 307371822
+ost_punch                 8 samples [usec] 193 622 2885 1244085
+ost_statfs                12 samples [usec] 150 3148 19635 55677347
+ost_sync                  9 samples [usec] 10739 20770 120891 1763853269
+ldlm_cancel               16323 samples [usec] 62 6823 2424031 1134552583
+obd_ping                  33 samples [usec] 177 29499 255927 4091781703
+osc.krvlrbev-OST0004-osc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869665952 secs.nsecs
+start_time                1787270564.653456782 secs.nsecs
+elapsed_time              72713.216209170 secs.nsecs
+req_waittime              157556 samples [usec] 61 71134652 19388710320 192885987234804578
+req_active                157578 samples [reqs] 1 49 2284107 65641559
+ldlm_glimpse_enqueue      20922 samples [reqs] 1 1 20922 20922
+ldlm_extent_enqueue       9 samples [reqs] 1 1 9 9
+read_bytes                28092 samples [bytes] 1048576 1048576 29456596992 30887480647483392
+write_bytes               92157 samples [bytes] 262144 1048576 96632569856 101326181252464640
+ost_read                  28092 samples [usec] 498 1505 21544031 16773783381
+ost_write                 92157 samples [usec] 459 71134652 19361249717 192885959065415441
+ost_connect               14 samples [usec] 292 12585 63969 451355633
+ost_disconnect            9 samples [usec] 325 1131 4551 2804117
+ost_punch                 8 samples [usec] 184 382 1994 540678
+ost_statfs                12 samples [usec] 137 3172 20380 56493220
+ost_sync                  9 samples [usec] 10863 21096 123369 1834730281
+ldlm_cancel               16287 samples [usec] 61 6738 2406660 1028307098
+obd_ping                  37 samples [usec] 172 38122 399537 7438086437
+osc.krvlrbev-OST0005-osc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869743314 secs.nsecs
+start_time                1787270564.654039136 secs.nsecs
+elapsed_time              72713.215704178 secs.nsecs
+req_waittime              167166 samples [usec] 62 66334788 20854321051 262925352082462807
+req_active                167202 samples [reqs] 1 53 2382888 68404460
+ldlm_glimpse_enqueue      20964 samples [reqs] 1 1 20964 20964
+ldlm_extent_enqueue       10 samples [reqs] 1 1 10 10
+read_bytes                32499 samples [bytes] 1048576 1048576 34077671424 35733028391092224
+write_bytes               96699 samples [bytes] 1048576 1048576 101396250624 106321674894311424
+ost_read                  32499 samples [usec] 502 1553 24981314 19499705250
+ost_write                 96699 samples [usec] 459 66334788 20756859389 258552433566927767
+ost_connect               11 samples [usec] 261 66127314 66173843 4372822308586695
+ost_disconnect            6 samples [usec] 267 1137 2883 1979773
+ost_punch                 8 samples [usec] 192 565 2503 939035
+ost_statfs                12 samples [usec] 152 3033 13746 36258484
+ost_sync                  10 samples [usec] 10615 20827 151658 2486498434
+ost_set_info              10 samples [usec] 264 352 2993 900979
+ldlm_cancel               16395 samples [usec] 63 6796 2430608 1062036300
+obd_ping                  542 samples [usec] 208 255389 769962 72162092020
+mdc.krvlrbev-MDT0000-mdc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.869918108 secs.nsecs
+start_time                1787270564.647264684 secs.nsecs
+elapsed_time              72713.222653424 secs.nsecs
+req_waittime              3101 samples [usec] 89 6268 1209156 618432234
+req_active                3102 samples [reqs] 1 3 3126 3180
+ldlm_ibits_enqueue        100 samples [reqs] 1 1 100 100
+ost_set_info              59 samples [usec] 283 434 20144 6959134
+mds_getattr               17 samples [usec] 201 391 4567 1272539
+mds_close                 20 samples [usec] 186 419 5684 1718606
+mds_readpage              1 samples [usec] 597 597 597 356409
+mds_connect               1 samples [usec] 247 247 247 61009
+mds_get_root              1 samples [usec] 220 220 220 48400
+mds_statfs                17 samples [usec] 190 358 4433 1204661
+mds_sync                  8 samples [usec] 364 4589 28433 113351741
+mds_getxattr              2 samples [usec] 192 211 403 81385
+ldlm_cancel               13 samples [usec] 239 394 4213 1399809
+obd_ping                  2834 samples [usec] 180 526 1097011 428031665
+seq_query                 1 samples [usec] 191 191 191 36481
+fld_query                 3 samples [usec] 170 260 661 149861
+mdc.krvlrbev-MDT0001-mdc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.870024320 secs.nsecs
+start_time                1787270564.650056936 secs.nsecs
+elapsed_time              72713.219967384 secs.nsecs
+req_waittime              3408 samples [usec] 84 493623 1752052 244175644988
+req_active                3424 samples [reqs] 1 16 4341 15329
+ldlm_ibits_enqueue        306 samples [reqs] 1 1 306 306
+ost_set_info              59 samples [usec] 274 470 21037 7617603
+mds_close                 94 samples [usec] 86 507 21300 6543576
+mds_connect               1 samples [usec] 493623 493623 493623 243663666129
+mds_statfs                16 samples [usec] 217 396 4951 1583171
+ldlm_cancel               51 samples [usec] 163 1082 14358 4963672
+obd_ping                  2846 samples [usec] 241 530 1120971 444615515
+seq_query                 1 samples [usec] 305 305 305 93025
+fld_query                 1 samples [usec] 263 263 263 69169
+mdc.krvlrbev-MDT0002-mdc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.870100242 secs.nsecs
+start_time                1787270564.652546512 secs.nsecs
+elapsed_time              72713.217553730 secs.nsecs
+req_waittime              2993 samples [usec] 83 493553 1650002 244050836856
+req_active                2993 samples [reqs] 1 2 2995 2999
+ldlm_ibits_enqueue        41 samples [reqs] 1 1 41 41
+ost_set_info              59 samples [usec] 275 435 20707 7370817
+mds_close                 2 samples [usec] 183 283 466 113578
+mds_connect               1 samples [usec] 493553 493553 493553 243594563809
+mds_statfs                18 samples [usec] 183 368 5133 1505111
+ldlm_cancel               33 samples [usec] 83 416 6966 1844442
+obd_ping                  2835 samples [usec] 227 507 1109698 437251296
+seq_query                 1 samples [usec] 358 358 358 128164
+mdc.krvlrbev-MDT0003-mdc-ffff8a0c24d60000.stats=
+snapshot_time             1787343277.870176263 secs.nsecs
+start_time                1787270564.651299994 secs.nsecs
+elapsed_time              72713.218876269 secs.nsecs
+req_waittime              2915 samples [usec] 181 493475 1578521 243924644161
+req_active                2915 samples [reqs] 1 1 2915 2915
+ost_set_info              59 samples [usec] 258 439 19914 6824058
+mds_connect               1 samples [usec] 493475 493475 493475 243517575625
+mds_statfs                16 samples [usec] 181 361 4626 1370354
+obd_ping                  2839 samples [usec] 236 716 1060506 398874124

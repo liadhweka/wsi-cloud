@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T19:46:39.630Z
+  modified: 2026-08-21T20:18:08.533Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -64,8 +64,17 @@ emergency-rebuild insurance only.
    (19 s proof, 100 MiB probes) are clean; failure engages under SUSTAINED bulk. Evidence: the three
    `runs/2026-08-21-1*-FAILED-efa-*` dirs (notes.md + incident-evidence.txt + fsx-cloudwatch dumps).
    Two fio workers left in D state — clears only with a reboot (phase-2 re-proves transport per boot).
-   **Next (human-ratified plan pending): reboot → short reproduce probe → if it reproduces, AWS support
-   case as a provisioning question (D16/L7 discipline); no calibration, no run-leg until resolved.**
+   **RATIFIED plan (2026-08-21), post-reboot sequence for the next session:**
+   (1) boot triage: `journalctl -u wsi-lustre-phase2.service` (gate + counter-proof must pass; a failed
+       counter-proof unmounts by design) + confirm no D-state fio remains;
+   (2) `./scripts/probe-efa-bulk-repro.sh` (120 s, mechanical verdict) → PASS →
+       `PROBE_RUNTIME=300 ./scripts/probe-efa-bulk-repro.sh`;
+   (3) full-length PASS → re-run `./scripts/calibrate-canary-bands.sh` (now watchdogged, 1800 s/cell)
+       → `probe-lustre-coldset.sh` (the ratified cold-set demonstration) → resume the pre-baseline plan;
+   (4) any FAIL → STOP stands; AWS support case as a provisioning question ([USER]; evidence bundle =
+       the three `-FAILED-efa-*` dirs; also check Personal Health Dashboard / instance status console —
+       the box's role cannot). Never a tuning exercise (D16/L7).
+   D-7 watchdog is BUILT + proven (`s0-watchdog-proof` cell); drivers carry per-cell RECORD_TIMEOUT_S.
 6. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
    included IOPS (register L6 has both readings + sources). Verify against the first invoice / Cost
    Explorer; if all 48,000 bill, correct to $30.6279/hr, dated, as a provisioning-cost event.

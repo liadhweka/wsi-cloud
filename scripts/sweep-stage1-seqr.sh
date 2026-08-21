@@ -37,6 +37,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 : "${LEG:?LEG is unset -- source env.sh}"
+# D-7 watchdog: cells cap at 600s + ramp (~11 min wall with recording);
+# a cell past 30 min is hung, not slow.
+export RECORD_TIMEOUT_S=${RECORD_TIMEOUT_S:-1800}
 : "${STAGE1_SEQ_CORPUS_GIB:?STAGE1_SEQ_CORPUS_GIB is unset -- set it in env.sh (cache-derived provisioning parameter)}"
 
 CORPUS_DIR="$FS_MOUNT/benchmarks/stage1-read-corpus"

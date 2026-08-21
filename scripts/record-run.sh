@@ -537,6 +537,15 @@ RC=999
 # before the real START_TS assignment (which happens after the trap is installed below).
 START_TS="(pre-start)"
 cleanup() {
+  # If the wrapper dies while the command still runs (chain TERM, ctrl-C), take
+  # the command's process group down with us — a setsid'd child would otherwise
+  # orphan and keep writing into a cell the INDEX will call INCOMPLETE (D-7).
+  if [[ -n "${CMD_PID:-}" ]] && kill -0 "$CMD_PID" 2>/dev/null; then
+    log "cleanup: command group ${CMD_PGID:-$CMD_PID} still alive — TERM group"
+    kill -TERM -- "-${CMD_PGID:-$CMD_PID}" 2>/dev/null
+    sleep 3
+    kill -KILL -- "-${CMD_PGID:-$CMD_PID}" 2>/dev/null
+  fi
   log "stopping recorders..."
   # The lustre recorders run as root and stop on this sentinel (see 1L/2L);
   # removing it first lets them exit during the flush sleep below.
@@ -730,16 +739,59 @@ EOF
 }
 trap cleanup EXIT INT TERM
 
-# ---------- run the benchmark ----------
+# ---------- run the benchmark (under the D-7 per-cell watchdog) ----------
 log "running: ${CMD[*]}"
 START_TS=$(date -u +%FT%TZ)
 START_EPOCH=$(date -u +%s)
 echo "$START_TS" > "$RUN_DIR/raw/.run_start"
 
-# Run the benchmark with stdout+stderr tee'd to cmd.log.
-# We allow non-zero exit codes to flow through to RC without aborting the wrapper.
-"${CMD[@]}" > "$RUN_DIR/cmd.log" 2>&1
+# D-7 per-cell watchdog. A hung cell on an unattended chain wastes hours and
+# money (2026-08-21: a 300 s cell hung >3 h on aio completions lost to an EFA
+# incident). The command runs in its OWN process group via setsid, so the
+# watchdog and the cleanup trap can kill the whole tree by PGID — never a
+# pattern match, which also matches this wrapper's argv (pattern #2). TERM
+# first; KILL the group after a grace period (a stuck fio ignores TERM).
+# RECORD_TIMEOUT_S comes from the driver, which knows the cell's runtime; the
+# default is deliberately generous — it exists to catch the hung-forever
+# class, because a watchdog that kills a valid hours-scale cell destroys real
+# money, and tight bounds are the drivers' job.
+WATCHDOG_S=${RECORD_TIMEOUT_S:-86400}
+# The leader writes its own PGID: under a job-control shell setsid(1) forks
+# (the background child is already a group leader), so $! would be setsid's
+# short-lived parent, not the group. The child's $$ is right in both regimes;
+# `setsid -w` makes $! wait-able for the rc in both regimes too.
+CMD_PGID_FILE="$RUN_DIR/raw/.cmd_pgid"
+setsid -w bash -c 'echo $$ > "$1"; shift; exec "$@"' _ "$CMD_PGID_FILE" "${CMD[@]}" > "$RUN_DIR/cmd.log" 2>&1 &
+CMD_PID=$!
+CMD_PGID=""
+for _ in 1 2 3 4 5; do
+  CMD_PGID=$(cat "$CMD_PGID_FILE" 2>/dev/null); [[ -n "$CMD_PGID" ]] && break; sleep 0.2
+done
+CMD_PGID=${CMD_PGID:-$CMD_PID}
+(
+  waited=0
+  while (( waited < WATCHDOG_S )); do
+    sleep 15
+    kill -0 "$CMD_PID" 2>/dev/null || exit 0
+    waited=$(( waited + 15 ))
+  done
+  {
+    echo "watchdog: cell exceeded ${WATCHDOG_S}s at $(date -u +%FT%TZ) — killing process group $CMD_PGID (TERM, then KILL after 60s)"
+  } >> "$RUN_DIR/raw/watchdog.log"
+  kill -TERM -- "-$CMD_PGID" 2>/dev/null
+  sleep 60
+  if kill -0 "$CMD_PID" 2>/dev/null; then
+    echo "watchdog: group survived TERM — KILL at $(date -u +%FT%TZ)" >> "$RUN_DIR/raw/watchdog.log"
+    kill -KILL -- "-$CMD_PGID" 2>/dev/null
+  fi
+) &
+WATCHDOG_PID=$!
+wait "$CMD_PID"
 RC=$?
+kill "$WATCHDOG_PID" 2>/dev/null
+if [[ -s "$RUN_DIR/raw/watchdog.log" ]]; then
+  log "WATCHDOG FIRED: cell killed after ${WATCHDOG_S}s (see raw/watchdog.log) — rc=$RC flows to the verdict"
+fi
 
 END_TS=$(date -u +%FT%TZ)
 END_EPOCH=$(date -u +%s)

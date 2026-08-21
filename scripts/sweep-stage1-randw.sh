@@ -11,6 +11,9 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
 : "${LEG:?LEG is unset -- source env.sh (the D-36 resume-skip is leg-scoped)}"
+# D-7 watchdog: cells are 600s steady + 60s ramp (~11 min wall with recording);
+# a cell past 30 min is hung, not slow.
+export RECORD_TIMEOUT_S=${RECORD_TIMEOUT_S:-1800}
 SCRATCH=${FS_MOUNT}/benchmarks/fio-scratch
 LOG_DIR=$REPO/runs/sweep-logs
 mkdir -p "$LOG_DIR" "$SCRATCH"

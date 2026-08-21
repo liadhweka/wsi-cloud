@@ -40,7 +40,7 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-4** | **Remaining: the head-to-head `--fs` pivot column; the lustre cold set's python-side workers** | `aggregate-sweep.py` + the per-stage aggregators (pivot); `read-feature-files-stage6b.py` (at 6.B.2) and Stage 7's cold cells (at 7.1) | Both recorder halves and the shared helper are BUILT and proven on each leg's live instance (evidence: the `record-run.sh` / `parse-results.py` / `wsi_agg_helper.py` entries). (1) The aggregators still don't pivot on `metadata.json`'s `fs` field to emit head-to-head columns — the deliverable IS the cross-filesystem delta, so this lands before the first cross-leg synthesis (`prove-recording.sh` SKIPs its assertion until then). (2) The Lustre cold-cell evidence set is **DECIDED (ratified 2026-08-21): `vm.drop_caches=3` + `ldlm.namespaces.*.lru_size=clear`, both acknowledged in `cache-evidence.txt`** — the reconciler enforces it (`wsi_agg_helper.py`), the three shell drivers with `drop_caches_evidenced` carry the leg-guarded second step, and `probe-lustre-coldset.sh` is the measured demonstration. Remaining: the clearing-based cold cells whose mechanism lives in python workers get the ldlm step at their gates — 6.B.2's discard child before 6.B, Stage 7's cold cells before 7.1 |
 | **D-5** | **Remaining: Lustre band calibration (R2); mixed-cell widening before 1.6; canary-abort wiring (D-7)** | `wsi_agg_helper.py` (`check <run-dir>`) | Both relations are derived and built — WEKA (D+P)/D with calibrated bands (anchors reproduce; Stage-1 register + helper docstring), Lustre from the recorded stripe layout (raid0 → 1.0/1.0, R1 anchors). Bands load from `runs/.leg-state/$LEG/canary-bands.json`; absent → the canary exits non-zero as UNCALIBRATED rather than inventing a tolerance — Lustre's file is written by R2's calibration cells (REP≥3 per direction + bs4k). Mixed-cell widening needs mixed calibration cells before 1.6: a guessed widening can mask a real inconsistency. Until D-7 wires canary-abort, run `check` after every sweep by hand |
 | **D-6** | **Remaining: the nvidia-fs block parser in `parse-results.py`; the pre-cuFile-cell canary requirement (with D-7); Leg B's recorded Phase-0 determination cell (R2); the Stage-7 worker's path-accounting wiring** (`inference-per-slide-stage7.py` records no split — found 2026-08-21; its kvikIO cells now declare `RECORD_KVIKIO_CELL=1`, so they fail loud as INCOMPLETE until this lands — **wire before Stage 7 runs**) | `parse-results.py`; `record-run.sh` (canary); R2 session (Phase-0 cell); `inference-per-slide-stage7.py` | The shared accounting module (`wsi_cufile_accounting.py`), the 4.C/5/6 worker wiring, the D-30 INCOMPLETE rule, and Leg A's Phase-0 determination (no true GDS on WEKA-over-ENA; outcome + consequences in `Stage-4-Patching.md`) are done and smoke-verified. The standing three-layer caveat: kvikio's own compat can serve reads via POSIX without entering cuFile at all, so the per-cell recorded split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged` — is the only proof of path; an accounting-off state reports as unknown, never zero. On the known-good compat legs the pre-cell canary signature is bounce-accounting non-zero |
-| **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
+| **D-7** | **Remaining: per-cell during-run sync; canary-abort** | `record-run.sh` | **The per-cell watchdog is DONE** (built after the 2026-08-21 EFA incident hung a 300 s cell for >3 h): the command runs in its own process group (`setsid`, PGID self-reported — `$!` is wrong under a job-control shell), a poll-loop TERMs then KILLs the group at `RECORD_TIMEOUT_S` (driver-set per cell; 86400 default catches only the hung-forever class — a watchdog that kills a valid hours-scale cell destroys real money), the cleanup trap takes the group down on wrapper death, and the fire is recorded (`raw/watchdog.log`, rc flows to the verdict — proven by the recorded `s0-watchdog-proof` cell). Still needed: per-**cell** sync inside `record-run.sh` (run-leg's per-step sync covers between steps), and making the canary abort the chain |
 | **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 | **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
@@ -157,8 +157,13 @@ The stats live in root-only debugfs and lnetctl needs `/dev/lnet`, so each lustr
 exits if the wrapper dies, so a kill -9 cannot orphan a root writer). Lustre snapshots add `lfs df`,
 `getstripe -d` (the D12 layout), `lctl dl`, health, cumulative stats / rpc_stats / read_ahead_stats
 (whole-run deltas as defence in depth), the L4 tunables, and the LNet state.
+**The D-7 watchdog:** the wrapped command runs in its own process group (`setsid`, PGID self-reported to
+`raw/.cmd_pgid`); at `RECORD_TIMEOUT_S` (driver-set; default 86400 — the hung-forever backstop) the group
+is TERMed then KILLed, `raw/watchdog.log` records the fire, and the rc flows to the INCOMPLETE verdict.
+The cleanup trap also group-kills a still-running command on wrapper death, so an interrupted wrapper no
+longer orphans its benchmark.
 **⏳ DEFER:** cuFile path accounting's reader half + the kvikIO-cell
-requirement wiring (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
+requirement wiring (D-6); during-run per-cell S3 sync, canary-abort (D-7).
 
 ### `wsi_agg_helper.py` — the shared per-leg aggregation helper (D-4 remainder, D-5, register D13/D18)
 **What.** One importable module (stdlib-only, same directory as the aggregators) holding the per-leg logic:
@@ -216,6 +221,19 @@ non-zero only when it cannot determine (mode mismatch, accounting off). Test fil
 `$FS_MOUNT/benchmarks/gds-phase0/` (zeros risk a compression/sparse fast path). Reads are
 backend-RAM-resident by construction — the PATH is the question, not the rate. Cells declare
 `RECORD_KVIKIO_CELL=1`, so the D-30 wrapper check enforces the recorded split.
+
+### `probe-efa-bulk-repro.sh` — the EFA bulk-write incident reproduce probe ⭐ NEW
+**What.** One recorded stage-0 diagnostic cell in the 2026-08-21 incident's exact shape (16 jobs × 4M
+direct writes; 120 s default, `PROBE_RUNTIME=300` for the full-length escalation), bracketed by EFA
+hw_counter and dmesg snapshots. **Mechanical verdict:** FAIL on any of {fio non-zero,
+`retrans_timeout_events` moved, new efalnd-cancel / ptlrpc-timeout / connection-lost dmesg lines}; PASS
+otherwise. Only a full-length (300 s) PASS clears calibration to relaunch.
+**Why.** The incident (efalnd TX cancellations under sustained bulk writes at ≤1% server utilization —
+evidence in `runs/2026-08-21-1*-FAILED-efa-*`) is a transport-stability question, and D16 discipline says
+a transport question is settled by evidence before wallclock is spent. A FAIL means the stop stands and it
+becomes an AWS support case, never a tuning exercise (register L7).
+**Caveats.** Lustre-only by `LEG` guard; never quote a rate from its cells. Runs under its own
+`RECORD_TIMEOUT_S` (2× runtime + 300 s), so a reproduced hang self-terminates.
 
 ### `probe-lustre-coldset.sh` — the lustre cold-mechanism demonstration (D13/D-4) ⭐ NEW
 **What.** One stage-0 diagnostic cell (never quote a rate) that times a fixed buffered re-read and a fixed

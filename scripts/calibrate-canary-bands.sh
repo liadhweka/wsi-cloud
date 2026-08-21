@@ -30,6 +30,9 @@ case "$LEG" in
   lustre) : "${LUSTRE_STRIPE_LAYOUT:?LUSTRE_STRIPE_LAYOUT is unset -- the Lustre relation cannot be derived without it (D12)}" ;;
   *) echo "calibrate: FATAL: unknown LEG='$LEG'" >&2; exit 2 ;;
 esac
+# D-7 watchdog: the longest calibration cell is 480 s; past 30 min it is hung,
+# not slow (the 2026-08-21 EFA incident hung a 300 s cell for >3 h).
+export RECORD_TIMEOUT_S=${RECORD_TIMEOUT_S:-1800}
 RECORD="$REPO/scripts/record-run.sh"
 HELPER="$REPO/scripts/wsi_agg_helper.py"
 CALIB_DIR="$FS_MOUNT/benchmarks/fio-canary-calib"
