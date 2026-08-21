@@ -506,7 +506,9 @@ recover. `weka status` reports capacity in **TiB**; the bootstrap converts to TB
 **NVIDIA pins (D-17):** `nvidia-driver` and `nvidia-fs` install the contract-recorded NVRs from Leg A's S3
 contract (fallback → latest, raising `/var/lib/wsi-DRIVER-DRIFT-CHECK-ME` + a WARN); the CUDA toolkit minor
 inside the 12-9 stream and the no-contract first build stay unpinned — the contract verify
-(kernel/AMI/driver/nvidia-fs are MUST_MATCH) is the accepted tripwire (ratified 2026-08-21). No `dnf
+(kernel/AMI/driver/nvidia-fs are MUST_MATCH) is the accepted tripwire (ratified 2026-08-21). The pins are
+unexercised and expected to stay so — no rebuild is planned (both legs run to completion on their built
+boxes), so they are emergency-rebuild insurance. No `dnf
 upgrade`, ever: the kernel is a MUST_MATCH field and the AL2023 Lustre modules ride in it.
 
 ### `prefetch-datasets-to-s3.sh` — one-time dataset staging ⭐ NEW

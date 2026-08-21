@@ -1,10 +1,11 @@
-# R2 — second rebuild: sanity-check the provisioning, then start the Leg-B benchmark
+# R2 — sanity-check the provisioning, then start the Leg-B benchmark (same box as R1 — no second rebuild)
 
-Written: 2026-08-20 · Leg: **lustre** (Leg B). You are a fresh Claude Code session on the twice-rebuilt
-Leg-B box, inside `tmux new -A -s wsi`. **Everything provisioning-side should already be true** — R1 proved
-the baked spinup and finished the automation, so this box was built hands-off and verified itself at boot.
-Your session has two parts: a mechanical sanity pass that should find nothing, then the benchmark itself,
-through the Stage-1.0 baseline greenlight.
+Written: 2026-08-21 · Leg: **lustre** (Leg B). You are a fresh Claude Code session on the SAME Leg-B box R1
+ran on, inside `tmux new -A -s wsi`. Ratified 2026-08-21: **no second rebuild** — the leg runs 24/7 from
+benchmark start to completion, then destroy → whitepaper. **Everything provisioning-side should already be
+true**: this box was built hands-off (R1 proved the from-scratch spinup on it) and R1 then finished the
+automation and verified everything live. Your session has two parts: a mechanical sanity pass that should
+find nothing, then the benchmark itself, through the Stage-1.0 baseline greenlight.
 
 **What this project is.** A competitive comparison of **WEKA vs Lustre** for a whole-slide-imaging pipeline
 on AWS: same instance, same workload code, same datasets, **only the filesystem under the mount point
@@ -49,13 +50,14 @@ L1–L7 — ratified; carry, don't re-litigate) → **`docs/SCRIPT-TRACKER.md`**
 
 `git pull --ff-only`. Boot triage (`grep WSI- /var/log/wsi-bootstrap.log`; FATAL = stop).
 `journalctl -u wsi-lustre-phase2.service` — gate + counter-proof passed unattended.
-**Contract fully clean, written by the BOOT:** R1 baked the contract step into the END of the background
-env build (lustre-only, gated on `wsi-lustre-phase2.service` active) — `grep -B2 -A6 "env-contract"
-/var/log/wsi-env-build.log` must show write 19/19 + verify PASSED with no session step, and the marker
-`runs/.leg-state/lustre/contract-verified` must carry a `verified_utc` from THIS boot (the marker is
-git-tracked, so an inherited stale one is possible if the bake never ran — the timestamp is the proof).
-Then re-run `env-contract.py verify` yourself — **every held-constant field must verify, including
-`stage1_*`** (filled + D13-re-verified at the 2026-08-20 teardown); any violation is a stop.
+**Contract fully clean (R1 wrote+verified it on this box):** the marker
+`runs/.leg-state/lustre/contract-verified` is armed with R1's `verified_utc` (2026-08-21). There is NO
+contract-at-boot evidence in `/var/log/wsi-env-build.log` and none is expected — the bake landed after this
+box booted, this box's generated `wsi-build-envs.sh` predates it, and it runs only on an instance build,
+which is no longer planned (emergency-rebuild insurance only; reboots re-run just phase-2 + tuning + the
+EFA re-arm). Re-run `env-contract.py verify` yourself — **every held-constant field must verify, including
+`stage1_*`** (filled + D13-re-verified at the 2026-08-20 teardown); any violation is a stop, and any
+contract rewrite later must re-run verify to re-arm the marker (verify unlinks it on any failure).
 `./env.sh --check` (cost/ceiling trios present and dated; `FS_CLIENT_RESERVED_CORES=none`;
 `LUSTRE_STRIPE_LAYOUT` live). Tier 0 per the gate above. `./scripts/verify-conda-env.sh` (both envs, GPU
 count). nvidia-fs counters enabled (`/sys/module/nvidia_fs/parameters/*_stats_enabled` = 1). S3 reachable;

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T04:06:18.540Z
+  modified: 2026-08-21T15:22:27.266Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -15,7 +15,11 @@ Provisioning is DONE (2026-08-20): EFA-mounted (counter-proven, D16), contract v
 values ratified — decision register: `docs/cloud-setup/LUSTRE-PROVISIONING.md` (entries L1–L7). Phase-2 is
 baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + fallback moved to that doc).
 
-## A. Before the destroy & reapply the human plans next
+## A. Leg-end teardown — the only destroy left
+
+NO second rebuild (ratified 2026-08-21): the leg runs 24/7 from benchmark start to completion on R1's
+box, then destroy → whitepaper. The contract-at-boot and NVIDIA-pin bakes therefore stay unexercised —
+emergency-rebuild insurance only.
 
 1. **Teardown checklist is mandatory before the destroy** (`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`):
    `scripts/teardown-prep.sh` gated by `scripts/teardown-preflight.sh` must GO first — its order is
@@ -27,20 +31,16 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    designed continuity and the preflight only warns, never blocks, without one. A prompt is deleted once
    its session has executed it (spent once read); the pending one is
    `TEMP/prompt-r2-verify-and-benchmark.md` (updated 2026-08-21 to R1's as-left state).
-3. **2nd EFA interface: APPLIED and verified on the 2026-08-21 rebuild** — 2 devices, 2 efa NIs up, CPT
-   options landed, `FS_CLIENT_RESERVED_CORES=none` holds; count-as-built recorded in register L7. The
-   feared per-NUMA CPT failure did not fire (the configurator saw 1 NUMA node). Nothing left to do; delete
-   this line at the next memory pass if R2's boot re-proves clean.
 
 ## B. Before the first measured cell on this leg
 
-1. **Contract-at-boot is BAKED (2026-08-21, R1):** the bootstrap appends a lustre-only step to the end of
-   `wsi-build-envs.sh` — gated on `wsi-lustre-phase2.service` active — that writes the leg contract and
-   verifies it against Leg A's committed one; a clean verify arms
-   `runs/.leg-state/lustre/contract-verified`, any failure leaves NO marker and `run-leg.sh` refuses the
-   leg. **R2 must confirm the bake fired unattended** (`grep -A3 contract /var/log/wsi-env-build.log`;
-   marker present without a session step) before the first measured cell (**D6**). Manually reproduced
-   clean on this rebuild: 18 match + script_commit ancestor-ok, 0 violations, 0 unverifiable.
+1. **Contract-at-boot is BAKED but will never run on this leg** (no rebuild planned; and this box's
+   generated `wsi-build-envs.sh` predates the bake, so even a reboot won't run it — reboots re-run only
+   phase-2, the tuning unit and the EFA re-arm). It is emergency-rebuild insurance. The marker
+   `runs/.leg-state/lustre/contract-verified` is armed from R1's clean verify (18 match +
+   script_commit ancestor-ok, 0 violations, 0 unverifiable); **sessions maintain it — any contract rewrite
+   must re-run verify to re-arm** (verify unlinks it on any failure; `run-leg.sh` refuses without it).
+   R2 re-verifies at session start (**D6**).
 2. **No true GDS on this leg either — documented, not measured (STAGES.md D8, checked 2026-08-20):** GDS on
    FSx requires a P5-class client; this client is g6e. Expect compat/bounce like Leg A; do NOT chase GDS
    wiring. The leg's Phase-0 determination cell and every kvikIO cell's path split still verify — a split
