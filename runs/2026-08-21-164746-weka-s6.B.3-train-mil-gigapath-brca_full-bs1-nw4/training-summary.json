@@ -1,0 +1,17 @@
+{
+  "features_dir": "/mnt/weka/features/6.A/gigapath/brca_full",
+  "embedding_dim": 1536,
+  "batch_size": 1,
+  "num_workers": 4,
+  "ramp_s": 300.0,
+  "runtime_s": 900.0,
+  "n_slides_in_corpus": 1064,
+  "total_steady_steps": 26617,
+  "total_steady_slides": 26617,
+  "total_steady_tiles": 293942831,
+  "slides_per_sec_steady": 29.574444444444445,
+  "tiles_per_sec_steady": 326603.14555555553,
+  "samples_per_sec_steady": 29.574444444444445,
+  "max_tiles_per_slide_cap": null,
+  "training_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-21-164746-weka-s6.B.3-train-mil-gigapath-brca_full-bs1-nw4/training-steps.csv"
+}

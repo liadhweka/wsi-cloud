@@ -1,30 +1,34 @@
 #!/usr/bin/env bash
 # Stage 6.B.2 file-IO stress sweep driver.
 #
-# Three sub-tiers per `runs/Stage-6-Feature-Extraction.md` 6.B.2:
+# Three sub-tiers per `docs/Stage-6-Feature-Extraction.md` 6.B.2. The grid was
+# FIXED AT SUBSTAGE ENTRY (ratified 2026-08-21) against the measured 6.A Tier-2
+# file-size distribution (features-6a fingerprint: median 55-66 MB, p10 14-17,
+# max 200-240) — 50 MB is the measured-median tier; 5/200 MB bracket the range.
 #
 #   B.2.a — Saturation sweep (the main customer-quotable curve)
-#     corpus = N=10K × sz=50MB × {FP32, FP16}
+#     corpus = N=10K × sz=50MB × {FP32, FP16}   (~500 GB each — cache-served)
 #     concurrency ∈ {16, 64, 256}
 #     pattern ∈ {random, batched-shuffled, sequential}
 #     dtype ∈ {fp32, fp16}
 #     = 3 conc × 3 pattern × 2 dtype = 18 cells
 #
-#   B.2.b — Production scale (100K-file headline cell)
-#     corpus = N=100K × sz=50MB × FP32
-#     concurrency ∈ {64, 128, 256}
-#     pattern = random
-#     dtype = fp32
+#   B.2.b — Production scale (the genuinely COLD headline cells)
+#     corpus = N=66,000 × sz=50MB × FP32 = 3.3 TB ≈ 3.0 TiB — the ratified
+#     corpus definition (Stage-6 register): past the 2304 GiB
+#     client+larger-server-cache floor with ~30% margin, identical on both legs
+#     concurrency ∈ {64, 128, 256}, pattern = random
 #     = 3 cells
 #
-#   B.2.c — File-size sensitivity (fixed corpus=30K, conc=64, vary file size)
-#     corpus = N=30K × sz ∈ {5, 10, 50, 200} MB × FP32
-#     concurrency = 64
-#     pattern = random
-#     dtype = fp32
-#     = 4 cells
+#   B.2.c — File-size sensitivity (conc=64, random, fp32; ~500 GB TOTAL per
+#     size tier, so N varies inversely with size and every tier stays in ONE
+#     cache regime — fixed-N would cross the cold floor mid-tier and confound
+#     the size axis with the cache regime)
+#     corpus ∈ {N=100K×5MB, N=50K×10MB, N=2.5K×200MB}
+#     = 3 cells; the 50 MB point of the curve IS B.2.a's (fp32, n=64, random)
+#     cell — identical corpus and config, so it is read, not re-run
 #
-# Total: 25 cells (18 + 3 + 4). Per cell: 5 min ramp + 10 min steady.
+# Total: 24 cells (18 + 3 + 3). Per cell: 5 min ramp + 10 min steady.
 # Total sweep wallclock: ~6 hr.
 #
 # Required env (set below): CONDA_PREFIX; no LD_PRELOAD needed (no kvikIO/GDS in 6.B).
@@ -138,8 +142,8 @@ run_cell() {
 
 prep() {
   echo "=== Stage 6.B.1 — Generate standard synthetic corpus suite ==="
-  echo "Corpora: {10K×50MB×fp32, 10K×50MB×fp16, 100K×50MB×fp32, 30K×{5,10,50,200}MB×fp32}"
-  echo "Total disk: ~13.75 TB; ~1.5 hr generation time."
+  echo "Corpora: {10K×50MB×fp32, 10K×50MB×fp16, 66K×50MB×fp32 (3.0 TiB cold), 100K×5MB, 50K×10MB, 2.5K×200MB}"
+  echo "Total disk: ~5.8 TB (~5.3 TiB) — confirm free capacity first."
 
   local cell_name="generate-synthetic-corpora-standard"
   local now_utc; now_utc=$(date -u +%Y-%m-%d-%H%M%S)
@@ -209,23 +213,24 @@ b2a_saturation() {
 }
 
 b2b_production() {
-  echo "=== Stage 6.B.2.b — Production scale (3 cells) ==="
-  local corpus="syn-N100000-sz50MB-fp32"
+  echo "=== Stage 6.B.2.b — Production scale, cold corpus (3 cells) ==="
+  local corpus="syn-N66000-sz50MB-fp32"
   for n in 64 128 256; do
     run_cell "$corpus" "$n" random 600 300 || echo "  (cell failed; continuing)"
   done
 }
 
 b2c_file_size() {
-  echo "=== Stage 6.B.2.c — File-size sensitivity (4 cells) ==="
-  for sz in 5 10 50 200; do
-    local corpus="syn-N30000-sz${sz}MB-fp32"
+  echo "=== Stage 6.B.2.c — File-size sensitivity (3 cells; the 50MB point is B.2.a's fp32/n64/random cell) ==="
+  for pair in "5:100000" "10:50000" "200:2500"; do
+    local sz="${pair%%:*}" count="${pair##*:}"
+    local corpus="syn-N${count}-sz${sz}MB-fp32"
     run_cell "$corpus" 64 random 600 300 || echo "  (cell failed; continuing)"
   done
 }
 
 all() {
-  echo "=== Stage 6.B.2 sweep: b2a + b2b + b2c (25 cells) ==="
+  echo "=== Stage 6.B.2 sweep: b2a + b2b + b2c (24 cells) ==="
   b2a_saturation
   b2b_production
   b2c_file_size

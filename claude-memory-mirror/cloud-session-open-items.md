@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-21T15:38:15.034Z
+  modified: 2026-08-21T19:03:20.950Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -67,44 +67,27 @@ These change what the numbers mean, so resolving them after cells have run means
 11. **Record both sides' provisioned configuration into the environment contract** — WEKA: backend type and
     count, capacity, EC scheme, client networking mode. FSx: tier, capacity, provisioned metadata IOPS, EFA
     state. Without these the fairness basis is unverifiable after the fact. Detail: `docs/STAGES.md` **D6/D7**.
-12. **Capacity headroom — fits everywhere; corpus sizes now FROZEN (2026-08-16: `STAGE1_*` = 3072/256/26,
-    6.B = 3.0 TiB; Stage-1 + Stage-6 registers, carried in the contract).** Worst case: datasets 1.75 TiB +
-    full-cohort raw-TIFF ~6.4 TiB (retained at rest per the Stage-4 register) + Stage-1.0 read corpora
-    **9.5 TiB** (seq 3 TiB + 26 × 256 GiB one-touch regions) + 6.B corpus 3.0 TiB +
-    features/heatmaps/scratch ≲ 1 TiB ≈ **21.7 TiB** — fits FSx at 28,800 GiB = 28.1 TiB (~23% headroom; capacity re-ratified 2026-08-20 — EFA+P2 moves in 4800-GiB steps) and the WEKA
-    cluster (61.37 TiB usable) trivially. If FSx headroom feels tight at Leg-B spin-up, raising FSx
-    capacity is a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full 1073
-    slides — measured work, not dead time, but plan the leg's schedule with it.
-13. **Worker measurement-correctness remainders — the 4.C half is DONE (2026-08-15):** `gds_engaged` now
-    carries the recorded three-layer path-accounting verdict via the new `wsi_cufile_accounting.py` +
-    `read-tiles-kvikio.py` wiring (see tracker **D-6** for what remains: the nvidia-fs block parser; the
-    pre-cuFile-cell canary with D-7; Leg B's Phase-0 cell; and the **Stage-7 worker's path-accounting
-    wiring** — `inference-per-slide-stage7.py` records no split, found 2026-08-21; wire before Stage 7
-    runs or every kvikIO 7.x cell goes INCOMPLETE by design). Still open here:
-    - **`read-after-write-stage7.py`'s 10 ms poll.** The interval is now reported as the visibility-latency
-      resolution floor, so quantisation is visible rather than silent. Whether to *tighten* it is a tuning
-      judgment against CPU cost and is unmade. Verified on the build machine: measured latencies fell
-      **below** the floor, so at 10 ms this cell is sampling poll phase, not visibility — decide the interval
-      before 7.4.b runs, or its headline number means nothing.
-13d. **Stage 4–7 sweep drivers must declare `RECORD_CACHE_STATE` per cell (kvikIO cells also
-    `RECORD_KVIKIO_CELL=1`) before their stages run** — blanket ratification 2026-08-17: methodology-faithful
-    labels per each roadmap's cache-discipline row, `na-*` where a stage deliberately defines no axis. Done:
-    Stage-1/2/stability, 3.0, 4.A/4.D (`na-mixed-rw-unmanaged`), **4.C (`cold` — client-cold at read/window
-    entry; the reader now emits `client_page_cache_discarded` for the reconciler)**, and **5 (`warm` —
-    steady-state by construction, note-worded)**. Also done: **6.A Tier 1/3
-    (kvikio `cold` per-slide-discard / cucim `warm` steady-state; cuCIM cache-size line in the cucim notes —
-    item 14 fully implemented, delete on the next hygiene pass)**, 6.A Tier 2 (`na-mixed-rw-chunk-resident`,
-    Stage-6 register), and **2026-08-21: 6.B** (generation `na-write-cell`; 6.B.2 per-cell cold/warm derived
-    mechanically from corpus-vs-cache arithmetic against the 2304 GiB floor; 6.B.3 `warm` steady-state) **and
-    7.1–7.4/7.6** (roadmap-named regimes; kvikIO cells declare `RECORD_KVIKIO_CELL=1` — INCOMPLETE by design
-    until the Stage-7 worker wiring lands, item 13 / tracker D-6). **REMAINING — an OPEN methodology call,
-    surfaced 2026-08-21: 6.C cells and 7.5's mixed multi-workload cells declare nothing; neither roadmap
-    defines a cache-discipline row.** Recommendation with the human: `na-mixed-concurrent-…` by construction
-    (a concurrent QoS cell has no cold/warm axis; retention compares same-fs). Wire `sweep-stage6c.sh` + the
-    7.5 cells in the ratifying edit, before 6.C launches — tracker **D-30**.
-14. **cuCIM tile-cache policy DECIDED (2026-08-17: record-not-sweep; Stage-4 register). Implementation:
-    4.B and 5.B cell notes carry the configured size (512 MiB library default). Remaining: the 6.A cuCIM
-    cells' notes, at the 6.A gate — then delete this item.**
+12. **Capacity headroom — fits everywhere; corpus sizes FROZEN (`STAGE1_*` = 3072/256/26, Stage-1
+    register + contract; 6.B suite grid fixed 2026-08-21 from the measured Tier-2 distribution — production
+    corpus 3.0 TiB per the register, full synthetic suite ≈ 5.8 TB ≈ **5.3 TiB**, Stage-6 roadmap 6.B.1
+    Grid row).** Worst case: datasets 1.75 TiB + full-cohort raw-TIFF ~6.4 TiB (retained at rest per the
+    Stage-4 register) + Stage-1.0 read corpora **9.5 TiB** (seq 3 TiB + 26 × 256 GiB one-touch regions) +
+    6.B suite 5.3 TiB + features/heatmaps/scratch ≲ 1 TiB ≈ **24.0 TiB** — fits FSx at 28,800 GiB =
+    28.1 TiB (**~15% headroom**; capacity re-ratified 2026-08-20 — EFA+P2 moves in 4800-GiB steps) and the
+    WEKA cluster (61.37 TiB usable) trivially. Human-approved fallback if Leg-B headroom pinches: Leg B may
+    generate-and-delete the 6.B corpora per tier instead of holding the whole suite. Raising FSx capacity
+    stays a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full cohort —
+    measured work, not dead time, but plan the leg's schedule with it.
+13. **Stage-7 pre-run gates:** (a) **`inference-per-slide-stage7.py` records no cuFile path-accounting
+    split** (found 2026-08-21; tracker **D-6**) — wire before Stage 7 runs, or every kvikIO 7.x cell goes
+    INCOMPLETE by design (they now declare `RECORD_KVIKIO_CELL=1`); (b) **the 7.4.b writer's
+    matched-artifact sizing** (standing constraint, Stage-7 roadmap 7.4.b — do not run 7.4.b as-is; the
+    artifact is sized and tiled from a measured 7.3 output on the same leg, see also item 20). The 7.4.b
+    poll interval is DECIDED and implemented (1 ms; Stage-7 register, 2026-08-21).
+13d. **(resolved 2026-08-21 — D-30 closed: every stage 3–7 driver declares per cell, 6.C
+    `na-mixed-concurrent-workloads` and 7.5 `na-mixed-concurrent-clinical` ratified + wired. Tracker
+    closed-ids + each roadmap's cache rows hold the record. Delete this stub once 6.C's first cells run
+    clean under the new declarations.)**
 15. **(resolved 2026-08-19 under the no-obvious-ratification rule — `CHUNK_SIZE=200` re-derived and kept:
     ~1.01 TiB transient per chunk vs ~50 TiB free on Leg A and ~7 TiB planned headroom on the re-ratified 28,800-GiB
     FSx config; identical-on-both-legs rule keeps the default. Stage-6 register carries the arithmetic.
@@ -114,21 +97,6 @@ These change what the numbers mean, so resolving them after cells have run means
     `LUSTRE_STRIPE_LAYOUT`, distinct from `--check`'s "configured") — **deliberately deferred until after
     the Stage-1.0 baseline**; not blocking. Detail: the original gap is that a leg can start with `--check`
     passing while the D12 consistency relation is underivable.
-17b. **[USER, optional strengthener] Confirm whether 4 FE cores / 4 NICs was the WEKA terraform module's
-    default client config for this instance class.** The documented basis is already recorded in the
-    fairness statement (docs.weka.io: >1 core required to maximize a ≥100 Gbps client; num_cores pairs
-    with configured network devices; deployment configured 4↔4, contract-recorded). If 4 was also the
-    vendor deployment tool's default, add that as a second-source sentence; if it was a hand choice,
-    leave the statement as is — the pairing-rule basis stands alone. Delete this item either way once
-    answered.
-18. **[USER] Cost-metering basis with WEKA Sales — the one cost remainder.** Does the Marketplace software
-    rate meter RAW NVMe (120 TB @ 0.1141553/TB-hr = 13.699/hr, the recorded value) or USABLE (~67.5 TB →
-    ~7.70/hr, the alternative in env.sh's comment)? Backfillable — cells record wallclock + dated prices,
-    cost is re-derived arithmetic. Everything else from the old item is DONE and verified on the rebuilt
-    cluster 2026-08-16 (type/count/RAM/capacity/EC/reserved cores; backend AMI recorded, STAGES **D20**;
-    `weka_version` pin confirmed by the human; values in env.sh + the contract's recovery fields). Leg B's
-    documented per-client caps (2026-08-15, performance.html): EFA 700 Gbps (the EFA+GDS 1200 Gbps row is inapplicable — g6e is not a GDS-capable client class, D8 2026-08-20) — set at
-    Leg-B spin-up.
 19. **Is a synthetic *metadata* ceiling worth adding to Stage 1?** Decided for now: **no**, and Stage 2 reports
     no ceiling-relative figure at all — 1.0a–d are all data-path, so there is no denominator that would mean
     "% of this filesystem's metadata capability", and 1.0d's random-read IOPS would be a mismatched one. Stage 2
@@ -159,6 +127,13 @@ These change what the numbers mean, so resolving them after cells have run means
     RECORD_CACHE_STATE declaration (memory 13d / tracker D-30)**. **Tier 2** rows (cuCIM tile-cache policy
     item 14 before Stage 4; CHUNK_SIZE item 15 before 6.A Tier 2; D-34 poll rate before 2.0; mixed-band
     calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
+22. **[THIS SESSION] D-7 in `record-run.sh`** (per-cell watchdog, during-run S3 sync, canary-abort),
+    tested on a stage-0 throwaway, **before the 6.B.1/6.B.2 chain launches** — record-run.sh must not be
+    edited while any cell is recording (the D18 rep cells are running it now). Everything else from the
+    6.B.3-boundary list landed 2026-08-21: run-leg's 6.B.1 step, the closeout-table 6.B.1 row, the 6.B.2
+    p99-join in `aggregate-stage6b.py` (feed verdict + non-zero exit on FAIL), and `MIL_NUM_WORKERS=16`
+    in env.sh (the measured knee — all three models flat 16→32; Leg B exports the same value).
+
 ## B. Watch during benchmarking
 
 -2. **CONCURRENT LEGS ARE LIVE (D6 amended; CLAUDE.md "Concurrent legs").** Leg B runs on its own instance

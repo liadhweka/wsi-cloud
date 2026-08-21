@@ -576,9 +576,13 @@ aggregate — so the backends had to move up or every ceiling cell would measure
 burst-credit state rather than the filesystem (**D7**: neither side may be the constraint). i8ge.6xlarge
 serves 37.5 Gbps sustained each (AWS API), 300 Gbps aggregate — above both the client's 200 Gbps line rate
 and its measured capability. *Why both drives per host:* the one-drive-per-host cost variant (halves the
-raw-capacity software metering) was examined and not adopted at apply; the raw basis for
-`SOFTWARE_USD_PER_HR` is therefore 120 TB, with the usable-basis alternative recorded beside it in env.sh
-pending the metering-basis answer from WEKA Sales. The backend AMI is **recorded, never pinned**
+capacity the software fee meters on) was examined and not adopted at apply. *Software-metering basis
+(confirmed with WEKA Sales, 2026-08-21):* the Marketplace fee meters on **usable** capacity —
+`SOFTWARE_USD_PER_HR` = 67.46 TB usable × the dated Marketplace rate = **7.7009/hr**. **Data-validity
+note:** every Leg-A cell recorded before this correction (through the 2026-08-21 6.B.3 sweep) carries the
+superseded raw-basis value 13.699 in its as-run `cost_inputs` — retained as provenance, never overwritten
+(`../PROJECT-THESIS.md` §4); every cost derivation, including the publication-time reprice, uses the
+usable basis. The backend AMI is **recorded, never pinned**
 (`WEKA_BACKEND_AMI`; backends are `MAY_DIFFER` and absent on Leg B). *Sources:* `weka status`/`weka fs` on
 the live cluster; `describe-instances`/`describe-instance-types` (fetched at spin-up).
 

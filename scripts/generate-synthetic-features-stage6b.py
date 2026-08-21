@@ -88,26 +88,34 @@ DTYPE_BYTES = {"fp32": 4, "fp16": 2}
 DTYPE_TORCH = {"fp32": torch.float32, "fp16": torch.float16}
 
 
-# Standard 6.B corpus matrix — what gets generated under --standard-suite.
-# Per disk budget in Stage-6-Feature-Extraction.md 6.B.1:
-#   Saturation: N=10K × sz=50MB × {fp32, fp16} = 0.5 TB + 0.25 TB = 0.75 TB
-#   Production: N=100K × sz=50MB × fp32 only    = 5 TB
-#   File-size sensitivity: N=30K × sz∈{5,10,50} MB × fp32 = ~2 TB
-# Total disk budget: ~13.75 TB — confirm free capacity on the target filesystem
-# before generating. 200 MB tier: real Stage 6.A features at full BRCA cluster
-# around 150-250 MB per slide for ViT-H/G foundation models.
+# Standard 6.B corpus matrix — the grid FIXED AT SUBSTAGE ENTRY (ratified
+# 2026-08-21) against the MEASURED 6.A Tier-2 file-size distribution
+# (fingerprint features-6a: mean 57-68 MB, median 55-66, p10 14-17,
+# max 200-240 MB per slide) — so 50 MB is the measured-median tier and
+# 5 / 200 MB bracket the observed range. Disk budget:
+#   Saturation:  N=10K × 50 MB × {fp32, fp16}      = 1.0 TB
+#   Production:  N=66,000 × 50 MB × fp32           = 3.3 TB ≈ 3.0 TiB
+#   Size tiers:  ~500 GB TOTAL each at 5/10/200 MB = 1.5 TB
+# Total ≈ 5.8 TB ≈ 5.3 TiB — confirm free capacity on the target filesystem
+# before generating (the Leg-B headroom arithmetic lives in the open-items
+# memory's capacity item).
 STANDARD_CORPORA = [
-    # Saturation tier (the main concurrency × pattern sweep target)
+    # Saturation tier (the main concurrency × pattern sweep target). The fp32
+    # corpus doubles as the 50 MB point of the size-sensitivity curve —
+    # identical corpus and cell config, so B.2.c does not re-run it.
     {"count": 10000, "file_size_mb": 50, "dtype": "fp32"},
     {"count": 10000, "file_size_mb": 50, "dtype": "fp16"},
-    # Production-scale (the 100K-file headline cell)
-    {"count": 100000, "file_size_mb": 50, "dtype": "fp32"},
-    # File-size sensitivity (fixed N=30K, vary file size)
-    # 200 MB tier matches the real Stage 6.A feature-size distribution.
-    {"count": 30000, "file_size_mb": 5,   "dtype": "fp32"},
-    {"count": 30000, "file_size_mb": 10,  "dtype": "fp32"},
-    {"count": 30000, "file_size_mb": 50,  "dtype": "fp32"},
-    {"count": 30000, "file_size_mb": 200, "dtype": "fp32"},
+    # Production-scale: the ratified 3.0 TiB cold corpus (Stage-6 register) —
+    # past the 2304 GiB client+larger-server-cache floor with ~30% margin,
+    # ONE identical definition on both legs.
+    {"count": 66000, "file_size_mb": 50, "dtype": "fp32"},
+    # File-size sensitivity at FIXED ~500 GB total per tier (N varies inversely
+    # with size). Fixed-N would cross the cache floor mid-tier and confound the
+    # size axis with the cache regime — the cold axis is the production tier's
+    # job, so every size-tier cell stays in one (cache-served) regime.
+    {"count": 100000, "file_size_mb": 5,   "dtype": "fp32"},
+    {"count": 50000,  "file_size_mb": 10,  "dtype": "fp32"},
+    {"count": 2500,   "file_size_mb": 200, "dtype": "fp32"},
 ]
 
 

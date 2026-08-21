@@ -1,0 +1,18 @@
+{
+  "run_name": "train-mil-virchow2-brca_full-bs1-nw16-rep3",
+  "stage": "6.B.3",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-21T19:18:26Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [1,2,3,4,49,50,51,52],
+  "cores_available": 80,
+  "cache_state": "warm",
+  "rep": 3,
+  "command": ["/data/local-nvme/conda-envs/wsi-cucim-2604/bin/python","/home/ec2-user/wsi-cloud/scripts/train-mil-stage6b.py","--features-dir","/mnt/weka/features/6.A/virchow2/brca_full","--embedding-dim","1280","--num-workers","16","--ramp","300","--runtime","900","--training-steps-csv","/home/ec2-user/wsi-cloud/runs/2026-08-21-191823-weka-s6.B.3-train-mil-virchow2-brca_full-bs1-nw16-rep3/training-steps.csv","--summary-json","/home/ec2-user/wsi-cloud/runs/2026-08-21-191823-weka-s6.B.3-train-mil-virchow2-brca_full-bs1-nw16-rep3/training-summary.json"],
+  "note": "Stage 6.B.3 canonical CLAM MIL training cell — real features from 6.A. model=virchow2 batch_size=1 num_workers=16. WHY: grounds the Phase 2 metadata-stress story in actual production training context. Storage concurrency driven by DataLoader num_workers (each worker prefetches one slide); batch_size=1 matches mahmoodlab/CLAM canonical (collate_MIL + CLAM_SB.forward([N,D])). num_workers is the customer-quotable IO axis. Regime: warm — the per-model feature corpus fits host RAM, so this is memory-served steady-state by construction after the first pass (Stage-6 roadmap regime row); it measures MIL throughput, not storage bandwidth — the cold storage number belongs to 6.B.2's synthetic corpus. [D18 REP=3 re-invocation of 2026-08-21-160651-weka-s6.B.3-train-mil-virchow2-brca_full-bs1-nw16 — same command, same env; original-run-dir paths rewritten into this rep's dir; reps group to median + spread]"
+}

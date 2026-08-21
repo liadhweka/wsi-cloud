@@ -1,0 +1,17 @@
+{
+  "features_dir": "/mnt/weka/features/6.A/virchow2/brca_full",
+  "embedding_dim": 1280,
+  "batch_size": 1,
+  "num_workers": 32,
+  "ramp_s": 300.0,
+  "runtime_s": 900.0,
+  "n_slides_in_corpus": 1064,
+  "total_steady_steps": 34048,
+  "total_steady_slides": 34048,
+  "total_steady_tiles": 376082241,
+  "slides_per_sec_steady": 37.83111111111111,
+  "tiles_per_sec_steady": 417869.1566666667,
+  "samples_per_sec_steady": 37.83111111111111,
+  "max_tiles_per_slide_cap": null,
+  "training_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-21-162717-weka-s6.B.3-train-mil-virchow2-brca_full-bs1-nw32/training-steps.csv"
+}

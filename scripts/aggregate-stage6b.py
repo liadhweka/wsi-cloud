@@ -399,6 +399,8 @@ def main():
         if not d.is_dir(): continue
         if "FAILED" in d.name:
             print(f"  skip forensic-renamed: {d.name}", file=sys.stderr); continue
+        if re.search(r"-rep\d+$", d.name):
+            continue  # D18 rep cells stay out of the single-shot grid (same policy as aggregate-sweep.py) until the D-4 helper's rep grouping lands
         if "smoke" in d.name:
             print(f"  skip smoke: {d.name}", file=sys.stderr); continue
         row = extract_b2_summary(d)
@@ -418,6 +420,8 @@ def main():
         if not d.is_dir(): continue
         if "FAILED" in d.name:
             print(f"  skip forensic-renamed: {d.name}", file=sys.stderr); continue
+        if re.search(r"-rep\d+$", d.name):
+            continue  # D18 rep cells stay out of the single-shot grid (same policy as aggregate-sweep.py) until the D-4 helper's rep grouping lands
         if "smoke" in d.name: continue
         row = extract_b3_summary(d)
         if row is None: continue
@@ -426,6 +430,43 @@ def main():
         sps_s = f"{sps:.1f}" if sps else "N/A"
         print(f"  {d.name}: bs={row['batch_size']} nw={row['num_workers']} "
               f"samples/s={sps_s}", file=sys.stderr)
+
+    # ── The 6.B file-load p99 canary criterion (Stage-6 roadmap, canary section) ──
+    # Asks exactly one thing: does the read path keep its consumer fed. At
+    # concurrency C the loader supplies a file roughly every p99/C; the tail is
+    # sane precisely when that interval sits inside the per-step time 6.B.3
+    # measured ON THE SAME LEG at the nearest worker count (minimum across the
+    # three models — the most demanding consumer). Fallback where this leg has
+    # no 6.B.3 rows yet: the uncontended reference — 6.B.2's own
+    # lowest-concurrency cell's per-load p99 (self-referential, but it still
+    # catches a pathological tail). Both inputs are same-leg, so no external
+    # constant enters. A FAIL exits non-zero: a canary whose criterion nobody
+    # computes passes silently, which is the failure this join exists to close.
+    feed_failures = 0
+    if b2_rows:
+        by_nw = {}
+        for r in b3_rows:
+            nw, sd = r.get("num_workers"), r.get("step_duration_ms_mean")
+            if nw is None or sd is None: continue
+            by_nw[nw] = min(sd, by_nw.get(nw, sd))
+        b2_eval = [r for r in b2_rows if r.get("lat_p99_ms") and r.get("n_processes")]
+        lowest = min(b2_eval, key=lambda r: r["n_processes"]) if b2_eval else None
+        for r in b2_rows:
+            p99, c = r.get("lat_p99_ms"), r.get("n_processes")
+            if not p99 or not c:
+                r["feed_verdict"] = "NO_DATA"; feed_failures += 1; continue
+            r["p99_feed_interval_ms"] = p99 / c
+            if by_nw:
+                nearest = min(by_nw, key=lambda nw: abs(nw - c))
+                ref, src = by_nw[nearest], f"b3-step@nw{nearest}-min-across-models"
+            else:
+                ref, src = lowest["lat_p99_ms"], f"b2-uncontended-p99@n{lowest['n_processes']}"
+            r["feed_reference_ms"], r["feed_reference_source"] = ref, src
+            r["feed_verdict"] = "PASS" if r["p99_feed_interval_ms"] <= ref else "FAIL"
+            if r["feed_verdict"] == "FAIL":
+                feed_failures += 1
+                print(f"  FEED-FAIL {r['run_dir']}: p99/C = {r['p99_feed_interval_ms']:.2f} ms "
+                      f"> {ref:.2f} ms ({src}) — the read path stalls its consumer", file=sys.stderr)
 
     if b2_rows:
         _LEG_OUT = __import__("os").environ.get("LEG") or __import__("sys").exit("LEG is unset -- source env.sh (summary CSVs are per-leg files: D6 concurrent legs)")
@@ -438,6 +479,10 @@ def main():
 
     if not b2_rows and not b3_rows:
         print("# No 6.B cells matched.", file=sys.stderr)
+        return 1
+    if feed_failures:
+        print(f"# FEED CHECK: {feed_failures} 6.B.2 cell(s) failed the file-load p99 criterion — "
+              "fix before accepting the sweep (Stage-6 canary).", file=sys.stderr)
         return 1
     return 0
 

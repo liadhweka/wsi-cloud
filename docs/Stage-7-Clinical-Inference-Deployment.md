@@ -267,6 +267,16 @@ single write in the stage.
 - **The read-after-write writer writes to a temporary name, fsyncs, then renames.** *Why:* without it the
   reader's existence check fires when the file is created at zero length, producing a plausible-looking
   number that measures nothing. A correctness requirement, not a style preference.
+- **7.4.b's reader polls at 1 ms, and the poll interval is recorded as the visibility-latency resolution
+  floor.** *Why 1 ms:* on the build machine, measured visibility latencies fell **below** the earlier 10 ms
+  interval, so at 10 ms the cell sampled poll phase rather than visibility. Any latency at or under the
+  recorded floor is still reported as quantisation, not measurement, and the cell's `sar` over
+  application-available cores shows what the tighter poll itself costs — so the trade this interval makes is
+  visible in the record rather than asserted.
+- **7.5's mixed multi-workload cells declare `RECORD_CACHE_STATE=na-mixed-concurrent-clinical`.** *Why:* the
+  cold/warm axis deliberately does not apply — the measured quantity is per-workload QoS retention against
+  same-filesystem solo baselines, not a cache-regime-dependent storage rate (the same construction as 6.C's
+  declaration, so the two mixed stages read identically).
 - **7.5 retention is measured against a same-filesystem solo baseline.** *Why:* the question is how much
   each filesystem degrades its own workloads under contention. Cross-comparing absolute numbers would
   conflate contention behaviour with raw speed; the **retention percentages** are the cross-leg comparison.

@@ -50,18 +50,26 @@ CUFILE_JSON=${CUFILE_ENV_PATH_JSON}
 # Default config (override via env)
 EXTRACT_MODEL="${EXTRACT_MODEL:-virchow2}"
 EXTRACT_DATASET_TAG="${EXTRACT_DATASET_TAG:-brca50}"
-# ⏳ D-8: the SET is valid for a 4-GPU instance; the ORDER is not yet derived.
-# NUMA/NIC-aware ordering needs `nvidia-smi topo -m` on the real instance, so
-# this is deliberately the identity list rather than a carried-over one -- the
-# previous environment's list (2,3,6,7) named GPUs that do not exist here, and
-# CUDA_VISIBLE_DEVICES drops unknown indices silently rather than erroring, so
-# the extract workload ran at half width while the cell claimed full width.
-# The guard below catches a wrong list; it cannot catch a wrong ORDER, which is
-# why D-8 still gates. Kept identical in shape to Stage 6.D's PIPELINE_GPUS so
-# the two sibling orchestrators cannot drift apart.
-EXTRACT_GPUS="${EXTRACT_GPUS:-0,1,2,3}"
-EXTRACT_N_GPUS="${EXTRACT_N_GPUS:-4}"
+# GPU partition (D-25, ratified 2026-08-21): extract on GPUs 1-3, MIL pinned to
+# GPU 0 -- TRUE isolation, so GPU contention stays out of a cell that exists to
+# measure filesystem QoS. The Tier-1 solo baselines run at this exact config,
+# so every retention denominator is internally consistent with its concurrent
+# numerator. This partition is 6.C-specific: 6.D's phases are sequential, so
+# PIPELINE_GPUS keeps the full 0,1,2,3 (it must match 6.A Tier 2's N to
+# compose) -- do not "align" the two.
+# ⏳ D-8: the SET is now decided; the NUMA/NIC-aware ORDER is still underived
+# (`nvidia-smi topo -m` on the real instance). The guard below catches a wrong
+# list; it cannot catch a wrong ORDER, which is why D-8 still gates.
+EXTRACT_GPUS="${EXTRACT_GPUS:-1,2,3}"
+EXTRACT_N_GPUS="${EXTRACT_N_GPUS:-3}"
 MIL_FEATURES_TAG="${MIL_FEATURES_TAG:-brca_full}"
+# The MIL workload runs at its 6.B.3 saturation knee (roadmap 6.C) — a MEASURED
+# per-project value, not a constant: it is read from Leg A's 6.B.3 results at
+# 6.C entry and then held identical on both legs (workload shape, Table 5).
+# Deliberately NO default: a carried-over knee from another environment would
+# run every 6.C cell at a wrong config and every retention figure would
+# inherit it silently. Enforced at the point of use (the mil workload below),
+# so cells that do not name the mil workload are unaffected.
 INGEST_N="${INGEST_N:-4}"
 INGEST_SRC="${INGEST_SRC:-${SCRATCH_DIR:?SCRATCH_DIR is unset -- source env.sh}/fpsync-source/tcga-brca}"
 INGEST_DST="${INGEST_DST:-${FS_MOUNT}/runs-stage6c-ingest-target}"
@@ -113,6 +121,17 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [ -z "$WORKLOADS" ] && { echo "missing --workloads" >&2; exit 2; }
+
+# Up-front, not only at use: the mil workload runs backgrounded, so a refusal
+# inside it would kill that workload alone and the cell would silently run a
+# DIFFERENT mix than it claims (the exact failure the MIL_FEATURES_TAG caveat
+# documents). Fail the whole cell before anything launches.
+if [[ ",$WORKLOADS," == *",mil,"* ]] && [ -z "${MIL_NUM_WORKERS:-}" ]; then
+  echo "FATAL: this cell names the mil workload but MIL_NUM_WORKERS is unset." >&2
+  echo "       Set it to the measured 6.B.3 saturation knee (docs/Stage-6-Feature-Extraction.md," >&2
+  echo "       6.B.3 results row) — one value, identical on both legs (Table 5 workload shape)." >&2
+  exit 2
+fi
 [ -z "$RUNTIME" ]   && { echo "missing --runtime" >&2; exit 2; }
 [ -z "$RAMP" ]      && { echo "missing --ramp" >&2; exit 2; }
 [ -z "$RUN_DIR" ]   && { echo "missing --run-dir" >&2; exit 2; }
@@ -266,16 +285,18 @@ workload_mil() {
   touch "$READY_DIR/.mil-ready"
   while [ ! -f "$BARRIER" ]; do sleep 0.1; done
 
-  # MIL uses GPU 0 (NUMA-1) to stay out of the extract workload's GPUs
-  # Canonical CLAM bs=1 (see Stage-6-Feature-Extraction.md);
-  # num_workers=16 is the saturation knee from 6.B.3 (peak ~8.6-8.8 slides/sec).
+  # MIL is pinned to GPU 0; extract runs on GPUs 1-3 (D-25 partition — true
+  # isolation, so GPU contention stays out of the QoS measurement). Canonical
+  # CLAM bs=1 (see Stage-6-Feature-Extraction.md); num_workers is the measured
+  # 6.B.3 saturation knee, required from the environment above — never a
+  # carried-over constant.
   CUDA_VISIBLE_DEVICES=0 \
   CONDA_PREFIX="$CONDA_ENV" \
   OMP_NUM_THREADS=8 MKL_NUM_THREADS=8 \
   "$PY" "$REPO/scripts/train-mil-stage6b.py" \
     --features-dir "$features_dir" \
     --embedding-dim "$embed_dim" \
-    --num-workers 16 \
+    --num-workers "${MIL_NUM_WORKERS:?MIL_NUM_WORKERS is unset -- set it to the measured 6.B.3 saturation knee (docs/Stage-6-Feature-Extraction.md 6.B.3 results row; identical on both legs)}" \
     --ramp "$RAMP" --runtime "$RUNTIME" \
     --training-steps-csv "$csv" \
     --summary-json "$RUN_DIR/workload-mil-summary.json" \

@@ -153,7 +153,9 @@ export STAGE1_RANDR_REGIONS=""          # region count (21 grid + reserve)
 # both infra-only and all-in cost figures are computed from them.
 export INSTANCE_USD_PER_HR=""
 export FS_USD_PER_HR=""                          # per leg: the provisioned filesystem's rate
-# WEKA leg: the PUBLIC AWS Marketplace rate (citable; a negotiated price is not).
+# WEKA leg: the PUBLIC AWS Marketplace rate (citable; a negotiated price is not),
+# metered on USABLE capacity — confirmed with WEKA Sales; value + data-validity
+# note in STAGES.md D20.
 # Lustre leg: 0 — the FSx service rate is software-inclusive (basis recorded per cell).
 export SOFTWARE_USD_PER_HR=""
 export PRICE_CHECKED_UTC=""                      # e.g. 2026-08-15 — undated is unusable

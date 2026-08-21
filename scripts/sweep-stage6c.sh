@@ -6,19 +6,22 @@
 #   Tier 2 (pairs):          4 cells — {extract+ingest, extract+mil, mil+viewer, extract+viewer}
 #   Tier 3 (triples):        2 cells — {extract+mil+ingest, extract+mil+viewer}
 #   Tier 4 (all-four-up):    1 cell  — all four workloads on one namespace
-#   Tier 5 (endurance):      1 cell  — all-four-up for 4–6 hr sustained
+#   Tier 5 (endurance):      1 cell  — all-four-up, 4 hr sustained (ratified
+#                            2026-08-21: mirrors 7.5.b's endurance window, so
+#                            the two endurance cells are cross-stage comparable
+#                            and the chain stays bounded overnight)
 #
 # Total: 12 cells. Wallclock estimate per cell:
 #   solo, pair, triple, all-four = 30 min each (5 ramp + 25 steady)
-#   endurance = 5 hr (5 ramp + 4h55 steady)
-# Total: ~11 hr (dominated by endurance).
+#   endurance = ~4 hr (5 ramp + 4h steady)
+# Total: ~10 hr (dominated by endurance).
 #
 # Usage:
 #   ./sweep-stage6c.sh tier1     # 4 solo baselines
 #   ./sweep-stage6c.sh tier2     # pair-wise
 #   ./sweep-stage6c.sh tier3     # triple-up
 #   ./sweep-stage6c.sh tier4     # all-four-up (THE customer slide)
-#   ./sweep-stage6c.sh tier5     # endurance (5 hr)
+#   ./sweep-stage6c.sh tier5     # endurance (4 hr)
 #   ./sweep-stage6c.sh all       # all five tiers
 #   ./sweep-stage6c.sh smoke     # very short single-cell validation
 set -uo pipefail
@@ -36,7 +39,7 @@ RECORD="$REPO/scripts/record-run.sh"
 # Common cell config
 DEFAULT_RAMP="${DEFAULT_RAMP:-300}"
 DEFAULT_RUNTIME="${DEFAULT_RUNTIME:-1500}"   # 25 min steady (so cell = ~30 min)
-ENDURANCE_RUNTIME="${ENDURANCE_RUNTIME:-17700}"  # 4 hr 55 min steady (so cell = ~5 hr)
+ENDURANCE_RUNTIME="${ENDURANCE_RUNTIME:-14400}"  # 4 hr steady — mirrors 7.5.b's endurance window (ratified 2026-08-21)
 
 FAILED_CELLS=0
 
@@ -52,7 +55,7 @@ run_cell() {
   # what gets filtered before anything is externalised.
   local approval_tag=""
   [ "${EXTRACT_MODEL:-virchow2}" = "uni2-h" ] && approval_tag="[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] "
-  local note="${approval_tag}Stage 6.C concurrent multi-workload cell on fs=${LEG}: workloads={$workloads} extract_model=${EXTRACT_MODEL:-virchow2} ramp=${ramp}s steady=${runtime}s. WHY: concurrent heterogeneous load on one namespace is where storage architectures diverge, and no single-workload cell surfaces it. Retention is measured against THIS leg's own solo baselines re-measured at the same concurrent config, so the cross-leg comparison is of retention percentages, not absolute rates. Per D15, check the core accounting before attributing any interference to the filesystem rather than the host."
+  local note="${approval_tag}Stage 6.C concurrent multi-workload cell on fs=${LEG}: workloads={$workloads} extract_model=${EXTRACT_MODEL:-virchow2} ramp=${ramp}s steady=${runtime}s. WHY: concurrent heterogeneous load on one namespace is where storage architectures diverge, and no single-workload cell surfaces it. Retention is measured against THIS leg's own solo baselines re-measured at the same concurrent config, so the cross-leg comparison is of retention percentages, not absolute rates. Per D15, check the core accounting before attributing any interference to the filesystem rather than the host. Regime: na — the cold/warm axis deliberately does not apply to 6.C (ratified 2026-08-21): the measured quantity is per-workload QoS retention, and solo baselines carry the same declaration as the concurrent tiers because they are the retention denominators measured under the identical construction — labelling the two sides differently would put numerator and denominator in different regimes."
 
   echo ""
   echo "=========================================="
@@ -61,6 +64,9 @@ run_cell() {
   echo "  ramp=${ramp}s runtime=${runtime}s"
   echo "=========================================="
 
+  # D-30/D13: one uniform na-* declaration across ALL 6.C tiers (solo included) —
+  # see the Regime sentence in the note for why.
+  RECORD_CACHE_STATE=na-mixed-concurrent-workloads \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
@@ -103,7 +109,7 @@ tier4_all_four() {
 }
 
 tier5_endurance() {
-  echo "=== Tier 5: endurance — all-four-up for ~5 hr (1 cell) ==="
+  echo "=== Tier 5: endurance — all-four-up for ~4 hr (1 cell) ==="
   run_cell extract,mil,ingest,viewer "$DEFAULT_RAMP" "$ENDURANCE_RUNTIME"
 }
 

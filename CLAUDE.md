@@ -273,6 +273,7 @@ against.
 | `docs/RUNBOOK.md` | How to run and record a cell; recovery; the canaries | When recording infrastructure changes |
 | `docs/FILESYSTEM-MAP.md` | "Where does X live?" — both mounts, S3 layout, scratch, tools | When a load-bearing path or environment fact emerges |
 | `docs/NAMING-AND-VARIABLES.md` | Every path, name and variable with its recommended value — the single source of truth for names, and the reason `$FS_MOUNT` exists. Paired with `env.example.sh` | When a variable is added, renamed, or its recommended value changes |
+| `docs/PROVISIONING-AND-PRICING.md` | The whitepaper writer's single stop: per-leg provisioning specs and price inputs with bases and dates — the story layer over the contract JSON, which stays authoritative | When a leg's provisioning or a price input changes; each leg fills its own section (D6 ownership) |
 | `docs/cloud-setup/*` | Human-facing procedure: provisioning reasoning, and the teardown + rebuild checklist | When provisioning or the bootstrap sequence changes |
 | `runs/INDEX.md`, run-dir `0_README.md` | Run history / per-run description | **Auto-generated — never hand-edit** |
 | memory + `MEMORY.md` | Open items and external commitments | Per memory hygiene below |

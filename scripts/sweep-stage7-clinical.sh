@@ -182,10 +182,9 @@ run_orchestrator_cell() {
   # D-30/D13 declaration: inference-only orchestrator cells run the stated
   # INFER_CACHE_POLICY (roadmap: 7.2/7.6 warm — production-realistic; a clinical
   # deployment processes many slides per shift). Mixed multi-workload cells
-  # (7.5) have NO roadmap-defined regime row — their declaration is an open
-  # methodology call (same class as 6.C's, tracked in the open-items memory);
-  # until it is ratified they stay undeclared, and the wrapper marks them
-  # INCOMPLETE by design rather than running under an invented label.
+  # (7.5) declare na-mixed-concurrent-clinical (ratified 2026-08-21): the
+  # cold/warm axis deliberately does not apply — the measured quantity is
+  # per-workload QoS retention against same-filesystem solo baselines.
   local declare_env=()
   local regime_note=""
   if [ "$workloads" = "inference" ]; then
@@ -193,6 +192,9 @@ run_orchestrator_cell() {
     [[ "$extra_env" == *INFER_CACHE_POLICY=cold* ]] && policy=cold
     declare_env+=("RECORD_CACHE_STATE=$policy")
     regime_note=" Regime: ${policy} — cache carries over across slides and processes by design; production steady-state (a clinical deployment processes many slides per shift)."
+  else
+    declare_env+=("RECORD_CACHE_STATE=na-mixed-concurrent-clinical")
+    regime_note=" Regime: na — the cold/warm axis deliberately does not apply to a mixed multi-workload cell (ratified 2026-08-21): the measured quantity is per-workload QoS retention against same-filesystem solo baselines."
   fi
   # The inference workload's backend defaults to kvikio (Table 5); only an
   # explicit cucim override makes this a non-kvikIO cell.
@@ -308,11 +310,11 @@ tier4_streaming() {
   RECORD_RUN_DIR="$run_dir" \
   CONDA_PREFIX="$CONDA_ENV" \
   "$RECORD" --run-name "7.4.b-read-after-write" --stage 7.4 \
-    --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 10ms for first-visible. Latency = first-visible - write-complete. WHY: read-after-write visibility is a CONSISTENCY property, not a bandwidth one, and the two filesystems have different metadata architectures — so there is no reason to assume they behave the same. SCOPE: single-client (writer and reader are processes on one instance); cross-client consistency would need a second instance and is out of scope. Regime: na — the cold/warm axis deliberately does not apply: the measured quantity is visibility latency, and the reader's first read is warm by construction (bytes written milliseconds earlier), labelled cache-served and never quoted as a storage read (D13)." \
+    --note "Stage 7.4.b read-after-write consistency — 20 writes of ~50 MB heatmaps; concurrent reader polls every 1ms for first-visible (ratified 2026-08-21: build-machine visibility fell BELOW the old 10ms floor, so 10ms sampled poll phase; the recorded resolution floor stays the quantisation guard). Latency = first-visible - write-complete. WHY: read-after-write visibility is a CONSISTENCY property, not a bandwidth one, and the two filesystems have different metadata architectures — so there is no reason to assume they behave the same. SCOPE: single-client (writer and reader are processes on one instance); cross-client consistency would need a second instance and is out of scope. Regime: na — the cold/warm axis deliberately does not apply: the measured quantity is visibility latency, and the reader's first read is warm by construction (bytes written milliseconds earlier), labelled cache-served and never quoted as a storage read (D13)." \
     -- "$PY" "$RAW_HELPER" \
        --output-dir "${FS_MOUNT}/heatmaps/7.4b" \
        --n-slides 20 --bytes-per-write 50000000 \
-       --poll-interval-s 0.01 \
+       --poll-interval-s 0.001 \
        --per-slide-csv "$run_dir/read-after-write-latencies.csv" \
        --summary-json "$run_dir/raw-summary.json"
   _rc=$?; if (( _rc != 0 )); then FAILED_CELLS=$(( FAILED_CELLS + 1 )); echo "WARN: cell exited rc=$_rc — recorded INCOMPLETE; sweep continues (fails loud at the end)"; fi

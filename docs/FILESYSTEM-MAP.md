@@ -53,6 +53,7 @@ run and a Lustre run is which mount `$FS_MOUNT` points at.
 │   ├── SCRIPT-TRACKER.md      #   per-script reference for scripts/, plus the deferred-work table
 │   ├── FILESYSTEM-MAP.md      #   THIS FILE
 │   ├── NAMING-AND-VARIABLES.md#   every path/name/variable, with its recommended value
+│   ├── PROVISIONING-AND-PRICING.md# per-leg provisioning specs + price inputs (whitepaper record)
 │   ├── Stage-{1..7}-*.md      #   per-stage roadmaps (the audit trail)
 │   └── cloud-setup/           #   human-facing procedure, one file per lifecycle event
 │       ├── SPINUP-CHECKLIST.md#     the reasoning behind the provisioning choices

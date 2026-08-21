@@ -85,7 +85,8 @@ log() { echo "[$(date -u +%FT%TZ)] run-leg: $*"; }
 #      6.B.3 all_models — 3 models x num_workers {4,16,32} = 9 cells, the roadmap's
 #                     grid. `all` would sweep num_workers for ONE model only.
 #      6.B.2 all    — b2a + b2b + b2c. Does NOT include `prep`; corpus generation
-#                     is step 6.B.1, still blocked on the corpus-size decision.
+#                     is step 6.B.1 (`prep` — the recorded ~5.8 TB suite write;
+#                     grid fixed 2026-08-21, Stage-6 roadmap 6.B.1 Grid row).
 #      6.C   all     · 7 all — every tier, ascending.
 STEPS=(
   # D18 stability canary — the same fixed pair, interleaved across the leg (unique
@@ -118,7 +119,7 @@ STEPS=(
   # step was marked done, and two thirds of the substage had silently never run —
   # and the missing models are exactly what makes the result not model-dependent.
   "6.B.3|Attention-MIL on real features (3 models x num_workers = 9 cells)|$LIB/sweep-stage6b-mil.sh all_models"
-  "6.B.1|Synthetic feature corpus generation|NOT_YET_BUILT:needs corpus size decided (open item 5b)"
+  "6.B.1|Synthetic feature corpus generation (recorded write cell; ~5.8 TB suite, grid fixed 2026-08-21)|$LIB/sweep-stage6b-stress.sh prep"
   "6.B.2|Small-file / metadata stress sweep|$LIB/sweep-stage6b-stress.sh all"
   "C5|Stability canary (D18)|$LIB/sweep-stability-canary.sh"
   "6.C|Concurrent multi-workload + endurance|$LIB/sweep-stage6c.sh all"

@@ -193,12 +193,12 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 | **Status** | ⏳ both legs |
 | **Type** | A one-shot generation pass rather than a benchmark cell — but **wrapped in `record-run.sh` anyway**, because the sustained write is itself a recordable workload and comes free |
 | **Step** | Write a synthetic `.pt` corpus at a specified `(N_files, file_size, dtype)` — `../scripts/generate-synthetic-features-stage6b.py` |
-| **Grid** | **File sizes bracket the real 20× feature distribution** (~40–65 MB/slide at ~8–15K tiles), **fixed at substage entry against the actual 6.A Tier 2 file-size distribution** rather than guessed. `N_files` spans small to production scale; `dtype ∈ {FP32, FP16}`. Stored at `$FS_MOUNT/features-6.B-synthetic/` |
+| **Grid (fixed at substage entry, ratified 2026-08-21, from the measured Tier-2 distribution)** | The `features-6a` fingerprint measured the real per-slide distribution: **mean 57–68 MB, median 55–66, p10 14–17, max 200–240** (1280/1536-dim fp32) — inside the assumed ~40–65 MB bracket, so **50 MB is the measured-median tier** and 5/200 MB bracket the observed range. The suite: **saturation** 10K × 50 MB × {fp32, fp16} (~500 GB each); **production** 66,000 × 50 MB × fp32 = **3.3 TB ≈ 3.0 TiB — the ratified cold-corpus definition**; **size tiers** at **fixed ~500 GB total each** (100K × 5 MB · 50K × 10 MB · 2.5K × 200 MB — N varies inversely with size, because fixed-N would cross the cache floor mid-tier and confound the size axis with the cache regime; the 50 MB point of the curve **is** the saturation fp32 corpus and its n=64/random cell, read rather than re-run). Suite total ≈ 5.8 TB ≈ 5.3 TiB. Stored at `$FS_MOUNT/features-6.B-synthetic/` |
 | **Why synthetic rather than real files** | The I/O pattern — small-file random reads plus metadata operations — is what differentiates storage architectures, and embedding *content* is irrelevant to it. Synthetic gives controlled scale, a controlled size distribution, and a controlled bit-width, none of which the real corpus provides |
 | **⚠ Corpus sizing is the cold-cache decision** | The production-scale corpus **must exceed the client page cache plus the larger of the two filesystems' server-side caches** — see the cold-cache section above. **This makes corpus sizing a cross-leg decision that must be made before Leg A generates anything**, and it must produce **one identical corpus definition for both legs** |
 | **Why FP16 is an axis** | Halving file size changes the metadata-to-bytes ratio, which is precisely the balance that a metadata-heavy workload is sensitive to. Low marginal cost, directly relevant axis |
 | **Recorded per cell** | generation wallclock, sustained write throughput, total bytes, resulting file-size distribution — plus the full measurement set and cost inputs (`RUNBOOK.md`) |
-| **Cache-regime disclosure (required output)** | At substage entry, record **which B.2 cells will be cache-served and which genuinely cold**, per filesystem, given the measured cache sizes. Framing must state which regime each number represents — a cache-served number presented as storage throughput would be wrong on either side |
+| **Cache-regime disclosure (required output — recorded at entry, 2026-08-21)** | Against the 2304 GiB floor (client 768 GiB + the larger server cache, WEKA's 1536 GiB — identical arithmetic on both legs by the one-definition rule): **only B.2.b's 3.0 TiB cells are genuinely cold** (3223 GiB > floor); **every B.2.a and B.2.c cell (~488 GiB corpora) is cache-served** and labelled `warm`, with the reader's client-side discard still recorded per cell. The sweep driver derives each cell's label mechanically from the corpus name, so the disclosure and the declarations cannot drift apart. A cache-served number is never presented as storage throughput |
 
 #### 6.B.2 — File-I/O stress sweep
 
@@ -255,6 +255,10 @@ what compare across legs**, with absolutes reported alongside.
 |---|---|
 | **Tools** | `../scripts/orchestrate-concurrent-stage6c.sh` + `../scripts/sweep-stage6c.sh` · **Aggregator** `../scripts/aggregate-stage6c-concurrent.py` |
 | **Methodology** | Workloads launched simultaneously, each emitting its own per-workload telemetry CSV; one `record-run.sh` wraps the group as a single cell. An `orchestration.log` records each workload's start / ramp-end / steady-end so per-workload windows can be aligned correctly |
+| **GPU partition (ratified 2026-08-21)** | Extract on **GPUs 1–3** (world size 3), MIL pinned to **GPU 0** — true isolation, so GPU contention stays out of a cell that exists to measure **filesystem** QoS; the Tier-1 solo baselines run at this exact config, so every retention denominator matches its concurrent numerator. 6.D is different on purpose: its phases are sequential, so `PIPELINE_GPUS` keeps all four (it must equal 6.A Tier 2's N to compose) — do not align the two. The NUMA/NIC-aware **order** within {1,2,3} is still D-8's |
+| **MIL concurrency** | The **measured 6.B.3 saturation knee**, read from Leg A's 6.B.3 results at 6.C entry and exported as `MIL_NUM_WORKERS` — **one value on both legs** (workload shape, Table 5). The orchestrator **refuses** a mil cell without it: a knee carried over from another environment would silently mis-shape every retention figure |
+| **Cache regime (D13, ratified 2026-08-21)** | Every 6.C cell — **solo tiers included** — declares `na-mixed-concurrent-workloads`: the measured quantity is per-workload QoS retention, not a cold/warm storage rate, and the solo baselines carry the same declaration because they are the retention denominators measured under the identical construction; labelling the two sides differently would put numerator and denominator in different regimes |
+| **Endurance duration (ratified 2026-08-21)** | **4 h steady** — mirrors 7.5.b's endurance window, so the training-shaped and clinical-shaped endurance cells are cross-stage comparable, and the overnight chain stays bounded. Hours-scale is what surfaces QoS drift, leaks, and degradation as caches warm |
 | **⚠ Ingest is data-bounded** | The ingest workload exhausts its source corpus and exits before the cell deadline, after which its mean reads as zero. **Report it as "active throughout, data-bounded by source" with the active-window rate extracted from the per-second telemetry**, rather than quoting a misleading retention percentage |
 | **⚠ Interference can be host-side rather than filesystem-side** | MIL training and viewer load both go through the host page cache and host CPU, so contention between them may be a **host** effect present on both filesystems. Per **D15**, host-CPU accounting differs between legs (the WEKA client reserves cores), so an apparent difference here needs the core accounting before it is attributed to the filesystem |
 | **Endurance failure recovery** | Periodic checkpoint summaries mean a partial failure still yields usable partial numbers, and `record-run.sh` marks the cell `INCOMPLETE`. If endurance fails repeatedly on a leg, fall back to the shorter all-four cell **and disclose the gap** rather than quietly presenting the short cell as endurance |
@@ -463,6 +467,21 @@ live in `STAGES.md`.
   free on the WEKA leg and ~7 TiB of planned headroom on the D7-maximum FSx configuration (28,800 GiB, re-ratified 2026-08-20) — it fits both
   with margin, so the identical-on-both-legs rule (chunk size is write/delete cadence, i.e. workload shape)
   keeps one value. 1064 slides → 6 chunks, a real chunked-pipeline cadence.
+- **6.B.1's grid is fixed (2026-08-21) from the measured Tier-2 file-size distribution; size tiers hold
+  total bytes fixed, not N.** Values and full rationale live in the 6.B.1 Grid row. *Why fixed-total for the
+  size tiers:* a fixed-N tier crosses the 2304 GiB cache floor as file size grows, confounding the size axis
+  with the cache regime — the cold axis belongs to the production tier alone, so every size-tier cell stays
+  in one (cache-served) regime.
+- **6.C runs extract on GPUs 1–3 and MIL on GPU 0, with MIL at the measured 6.B.3 knee
+  (`MIL_NUM_WORKERS`, no in-script default).** *Why:* true GPU isolation keeps compute contention out of a
+  filesystem-QoS measurement, and the solo baselines re-measured at this exact config keep every retention
+  ratio internally consistent. The knee is a per-project measured value — Leg A's 6.B.3 results supply it,
+  and it is then held identical on both legs as workload shape (Table 5); the orchestrator refuses to run a
+  mil cell without it because a carried-over value would silently mis-shape every retention figure.
+- **6.C cells declare `RECORD_CACHE_STATE=na-mixed-concurrent-workloads`, all tiers alike; the endurance
+  cell runs 4 h steady.** *Why na:* the measured quantity is QoS retention, and solos are the denominators
+  under identical construction. *Why 4 h:* mirrors 7.5.b's endurance window for cross-stage comparability
+  while keeping the chain bounded.
 - **Tier 2's kvikIO cells declare `RECORD_CACHE_STATE=na-mixed-rw-chunk-resident`.** *Why `na-*`:* each
   chunk's extraction reads raw-TIFF the cell wrote minutes earlier — server-cache-resident **by
   construction**, because the convert→extract→delete cadence *is* the measured production pattern (**D13**
