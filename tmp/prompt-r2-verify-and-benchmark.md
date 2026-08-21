@@ -49,10 +49,13 @@ L1–L7 — ratified; carry, don't re-litigate) → **`docs/SCRIPT-TRACKER.md`**
 
 `git pull --ff-only`. Boot triage (`grep WSI- /var/log/wsi-bootstrap.log`; FATAL = stop).
 `journalctl -u wsi-lustre-phase2.service` — gate + counter-proof passed unattended.
-**Contract fully clean:** the boot automation wrote+verified it and left
-`runs/.leg-state/lustre/contract-verified`; re-run `env-contract.py verify` yourself — **every
-held-constant field must now verify, including `stage1_*`** (filled + D13-re-verified at the 2026-08-20
-teardown); any violation is a stop.
+**Contract fully clean, written by the BOOT:** R1 baked the contract step into the END of the background
+env build (lustre-only, gated on `wsi-lustre-phase2.service` active) — `grep -B2 -A6 "env-contract"
+/var/log/wsi-env-build.log` must show write 19/19 + verify PASSED with no session step, and the marker
+`runs/.leg-state/lustre/contract-verified` must carry a `verified_utc` from THIS boot (the marker is
+git-tracked, so an inherited stale one is possible if the bake never ran — the timestamp is the proof).
+Then re-run `env-contract.py verify` yourself — **every held-constant field must verify, including
+`stage1_*`** (filled + D13-re-verified at the 2026-08-20 teardown); any violation is a stop.
 `./env.sh --check` (cost/ceiling trios present and dated; `FS_CLIENT_RESERVED_CORES=none`;
 `LUSTRE_STRIPE_LAYOUT` live). Tier 0 per the gate above. `./scripts/verify-conda-env.sh` (both envs, GPU
 count). nvidia-fs counters enabled (`/sys/module/nvidia_fs/parameters/*_stats_enabled` = 1). S3 reachable;
@@ -66,10 +69,14 @@ cell, named assertions, filesystem-side streams non-empty, S3 sync verified. Che
 
 ### 3 — Close the pre-baseline rows on THIS filesystem
 
-- **Calibrate the canary bands** (D18/D-5): probe-shaped Stage-0 cells (seq write + seq read), REP≥3; the
-  Lustre wire/app relation derives from the recorded stripe layout (register L2/D12) — never ported from
-  WEKA's EC relation; write `runs/.leg-state/lustre/canary-bands.json`. `check` exits UNCALIBRATED until
-  then, by design.
+- **Calibrate the canary bands** (D18/D-5): probe-shaped Stage-0 cells (seq write + seq read), REP≥3, plus
+  bs4k cells for the small-bs widening; write `runs/.leg-state/lustre/canary-bands.json`. The wire/app
+  RELATION is already derived and built (R1: `wsi_agg_helper.parse_stripe_layout`, raid0 layout → centers
+  1.0/1.0, empirically anchored at wire/osc = 1.002 on R1's proof cell) — calibration fills the BANDS only;
+  `check` exits UNCALIBRATED until then, by design. The quotable client series is **osc-derived** (llite is
+  blind to libaio — R1 finding, parser entry has the detail). **At calibration also decide the lustre
+  cold-cell achieved-evidence set** (D-4 remainder: page-cache drop is leg-neutral; whether "cold" also
+  requires clearing the client's ldlm/osc caches is the open methodology call — surface it, don't default).
 - **The recorded D8 Phase-0 determination cell**: kvikIO known-good read, modes forced explicitly (never
   AUTO), three-layer path accounting recorded. **Expected: compat/bounce — no true GDS on g6e (D8,
   doc-grounded on both legs); a split contradicting that is a finding to surface immediately, not wiring
