@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-21T19:03:20.950Z
+  modified: 2026-08-21T21:26:54.126Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -31,10 +31,12 @@ These change what the numbers mean, so resolving them after cells have run means
 3. **Consistency relation — WEKA bands CALIBRATED on the 6xlarge cluster (2026-08-16:
    `calibrate-canary-bands.sh`, 12 cells; anchors reproduce — write 1.456 vs 1.455, read 1.042 vs 1.034;
    4K derived separately: read 1.424, write 1.372 → smallbs_widening 1.366; `check` PASSES end-to-end).
-   Remaining: (a) wire the check into the chain (D-7 canary-abort + prove-recording's pending assertion) —
-   until then, run `wsi_agg_helper.py check` after every sweep by hand; (b) mixed-cell widening needs mixed
-   calibration cells before 1.6 (B.3); (c) the Lustre relation from the actual stripe layout on Leg B (the
-   helper refuses until built).** Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md`.
+   Remaining: (a) — DONE 2026-08-21 (D-7 closed: the check runs mechanically per cell, poison-marker
+   chain-abort, prove-recording asserts it); (b) **mixed-cell widening needs mixed calibration cells before
+   1.6, and RECOMMENDED before 6.C** — until then a mixed direction outside the unwidened band is
+   REPORT_ONLY (recorded, never judged, never poisons; inside it is a genuine PASS), so 6.C's ingest-active
+   cells would carry report-only read verdicts (surfaced to the human 2026-08-21); (c) Leg B's R2 band
+   calibration writes that leg's bands file (theirs).** Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md`.
 4. **Determine the Lustre LND actually in use** (kernel TCP vs the EFA provider). This decides which client
    counters are primary versus diagnostic — get it wrong and every Lustre number cites a bypassed source.
 5. **Cache-clearing mechanism per filesystem.** How you reach a cold state differs per side and includes a
@@ -46,9 +48,9 @@ These change what the numbers mean, so resolving them after cells have run means
 6b. **nvidia-fs accounting — enabled, persisted, and now VERIFIED UNDER LOAD on the rebuilt cluster
     (2026-08-16: the D8 determination cells exercised all three layers — shadow-buffer signal live on the
     cuFile-bounce read, nvidia-fs zero on the kvikio-posix read, `unknown-accounting-off` never fired).
-    What remains of the D-6 canary half:** wire the pre-cuFile-cell requirement into the mechanical pre-cell
-    canary (with D-7) — on THIS leg the known-good signature is *bounce accounting non-zero* (gds stays 0
-    by determination); **Leg B's expected signature is the same** (no true GDS there either — documented
+    The D-6 canary half is DONE (2026-08-21, with D-7): record-run's pre-cell gate refuses a kvikIO cell
+    whose `/proc/driver/nvidia-fs/stats` is unreadable. On THIS leg the known-good post-cell signature is
+    *bounce accounting non-zero* (gds stays 0 by determination); **Leg B's expected signature is the same** (no true GDS there either — documented
     client-class constraint, STAGES.md D8, checked 2026-08-20; nvidia-fs read bytes non-zero would now be a
     docs-contradicting finding on either leg, not an expectation). Stats format:
     `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
@@ -127,13 +129,6 @@ These change what the numbers mean, so resolving them after cells have run means
     RECORD_CACHE_STATE declaration (memory 13d / tracker D-30)**. **Tier 2** rows (cuCIM tile-cache policy
     item 14 before Stage 4; CHUNK_SIZE item 15 before 6.A Tier 2; D-34 poll rate before 2.0; mixed-band
     calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
-22. **[THIS SESSION] D-7 in `record-run.sh`** (per-cell watchdog, during-run S3 sync, canary-abort),
-    tested on a stage-0 throwaway, **before the 6.B.1/6.B.2 chain launches** — record-run.sh must not be
-    edited while any cell is recording (the D18 rep cells are running it now). Everything else from the
-    6.B.3-boundary list landed 2026-08-21: run-leg's 6.B.1 step, the closeout-table 6.B.1 row, the 6.B.2
-    p99-join in `aggregate-stage6b.py` (feed verdict + non-zero exit on FAIL), and `MIL_NUM_WORKERS=16`
-    in env.sh (the measured knee — all three models flat 16→32; Leg B exports the same value).
-
 ## B. Watch during benchmarking
 
 -2. **CONCURRENT LEGS ARE LIVE (D6 amended; CLAUDE.md "Concurrent legs").** Leg B runs on its own instance

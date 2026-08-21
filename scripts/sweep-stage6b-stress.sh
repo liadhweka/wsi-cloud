@@ -121,6 +121,7 @@ run_cell() {
   echo "=========================================="
 
   RECORD_CACHE_STATE="$cache_state" \
+  RECORD_TIMEOUT_S=3600 \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \
@@ -150,6 +151,7 @@ prep() {
   local run_dir="$REPO/runs/${now_utc}-${LEG}-s6.B.1-${cell_name}"
 
   RECORD_CACHE_STATE=na-write-cell \
+  RECORD_TIMEOUT_S=14400 \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
     --run-name "$cell_name" \

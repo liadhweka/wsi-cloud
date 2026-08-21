@@ -38,9 +38,8 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
 | **D-4** | **Remaining: the head-to-head `--fs` pivot column; the lustre cold set's python-side workers** | `aggregate-sweep.py` + the per-stage aggregators (pivot); `read-feature-files-stage6b.py` (at 6.B.2) and Stage 7's cold cells (at 7.1) | Both recorder halves and the shared helper are BUILT and proven on each leg's live instance (evidence: the `record-run.sh` / `parse-results.py` / `wsi_agg_helper.py` entries). (1) The aggregators still don't pivot on `metadata.json`'s `fs` field to emit head-to-head columns — the deliverable IS the cross-filesystem delta, so this lands before the first cross-leg synthesis (`prove-recording.sh` SKIPs its assertion until then). (2) The Lustre cold-cell evidence set is **DECIDED (ratified 2026-08-21): `vm.drop_caches=3` + `ldlm.namespaces.*.lru_size=clear`, both acknowledged in `cache-evidence.txt`** — the reconciler enforces it (`wsi_agg_helper.py`), the three shell drivers with `drop_caches_evidenced` carry the leg-guarded second step, and `probe-lustre-coldset.sh` is the measured demonstration. Remaining: the clearing-based cold cells whose mechanism lives in python workers get the ldlm step at their gates — 6.B.2's discard child before 6.B, Stage 7's cold cells before 7.1 |
-| **D-5** | **Remaining: Lustre band calibration (R2); mixed-cell widening before 1.6; canary-abort wiring (D-7)** | `wsi_agg_helper.py` (`check <run-dir>`) | Both relations are derived and built — WEKA (D+P)/D with calibrated bands (anchors reproduce; Stage-1 register + helper docstring), Lustre from the recorded stripe layout (raid0 → 1.0/1.0, R1 anchors). Bands load from `runs/.leg-state/$LEG/canary-bands.json`; absent → the canary exits non-zero as UNCALIBRATED rather than inventing a tolerance — Lustre's file is written by R2's calibration cells (REP≥3 per direction + bs4k). Mixed-cell widening needs mixed calibration cells before 1.6: a guessed widening can mask a real inconsistency. Until D-7 wires canary-abort, run `check` after every sweep by hand |
+| **D-5** | **Remaining: Lustre band calibration (R2); mixed-cell widening — needed before 1.6, and RECOMMENDED before 6.C** | `wsi_agg_helper.py` (`check <run-dir>`); `calibrate-canary-bands.sh` (the mixed probe cells) | Both relations are derived and built — WEKA (D+P)/D with calibrated bands (anchors reproduce; Stage-1 register + helper docstring), Lustre from the recorded stripe layout (raid0 → 1.0/1.0, R1 anchors). Bands load from `runs/.leg-state/$LEG/canary-bands.json`; absent → UNCALIBRATED exits non-zero rather than inventing a tolerance — Lustre's file is written by R2's calibration cells (REP≥3 per direction + bs4k). **Mixed-cell semantics until the widening is calibrated (2026-08-21):** a mixed direction whose ratio sits inside the UNWIDENED single-direction band is a genuine PASS (any valid mixed band is a superset); outside it the verdict is **REPORT_ONLY** — recorded, never judged, never chain-poisoning — because it cannot be told apart from the uncalibrated widening, and a guessed widening can mask a real inconsistency. Consequence: **6.C's ingest-active mixed cells get report-only read verdicts until the mixed calibration runs** — running it before 6.C (not just before 1.6) gives the endurance chain full canary coverage. Canary-abort itself is wired (D-7, closed) |
 | **D-6** | **Remaining: the nvidia-fs block parser in `parse-results.py`; the pre-cuFile-cell canary requirement (with D-7); Leg B's recorded Phase-0 determination cell (R2); the Stage-7 worker's path-accounting wiring** (`inference-per-slide-stage7.py` records no split — found 2026-08-21; its kvikIO cells now declare `RECORD_KVIKIO_CELL=1`, so they fail loud as INCOMPLETE until this lands — **wire before Stage 7 runs**) | `parse-results.py`; `record-run.sh` (canary); R2 session (Phase-0 cell); `inference-per-slide-stage7.py` | The shared accounting module (`wsi_cufile_accounting.py`), the 4.C/5/6 worker wiring, the D-30 INCOMPLETE rule, and Leg A's Phase-0 determination (no true GDS on WEKA-over-ENA; outcome + consequences in `Stage-4-Patching.md`) are done and smoke-verified. The standing three-layer caveat: kvikio's own compat can serve reads via POSIX without entering cuFile at all, so the per-cell recorded split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged` — is the only proof of path; an accounting-off state reports as unknown, never zero. On the known-good compat legs the pre-cell canary signature is bounce-accounting non-zero |
-| **D-7** | **Remaining: per-cell during-run sync; canary-abort** | `record-run.sh` | **The per-cell watchdog is DONE** (built after the 2026-08-21 EFA incident hung a 300 s cell for >3 h): the command runs in its own process group (`setsid`, PGID self-reported — `$!` is wrong under a job-control shell), a poll-loop TERMs then KILLs the group at `RECORD_TIMEOUT_S` (driver-set per cell; 86400 default catches only the hung-forever class — a watchdog that kills a valid hours-scale cell destroys real money), the cleanup trap takes the group down on wrapper death, and the fire is recorded (`raw/watchdog.log`, rc flows to the verdict — proven by the recorded `s0-watchdog-proof` cell). Still needed: per-**cell** sync inside `record-run.sh` (run-leg's per-step sync covers between steps), and making the canary abort the chain |
 | **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 | **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
@@ -52,7 +51,15 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-34** | **Short-cell recorder poll rate — DECIDED (ratified 2026-08-16, Stage-2 register): raise the filesystem-side poll rate for short cells (~10 Hz), identically on both legs; build it** | `record-run.sh` (recorder set) | Sub-second high-concurrency Stage 2/3 cells yield 1–3 samples at 1 Hz, so any sustained mean is ill-defined and both legs lose filesystem-side evidence exactly where the metadata architectures differ most. Implement before the first Stage 2/3 cell; verify the higher rate does not itself perturb the measurement (the recorded `_sample_interval_s` block is the evidence) |
 
 **Closed ids** — rows deleted (git holds their text); each id still resolves to where its constraint lives
-now, so citations in scripts and entries never dangle (the D-26 lesson): **D-24** → all four fingerprint
+now, so citations in scripts and entries never dangle (the D-26 lesson): **D-7** → all four chain protections
+live in `record-run.sh` and proven by stage-0 cells (`s0-watchdog-proof`, the recording proof's assertions
+16/17, the `midrun-sync-proof` cell): per-cell watchdog (`RECORD_TIMEOUT_S`), during-run + end-of-cell raw
+S3 sync (`RECORD_MIDRUN_SYNC_S`, warn-only — run-leg's verified per-step sync stays the fail-loud
+authority), the mechanical pre-cell gate (poison-marker refusal · mount responsive · free-space floor ·
+kvikIO nvidia-fs readability), and canary-abort (a FAIL/UNCALIBRATED/NO_DATA verdict on a stage ≥ 1 cell
+marks it INCOMPLETE and writes `runs/.leg-state/<leg>/canary-abort`, which every later cell refuses on
+until a human deletes it; stage-0 cells record but never poison — the calibration cells legitimately
+predate the bands); mechanics in the `record-run.sh` entry · **D-24** → all four fingerprint
 classes built + captured on Leg A (`runs/.leg-state/weka/fingerprints/`); definitions in `STAGES.md` **D19**,
 mechanics in the `fingerprint.py` entry · **D-9** → values contract-recorded
 per leg (`fs_client_reserved_cores`); mechanism in the `record-run.sh` entry · **D-10** → values set by the
@@ -157,13 +164,27 @@ The stats live in root-only debugfs and lnetctl needs `/dev/lnet`, so each lustr
 exits if the wrapper dies, so a kill -9 cannot orphan a root writer). Lustre snapshots add `lfs df`,
 `getstripe -d` (the D12 layout), `lctl dl`, health, cumulative stats / rpc_stats / read_ahead_stats
 (whole-run deltas as defence in depth), the L4 tunables, and the LNet state.
-**The D-7 watchdog:** the wrapped command runs in its own process group (`setsid`, PGID self-reported to
+**The D-7 chain protections (all four live; proven by stage-0 cells):**
+*Watchdog* — the wrapped command runs in its own process group (`setsid`, PGID self-reported to
 `raw/.cmd_pgid`); at `RECORD_TIMEOUT_S` (driver-set; default 86400 — the hung-forever backstop) the group
 is TERMed then KILLed, `raw/watchdog.log` records the fire, and the rc flows to the INCOMPLETE verdict.
-The cleanup trap also group-kills a still-running command on wrapper death, so an interrupted wrapper no
-longer orphans its benchmark.
-**⏳ DEFER:** cuFile path accounting's reader half + the kvikIO-cell
-requirement wiring (D-6); during-run per-cell S3 sync, canary-abort (D-7).
+The cleanup trap also group-kills a still-running command on wrapper death.
+*During-run + end-of-cell sync* — every `RECORD_MIDRUN_SYNC_S` (default 600; 0 disables) and once at cell
+end, `sync-to-s3.sh --mode run` pushes `raw/` so a crash cannot lose the night; warn-only into
+`raw/midrun-sync.log` — run-leg's verified per-step sync stays the fail-loud durability authority. The
+sync subshell's stdio is detached at spawn: an orphaned `sleep` would otherwise hold the caller's stdout
+pipe open a full interval past the cell.
+*Pre-cell gate* — refuses (exit 3) on: a `canary-abort` poison marker; an unresponsive `$FS_MOUNT` (10 s
+stat); under `RECORD_MIN_FREE_MB` (default 2048) free beneath the runs root (the 2026-08-16 ENOSPC class);
+a kvikIO cell with `/proc/driver/nvidia-fs/stats` unreadable (D-6's pre-cell half — the path proof would
+be unprovable only after the wallclock was spent).
+*Canary-abort* — after the parser, `wsi_agg_helper.py check` runs mechanically into `canary-check.json`.
+A FAIL / UNCALIBRATED / NO_DATA verdict on a stage ≥ 1 cell → INCOMPLETE + the poison marker
+(`runs/.leg-state/<leg>/canary-abort`), which every subsequent cell refuses on until a human deletes it.
+Never poisons: stage-0 cells (calibration legitimately predates the bands), empty verdicts (no material
+fs-side direction — memory-served/idle), UNDER_SAMPLED, and REPORT_ONLY (uncalibrated mixed widening,
+D-5) — judgements recorded, not failures.
+**⏳ DEFER:** cuFile path accounting's nvidia-fs parser half (D-6, in `parse-results.py`).
 
 ### `wsi_agg_helper.py` — the shared per-leg aggregation helper (D-4 remainder, D-5, register D13/D18)
 **What.** One importable module (stdlib-only, same directory as the aggregators) holding the per-leg logic:

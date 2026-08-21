@@ -252,6 +252,18 @@ calibration file the canary refuses loudly rather than invent a tolerance, becau
 mask a real inconsistency and manufacture a false one. `wsi_agg_helper.py cache <run-dir>` is the
 declared-vs-achieved cache reconciliation (**D13**).
 
+**The check runs mechanically after every cell** — `record-run.sh` writes the evaluator's output into the
+run dir as `canary-check.json`, and a FAIL / UNCALIBRATED / NO_DATA verdict on a stage ≥ 1 cell marks the
+cell INCOMPLETE **and poisons the chain**: `runs/.leg-state/<leg>/canary-abort` is written, and every
+subsequent cell refuses to start until a human fixes the instrumentation and deletes the marker. Stage-0
+cells record their verdict but never poison (the band-calibration cells legitimately run before bands
+exist). Three verdicts are judgements, not failures, and never poison: an **empty verdict list** (no
+material filesystem-side direction — a memory-served or idle cell), **UNDER_SAMPLED** (the short-cell
+sampling limit above), and **REPORT_ONLY** (a mixed direction with no calibrated `mixed_widening` — a
+mixed ratio inside the *unwidened* band is a genuine PASS, since any valid mixed band is a superset of it;
+outside it, the ratio is recorded against the single-direction band for reference and never judged by it,
+until the mixed calibration cells land).
+
 **Cache state is reconciled, not trusted (D13):** a cell's declared `cache_state` must be matched by its
 achieved evidence (the readers' recorded discard returns, drop_caches acknowledgments, the canary's own
 check). Declared-without-evidence or declared-versus-evidence disagreement → the cell is **marked and never

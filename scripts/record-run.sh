@@ -116,6 +116,42 @@ fi
 # then point at a directory that does not exist on disk.
 RUN_ID="$(basename "$RUN_DIR")"
 
+# ---------- D-7 pre-cell gate (the mechanical half of RUNBOOK canary #1) ----------
+# (1) Chain poison: a prior cell's consistency canary failed and wrote the abort
+# marker — every subsequent cell REFUSES until a human fixes the instrumentation
+# and deletes it. "The canary aborts the chain itself": on an unattended chain,
+# cells recorded after broken instrumentation look fine and are worthless.
+if [[ -f "$RUNS_ROOT/.leg-state/$FS/canary-abort" ]]; then
+  echo "record-run: REFUSING to start a cell — canary-abort marker present:" >&2
+  echo "            $RUNS_ROOT/.leg-state/$FS/canary-abort" >&2
+  sed 's/^/            | /' "$RUNS_ROOT/.leg-state/$FS/canary-abort" >&2 || true
+  echo "            Fix the instrumentation first (RUNBOOK: disagreement means bugged infra —" >&2
+  echo "            every subsequent number depends on it), then delete the marker to re-arm." >&2
+  exit 3
+fi
+# (2) Mount responsive — a hung mount would otherwise burn the whole watchdog window.
+if [[ -n "${FS_MOUNT:-}" ]] && ! timeout 10 stat -f "$FS_MOUNT" >/dev/null 2>&1; then
+  echo "record-run: REFUSING — \$FS_MOUNT ($FS_MOUNT) did not answer stat within 10 s" >&2
+  exit 3
+fi
+# (3) Runs-root free-space floor (the 2026-08-16 ENOSPC aborted 1.0b mid-sweep):
+# refuse BEFORE the cell rather than dying mid-recording. Override: RECORD_MIN_FREE_MB.
+_free_kb=$(df --output=avail -k "$RUNS_ROOT" 2>/dev/null | tail -1 | tr -d ' ')
+_floor_kb=$(( ${RECORD_MIN_FREE_MB:-2048} * 1024 ))
+if [[ -n "$_free_kb" ]] && (( _free_kb < _floor_kb )); then
+  echo "record-run: REFUSING — only $(( _free_kb / 1024 )) MB free under $RUNS_ROOT (floor $(( _floor_kb / 1024 )) MB)." >&2
+  echo "            Relocate synced raw payloads (D-35) or set RECORD_RAW_ON_SCRATCH=1 for this cell." >&2
+  exit 3
+fi
+# (4) kvikIO cell: nvidia-fs accounting must be READABLE before the cell runs (D-6's
+# pre-cell half) — an off/absent accounting records unknown-accounting-off and the
+# D8 path proof cannot exist, so the cell would only fail AFTER spending its wallclock.
+if [[ "${RECORD_KVIKIO_CELL:-0}" == "1" && ! -r /proc/driver/nvidia-fs/stats ]]; then
+  echo "record-run: REFUSING — kvikIO cell, but /proc/driver/nvidia-fs/stats is absent/unreadable:" >&2
+  echo "            the cuFile GPU-direct-vs-bounced split would be unprovable (D8/D-6)." >&2
+  exit 3
+fi
+
 # D-35: a long cell's raw telemetry can exceed the 48 GB root volume's headroom
 # (a ~25 h cell writes ~30 GB of 1 Hz series; the 4.D BRCA cell wrote 18 GB in
 # 15.7 h). With RECORD_RAW_ON_SCRATCH=1, raw/ is created ON the local-NVMe
@@ -724,6 +760,46 @@ EOF
       || log "  WARN: parser failed; see raw/parse.log"
   fi
 
+  # ---------- D-7 canary-abort: the post-cell consistency check, mechanical ----------
+  # RUNBOOK: cross-source disagreement means bugged instrumentation, and on an
+  # unattended chain the canary aborts the chain ITSELF. A FAIL / UNCALIBRATED /
+  # NO_DATA verdict on a measured cell marks the cell INCOMPLETE and writes the
+  # poison marker the pre-cell gate refuses on — no further cell runs anywhere
+  # until a human clears it. Stage-0 cells record their verdict but never poison:
+  # infra proofs and the band-calibration cells legitimately run before bands
+  # exist (poisoning on their UNCALIBRATED would kill the very chain that creates
+  # the bands). Deliberately NOT poison-worthy: empty verdicts (no material
+  # fs-side direction — a memory-served/idle cell; the sampling-limit rule),
+  # UNDER_SAMPLED (same rule), and REPORT_ONLY (a mixed direction with no
+  # calibrated mixed widening, B.3 — recorded, never judged).
+  if [[ -s "$RUN_DIR/results.json" && -f "$SCRIPT_DIR/wsi_agg_helper.py" ]]; then
+    CANARY_OUT=$(python3 "$SCRIPT_DIR/wsi_agg_helper.py" check "$RUN_DIR" 2>&1 || true)
+    printf '%s\n' "$CANARY_OUT" > "$RUN_DIR/canary-check.json"
+    if printf '%s' "$CANARY_OUT" | grep -qE '"verdict": "(FAIL|UNCALIBRATED|NO_DATA)"'; then
+      if [[ "$STAGE" == "0" ]]; then
+        log "  WARN: consistency canary non-PASS on a stage-0 cell — recorded (canary-check.json), never poisons"
+      else
+        log "  CANARY: non-PASS verdict (canary-check.json) -> INCOMPLETE + chain poisoned (D-7)"
+        INCOMPLETE=1
+        mkdir -p "$RUNS_ROOT/.leg-state/$FS"
+        {
+          echo "written by record-run.sh at $(date -u +%FT%TZ)"
+          echo "cell: $RUN_ID"
+          echo "reason: post-cell consistency canary returned a poison-class verdict:"
+          printf '%s\n' "$CANARY_OUT" | grep -E '"verdict"|"direction"|"detail"|"ratio"' | head -12
+          echo "Every subsequent cell on this leg refuses until this file is deleted."
+          echo "Fix the instrumentation first — every number after a canary FAIL depends on it."
+        } > "$RUNS_ROOT/.leg-state/$FS/canary-abort"
+      fi
+    elif printf '%s' "$CANARY_OUT" | grep -q '"verdicts": \[\]'; then
+      log "  canary: no material fs-side direction (memory-served/idle cell) — judgement recorded (canary-check.json)"
+    elif printf '%s' "$CANARY_OUT" | grep -qE '"verdict": "(REPORT_ONLY|UNDER_SAMPLED)"'; then
+      log "  canary: report-only/under-sampled judgement recorded (canary-check.json) — not a failure"
+    else
+      log "  OK:   consistency canary PASS (canary-check.json)"
+    fi
+  fi
+
   # Append to INDEX.md
   STATUS=$( (( RC == 0 && INCOMPLETE == 0 )) && echo "OK" || echo "INCOMPLETE" )
   ESC_NOTE=$(printf '%s' "$NOTE" | head -c 200 | tr '\n' ' ')
@@ -733,6 +809,15 @@ EOF
   # stays true for any caller-supplied RECORD_RUN_DIR.
   echo "- \`${RUN_ID}\` (fs $FS, stage $STAGE, $START_TS, rc=$RC, $STATUS) — ${ESC_NOTE}" \
     >> "$RUNS_ROOT/INDEX.md"
+
+  # D-7 end-of-cell raw sync: each completed cell is durable the moment it ends,
+  # not at the step boundary. Warn-only — run-leg's verified per-step sync stays
+  # the fail-loud authority (same switch as the mid-run loop).
+  if [[ -n "${S3_BUCKET:-}" && "${RECORD_MIDRUN_SYNC_S:-600}" != "0" && -x "$SCRIPT_DIR/sync-to-s3.sh" ]]; then
+    "$SCRIPT_DIR/sync-to-s3.sh" --mode run --run-dir "$RUN_DIR" \
+      >> "$RUN_DIR/raw/midrun-sync.log" 2>&1 \
+      || log "  WARN: end-of-cell S3 sync failed (the per-step sync will retry; see raw/midrun-sync.log)"
+  fi
 
   log "done: $RUN_DIR"
   log "status: $STATUS (rc=$RC)"
@@ -786,9 +871,33 @@ CMD_PGID=${CMD_PGID:-$CMD_PID}
   fi
 ) &
 WATCHDOG_PID=$!
+# D-7 per-cell DURING-RUN sync: raw telemetry reaches S3 while the cell runs, so
+# a crash at 4am cannot lose the night (RUNBOOK chain requirement #1). The
+# increments are the KB–MB-scale 1 Hz CSVs — the permitted targeted-sync class;
+# run-leg's verified per-step sync stays the fail-loud durability authority, so
+# a mid-run sync failure warns into its log and never kills the cell.
+# RECORD_MIDRUN_SYNC_S=0 disables; no S3_BUCKET (pre-cloud) skips.
+MIDRUN_SYNC_S=${RECORD_MIDRUN_SYNC_S:-600}
+MIDRUN_SYNC_PID=""
+if [[ -n "${S3_BUCKET:-}" && "$MIDRUN_SYNC_S" != "0" && -x "$SCRIPT_DIR/sync-to-s3.sh" ]]; then
+  # stdio detached at spawn: an orphaned `sleep` from a killed loop would
+  # otherwise inherit — and hold open — the caller's stdout pipe for up to a
+  # full interval after the cell ends.
+  (
+    while sleep "$MIDRUN_SYNC_S"; do
+      kill -0 "$CMD_PID" 2>/dev/null || exit 0
+      "$SCRIPT_DIR/sync-to-s3.sh" --mode run --run-dir "$RUN_DIR" \
+        >> "$RUN_DIR/raw/midrun-sync.log" 2>&1 \
+        || echo "midrun-sync: FAILED at $(date -u +%FT%TZ) — warn-only; the per-step sync is the authority" \
+             >> "$RUN_DIR/raw/midrun-sync.log"
+    done
+  ) >/dev/null 2>&1 &
+  MIDRUN_SYNC_PID=$!
+fi
 wait "$CMD_PID"
 RC=$?
 kill "$WATCHDOG_PID" 2>/dev/null
+[[ -n "$MIDRUN_SYNC_PID" ]] && kill "$MIDRUN_SYNC_PID" 2>/dev/null
 if [[ -s "$RUN_DIR/raw/watchdog.log" ]]; then
   log "WATCHDOG FIRED: cell killed after ${WATCHDOG_S}s (see raw/watchdog.log) — rc=$RC flows to the verdict"
 fi

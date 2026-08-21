@@ -164,8 +164,27 @@ def consistency_verdict(app_bps, wire_bps, *, fs, direction, ec_scheme=None,
     b = bands["bands"][direction]
     lo, hi = b["lo"], b["hi"]
     widenings = []
+    if mixed and "mixed_widening" not in bands["bands"]:
+        # No calibrated mixed widening yet (open-items B.3). Two sound outcomes
+        # only: a mixed ratio INSIDE the unwidened single-direction band is a
+        # genuine PASS (any valid mixed band is a superset of it), but a ratio
+        # outside it is REPORT_ONLY — it cannot be told apart from the
+        # uncalibrated widening (4.D's mixed reads landed at 1.22-1.74 against
+        # [0.99, 1.09] while its writes PASSed dead-centre), judging it FAIL
+        # would manufacture a false instrumentation failure, and inventing a
+        # widening could mask a real one.
+        out["band"] = [round(center * lo, 4), round(center * hi, 4)]
+        out["widenings_applied"] = ["mixed: NONE CALIBRATED (B.3) — unwidened band, conservative"]
+        if center * lo <= ratio <= center * hi:
+            out["verdict"] = "PASS"
+        else:
+            out["verdict"] = "REPORT_ONLY"
+            out["detail"] = ("mixed direction with no calibrated mixed_widening (B.3 mixed "
+                             "calibration cells): ratio recorded against the single-direction band "
+                             "for reference, never judged by it — not an instrumentation failure")
+        return out
     if mixed:
-        w = bands["bands"].get("mixed_widening", 1.0)
+        w = bands["bands"]["mixed_widening"]
         lo, hi = lo / w, hi * w
         widenings.append(f"mixed x{w}")
     if bs_bytes is not None and bs_bytes <= bands["bands"].get("smallbs_bytes", 0):

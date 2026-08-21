@@ -1,0 +1,33 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-21-211515-weka-s0-proof-bs1m-jobs4",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.0543,
+      "expected_center": 1.0,
+      "band": [
+        0.9919,
+        1.0945
+      ],
+      "widenings_applied": [
+        "mixed: NONE CALIBRATED (B.3) \u2014 unwidened band, conservative"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4616,
+      "expected_center": 1.4,
+      "band": [
+        1.3863,
+        1.5289
+      ],
+      "widenings_applied": [
+        "mixed: NONE CALIBRATED (B.3) \u2014 unwidened band, conservative"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

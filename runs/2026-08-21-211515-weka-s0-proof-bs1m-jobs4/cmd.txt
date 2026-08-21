@@ -1,0 +1,1 @@
+fio --name=proof --directory=/mnt/weka/benchmarks/fio-scratch --rw=readwrite --rwmixread=50 --bs=1M --size=512M --numjobs=4 --iodepth=4 --ioengine=libaio --direct=1 --runtime=15 --time_based --group_reporting --unlink=1 --output-format=json+ 

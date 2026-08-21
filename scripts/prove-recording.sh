@@ -13,12 +13,15 @@
 #       the cell measured nothing)
 #   14  the run's raw/ telemetry is verifiably in S3 (every local file listed)
 #   15  the generic aggregator emits a summary row for the cell
+#   16  the post-cell consistency canary ran mechanically (D-5/D-7:
+#       canary-check.json written by record-run.sh)
+#   17  the pre-cell gate refuses on a planted canary-abort marker (D-7 chain
+#       poison) and re-arms when it is removed
 #
-# Loud SKIPs, not silent gaps: the two canary assertions (pre-cell exclusivity
-# canary as a mechanical check, post-cell cross-source consistency canary) do
-# not exist yet — they land with D-7 and D-5 — and this script must gain them
-# then. Until it does it says so on every run, because a proof that silently
-# proves less than the checklist promises is how one of five checks gets skipped.
+# Loud SKIPs, not silent gaps: the one remaining pending assertion (the D-4
+# helper's fs-pivoted aggregation column) says so on every run, because a proof
+# that silently proves less than the checklist promises is how a check gets
+# skipped.
 #
 # Runs on every rebuild BEFORE wallclock is spent. Costs ~1 min and one ~15 s
 # fio cell (a real Stage-0 run dir; never deleted, like every run dir).
@@ -102,9 +105,32 @@ SUMMARY="$REPO/runs/s0-proof-summary-${LEG:?LEG is unset -- source env.sh}.csv"
   || fail 15 "aggregator summary missing the proof cell's row"
 note "OK  aggregator emitted the cell's row ($SUMMARY)"
 
+# 16 — D-5/D-7 post-cell consistency canary ran mechanically inside record-run.sh:
+# the proof cell carries canary-check.json with a verdicts array. (The proof cell
+# is stage 0, so a non-PASS verdict is recorded but never poisons — asserted below.)
+[ -s "$RECORD_RUN_DIR/canary-check.json" ] && grep -q '"verdicts"' "$RECORD_RUN_DIR/canary-check.json" \
+  || fail 16 "record-run.sh did not run the post-cell consistency canary (canary-check.json absent/empty)"
+note "OK  post-cell consistency canary ran mechanically (canary-check.json present)"
+
+# 17 — D-7 pre-cell gate: a planted canary-abort marker makes record-run.sh REFUSE
+# (exit 3) before creating anything, and removing the marker re-arms it. This is
+# the chain-poison mechanic that turns a 3am canary FAIL into zero further cells.
+MARKER="$REPO/runs/.leg-state/$LEG/canary-abort"
+if [ -e "$MARKER" ]; then
+  fail 17 "a REAL canary-abort marker already exists at $MARKER — investigate it; not planting a test one"
+fi
+mkdir -p "$(dirname "$MARKER")"
+echo "planted by prove-recording.sh assertion 17 at $(date -u +%FT%TZ) — safe to delete if found orphaned" > "$MARKER"
+set +e
+RECORD_RUN_DIR="" "$REPO/scripts/record-run.sh" --run-name "poison-gate-proof" --stage 0 \
+  --note "prove-recording assertion 17 — must never actually run" -- true >/dev/null 2>&1
+GATE_RC=$?
+set -e
+rm -f "$MARKER"
+[ "$GATE_RC" -eq 3 ] || fail 17 "record-run.sh did not refuse on a planted canary-abort marker (rc=$GATE_RC, expected 3)"
+note "OK  pre-cell gate refuses on the poison marker (rc=3) and re-arms on removal"
+
 echo
-note "SKIP (pending D-7): pre-cell exclusivity/health canary is not mechanical yet — add its assertion here when it lands"
-note "SKIP (pending D-5): post-cell cross-source consistency canary does not exist yet — add its assertion here when it lands"
 note "SKIP (pending D-4 helper): the fs-pivoted aggregation column is not built yet — assert it here when the shared helper lands"
 echo
 note "ALL AVAILABLE ASSERTIONS PASSED — recording infrastructure proven on this build."
