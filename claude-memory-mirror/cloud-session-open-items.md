@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-21T21:26:54.126Z
+  modified: 2026-08-21T21:42:26.413Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -34,8 +34,11 @@ These change what the numbers mean, so resolving them after cells have run means
    Remaining: (a) — DONE 2026-08-21 (D-7 closed: the check runs mechanically per cell, poison-marker
    chain-abort, prove-recording asserts it); (b) **mixed-cell widening needs mixed calibration cells before
    1.6, and RECOMMENDED before 6.C** — until then a mixed direction outside the unwidened band is
-   REPORT_ONLY (recorded, never judged, never poisons; inside it is a genuine PASS), so 6.C's ingest-active
-   cells would carry report-only read verdicts (surfaced to the human 2026-08-21); (c) Leg B's R2 band
+   REPORT_ONLY (recorded, never judged, never poisons; inside it is a genuine PASS). **RATIFIED 2026-08-21:
+   the mixed calibration runs BEFORE 6.C** (not just before 1.6) — extend `calibrate-canary-bands.sh` with
+   mixed probe cells at the 4.D-observed mix plus a read-heavier and a write-heavier bracket, take the max
+   widening; implement at the current chain's boundary (the helper is chain-invoked, no mid-chain edits),
+   run the cells, then launch 6.C; (c) Leg B's R2 band
    calibration writes that leg's bands file (theirs).** Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md`.
 4. **Determine the Lustre LND actually in use** (kernel TCP vs the EFA provider). This decides which client
    counters are primary versus diagnostic — get it wrong and every Lustre number cites a bypassed source.
