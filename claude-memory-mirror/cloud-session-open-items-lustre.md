@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T20:18:08.533Z
+  modified: 2026-08-21T21:08:01.121Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -29,8 +29,8 @@ emergency-rebuild insurance only.
    filled handoff inline in its final message. Destroy/rebuild: OPTIONALLY (human's call, worth it
    mid-work) the filled handoff goes into `TEMP/` as a durable committed file — memory + repo are the
    designed continuity and the preflight only warns, never blocks, without one. A prompt is deleted once
-   its session has executed it (spent once read); the pending one is
-   `TEMP/prompt-r2-verify-and-benchmark.md` (updated 2026-08-21 to R1's as-left state).
+   its session has executed it (spent once read); none pending (R3 executed and deleted the post-reboot
+   one).
 
 ## B. Before the first measured cell on this leg
 
@@ -56,25 +56,23 @@ emergency-rebuild insurance only.
    enforced by the reconciler, wired into the three shell drivers; python-side workers get it at their
    gates (6.B.2, 7.1 — tracker D-4). Demonstration cell: `probe-lustre-coldset.sh` (run at calibration
    close).
-5. **⛔ LEG STOPPED — EFA bulk-write instability (2026-08-21 ~16:05–16:45Z), unresolved.** All three seqw
-   calibration cells (16j×4M direct, 300 s) failed under sustained bulk writes: fio EAGAIN/hang, efalnd
-   TX cancellations on BOTH efa devices, ptlrpc bulk timeouts, OST reconnect flaps; EFA hw_counters show
-   ~48k retrans_pkts + ~2,850 retrans_timeout_events; FSx CloudWatch shows the OSSes ≤1% network / ≤5%
-   disk utilization during the failures — client↔server EFA-path loss, not server overload. Short cells
-   (19 s proof, 100 MiB probes) are clean; failure engages under SUSTAINED bulk. Evidence: the three
-   `runs/2026-08-21-1*-FAILED-efa-*` dirs (notes.md + incident-evidence.txt + fsx-cloudwatch dumps).
-   Two fio workers left in D state — clears only with a reboot (phase-2 re-proves transport per boot).
-   **RATIFIED plan (2026-08-21), post-reboot sequence for the next session:**
-   (1) boot triage: `journalctl -u wsi-lustre-phase2.service` (gate + counter-proof must pass; a failed
-       counter-proof unmounts by design) + confirm no D-state fio remains;
-   (2) `./scripts/probe-efa-bulk-repro.sh` (120 s, mechanical verdict) → PASS →
-       `PROBE_RUNTIME=300 ./scripts/probe-efa-bulk-repro.sh`;
-   (3) full-length PASS → re-run `./scripts/calibrate-canary-bands.sh` (now watchdogged, 1800 s/cell)
-       → `probe-lustre-coldset.sh` (the ratified cold-set demonstration) → resume the pre-baseline plan;
-   (4) any FAIL → STOP stands; AWS support case as a provisioning question ([USER]; evidence bundle =
-       the three `-FAILED-efa-*` dirs; also check Personal Health Dashboard / instance status console —
-       the box's role cannot). Never a tuning exercise (D16/L7).
-   D-7 watchdog is BUILT + proven (`s0-watchdog-proof` cell); drivers carry per-cell RECORD_TIMEOUT_S.
+5. **⛔ LEG STOPPED — EFA bulk-write instability, REPRODUCED POST-REBOOT (2026-08-21), AWS case pending.**
+   Original event ~16:05–16:45Z: all three seqw calibration cells (16j×4M direct, 300 s) failed under
+   sustained bulk writes — fio EAGAIN/hang, efalnd TX cancellations on BOTH efa devices, ptlrpc bulk
+   timeouts, OST reconnect flaps; server-side CloudWatch ≤1% network / ≤5% disk during the failures.
+   **Reproduced on a clean boot (20:29:35Z boot, phase-2 gate + counter-proof PASSED): the 120 s
+   `probe-efa-bulk-repro.sh` FAILED at 20:42Z** — all-six-OST connection flaps, efalnd TX cancel on
+   efa_0, since-boot retrans_timeout_events 1,200 (efa_0) + 2,227 (efa_1), servers again ≤5% utilized;
+   short transfers (phase-2 100 MiB proof, 4 MiB writes) clean. Failure engages under SUSTAINED bulk
+   only; a clean-boot reproduction rules out incident-day transient state. No D-state survivors this
+   time; the filesystem recovered once load stopped (all OSTs FULL, direct writes OK).
+   Evidence bundle: the four `runs/2026-08-21-*-FAILED-efa-*` dirs (notes.md + incident-evidence.txt +
+   fsx-cloudwatch dumps; the 204248 dir is the reproduction).
+   **NEXT: [USER] files the AWS support case — draft prepared at `TEMP/aws-support-case-efa-bulk-write.md`
+   — and checks Personal Health Dashboard + instance-status console (the box's role cannot see them).**
+   Never a tuning exercise (D16/L7). The leg runs NO cells (no calibration, no coldset demo, no probes)
+   until the case resolves or the human ratifies otherwise; the 300 s probe re-runs only after a fix, to
+   clear calibration.
 6. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
    included IOPS (register L6 has both readings + sources). Verify against the first invoice / Cost
    Explorer; if all 48,000 bill, correct to $30.6279/hr, dated, as a provisioning-cost event.

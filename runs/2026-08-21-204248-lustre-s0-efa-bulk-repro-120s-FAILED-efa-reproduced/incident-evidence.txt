@@ -1,0 +1,58 @@
+=== EFA bulk-write reproduce probe 120s — INCIDENT REPRODUCED (FAIL) ===
+captured: 2026-08-21T21:02:41Z by R3 session; boot: 2026-08-21 20:29:35Z (post-incident reboot)
+
+--- fio process group at capture (PGID 21534, from raw/.cmd_pgid) ---
+    PID    PPID    PGID STAT WCHAN                          ELAPSED COMMAND
+  21534       1   21534 Ssl  futex_wait_queue                  1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21684   21534   21684 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21685   21534   21685 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21686   21534   21686 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21688   21534   21688 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21689   21534   21689 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21692   21534   21692 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21693   21534   21693 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21694   21534   21694 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21695   21534   21695 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21697   21534   21697 Ss   read_events                       1190 fio --name=efa-bulk-repro --directory=/mnt/lustre/benchmarks/fio-canary-calib --filename_format=calib.$jobnum --size=10G --numjobs=16 --ioengine=libaio --direct=1 --iodepth=8 --rw=write --bs=4M --runtime=120 --time_based --group_reporting --output-format=json+ --status-interval=1
+  21534   21534 Ssl     1190 fio
+
+--- EFA hw_counters (cumulative since boot; only bulk traffic since boot = this probe + phase-2 100MiB proof) ---
+efa_0 retrans_pkts = 20475
+efa_0 retrans_timeout_events = 1200
+efa_0 tx_pkts = 44714603
+efa_0 rx_pkts = 17988159
+efa_1 retrans_pkts = 35903
+efa_1 retrans_timeout_events = 2227
+efa_1 tx_pkts = 44684646
+efa_1 rx_pkts = 17901279
+
+--- dmesg (this boot): lustre/lnet/efalnd error lines ---
+[Fri Aug 21 20:29:51 2026] LNetError: 19238:0:(api-ni.c:3678:lnet_dyn_del_ni()) net tcp not found
+[Fri Aug 21 20:29:51 2026] LNet: Added LNI 10.1.1.251@tcp [8/2560/0/180]
+[Fri Aug 21 20:29:51 2026] LNet: Accept secure, port 988
+[Fri Aug 21 20:30:00 2026] LNet: Started NI[1.251.91.0@efa] EFA device[efa_0] FW[0x0] Lustre[2.15.6] LND[1.2.2] CPT[0]
+[Fri Aug 21 20:30:00 2026] LNet: Added LNI 1.251.91.0@efa [32/512/0/200]
+[Fri Aug 21 20:30:10 2026] LNet: Started NI[1.251.92.0@efa] EFA device[efa_1] FW[0x0] Lustre[2.15.6] LND[1.2.2] CPT[1]
+[Fri Aug 21 20:30:10 2026] LNet: Added LNI 1.251.92.0@efa [32/512/0/200]
+[Fri Aug 21 20:30:10 2026] Lustre: Lustre: Build Version: 2.15.6
+[Fri Aug 21 20:30:11 2026] LNetError: 19236:0:(lib-move.c:2259:lnet_handle_find_routed_path()) peer 198.19.30.244@tcp1 has no available nets
+[Fri Aug 21 20:46:01 2026] Lustre: 19484:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for sent delay: [sent 1787345090/real 0]  req@000000002050cc27 x1874166256161856/t0(0) o4->krvlrbev-OST0001-osc-ffff8d7009651000@10.1.1.207@tcp:6/4 lens 488/448 e 0 to 1 dl 1787345162 ref 3 fl Rpc:Xr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 20:46:01 2026] Lustre: 19512:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for sent delay: [sent 1787345090/real 0]  req@000000002bccc8cb x1874166256167680/t0(0) o4->krvlrbev-OST0004-osc-ffff8d7009651000@10.1.1.50@tcp:6/4 lens 488/448 e 0 to 1 dl 1787345162 ref 3 fl Rpc:Xr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 20:46:01 2026] Lustre: 19471:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for sent delay: [sent 1787345090/real 0]  req@0000000092fc365d x1874166256166016/t0(0) o4->krvlrbev-OST0001-osc-ffff8d7009651000@10.1.1.207@tcp:6/4 lens 488/448 e 0 to 1 dl 1787345162 ref 3 fl Rpc:Xr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 20:46:01 2026] Lustre: krvlrbev-OST0004-osc-ffff8d7009651000: Connection to krvlrbev-OST0004 (at 10.1.1.50@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 20:46:01 2026] Lustre: krvlrbev-OST0001-osc-ffff8d7009651000: Connection to krvlrbev-OST0001 (at 10.1.1.207@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 20:46:01 2026] Lustre: 19484:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 1 previous similar message
+[Fri Aug 21 20:46:02 2026] Lustre: 19458:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has failed due to network error: [sent 1787345091/real 1787345163]  req@00000000bcf64a8f x1874166256169152/t0(0) o4->krvlrbev-OST0004-osc-ffff8d7009651000@10.1.1.50@tcp:6/4 lens 488/448 e 0 to 1 dl 1787345163 ref 2 fl Rpc:eXSQU/0/ffffffff rc -11/-1 job:''
+[Fri Aug 21 20:46:02 2026] Lustre: 19458:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 6 previous similar messages
+[Fri Aug 21 20:46:26 2026] Lustre: 19490:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787345090/real 1787345091]  req@000000001cec48ca x1874166256164864/t0(0) o4->krvlrbev-OST0003-osc-ffff8d7009651000@10.1.1.61@tcp:6/4 lens 488/448 e 1 to 1 dl 1787345187 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 20:46:26 2026] Lustre: krvlrbev-OST0003-osc-ffff8d7009651000: Connection to krvlrbev-OST0003 (at 10.1.1.61@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 20:46:26 2026] Lustre: 19490:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 2 previous similar messages
+[Fri Aug 21 20:46:28 2026] Lustre: krvlrbev-OST0002-osc-ffff8d7009651000: Connection to krvlrbev-OST0002 (at 10.1.1.227@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 20:46:52 2026] Lustre: 19505:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787345090/real 1787345091]  req@000000000189404f x1874166256161280/t0(0) o4->krvlrbev-OST0005-osc-ffff8d7009651000@10.1.1.104@tcp:6/4 lens 488/448 e 2 to 1 dl 1787345213 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 20:46:52 2026] Lustre: krvlrbev-OST0005-osc-ffff8d7009651000: Connection to krvlrbev-OST0005 (at 10.1.1.104@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 20:46:52 2026] Lustre: 19505:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 2 previous similar messages
+[Fri Aug 21 20:48:12 2026] LNet: 19342:0:(efalnd.c:949:kefalnd_force_cancel_tx()) Device[efa_0] canceling TX type[IMMEDIATE] to peer NI[1.207.71.0@efa]
+[Fri Aug 21 20:48:12 2026] Lustre: 19507:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has failed due to network error: [sent 1787345090/real 1787345293]  req@00000000ab21fab3 x1874166256161408/t0(0) o4->krvlrbev-OST0001-osc-ffff8d7009651000@10.1.1.207@tcp:6/4 lens 488/448 e 0 to 1 dl 1787345162 ref 2 fl Rpc:eXSQU/0/ffffffff rc -11/-1 job:''
+[Fri Aug 21 20:48:12 2026] Lustre: 19507:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 13 previous similar messages
+[Fri Aug 21 20:55:20 2026] Lustre: 19505:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787345091/real 1787345091]  req@00000000c20a5a06 x1874166256172160/t0(0) o4->krvlrbev-OST0000-osc-ffff8d7009651000@10.1.1.21@tcp:6/4 lens 488/448 e 22 to 1 dl 1787345721 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 20:55:20 2026] Lustre: krvlrbev-OST0000-osc-ffff8d7009651000: Connection to krvlrbev-OST0000 (at 10.1.1.21@tcp) was lost; in progress operations using this service will wait for recovery to complete

@@ -1,0 +1,2 @@
+systemd-1 /mnt/lustre autofs rw,relatime,fd=50,pgrp=1,timeout=0,minproto=5,maxproto=5,direct,pipe_ino=16214 0 0
+10.1.1.154@tcp:/krvlrbev /mnt/lustre lustre rw,seclabel,relatime,checksum,flock,nouser_xattr,lruresize,lazystatfs,nouser_fid2path,verbose,encrypt 0 0
