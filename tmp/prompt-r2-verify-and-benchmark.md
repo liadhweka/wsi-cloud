@@ -81,6 +81,10 @@ cell, named assertions, filesystem-side streams non-empty, S3 sync verified. Che
   AUTO), three-layer path accounting recorded. **Expected: compat/bounce — no true GDS on g6e (D8,
   doc-grounded on both legs); a split contradicting that is a finding to surface immediately, not wiring
   to add.**
+- **Build D-39 (ratified 2026-08-21): the post-cell FSx CloudWatch window dump** — the RUNBOOK's Lustre
+  table declares the server-side view Primary; nothing captures it yet. Fetch the current FSx CloudWatch
+  metrics doc FIRST (which metrics/dimensions exist — never recalled), then wire the dump into the per-cell
+  flow before the first measured cell. Detail: SCRIPT-TRACKER D-39.
 - **Stage-1.0 corpora staging** via `run-leg.sh`'s prep step, against the D13 values now in the contract.
 - **Watch item (register L7):** if calibration plateaus below expectation with the efa net unsaturated,
   stop and surface — the interface count is the first candidate, a ratified provisioning event.

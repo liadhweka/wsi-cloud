@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T04:01:27.641Z
+  modified: 2026-08-21T04:06:18.540Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -54,10 +54,14 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    (`runs/.leg-state/lustre/canary-bands.json`, dies with the filesystem, R2 work). Recorder half of D-4 is
    DONE + capture-verified; at calibration also decide the lustre cold-cell evidence set (D-4 remainder:
    page-cache drop is leg-neutral, ldlm/osc client caches are the open question).
-5. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
+5. **Build D-39 (ratified 2026-08-21): the post-cell FSx CloudWatch window dump** — the RUNBOOK's Lustre
+   table declares the server-side view Primary and nothing captures it yet. Fetch the current FSx CloudWatch
+   metrics doc first (which metrics/dimensions exist — never recalled), then wire the dump into the per-cell
+   flow BEFORE the first measured cell. Detail: SCRIPT-TRACKER D-39.
+6. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
    included IOPS (register L6 has both readings + sources). Verify against the first invoice / Cost
    Explorer; if all 48,000 bill, correct to $30.6279/hr, dated, as a provisioning-cost event.
-6. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
+7. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
    (a) docstring/comment headers describing the kvikio backend as "kvikIO+GDS" in
    `train-resnet50-stage5.py`, `extract-features-foundation-stage6.py`, `read-tiles-kvikio.py` — the
    backend is kvikIO/cuFile (compat on both legs per D8); (b) `cufile-full-rdma.template.json`'s header
