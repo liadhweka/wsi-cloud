@@ -1,0 +1,51 @@
+{
+  "run_name": "extract-multimodel-kvikio-brca_full-N4",
+  "stage": "6.A",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-20T03:42:08Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 8,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 0,
+  "cache_state": "na-mixed-rw-chunk-resident",
+  "rep": null,
+  "command": [
+    "/home/ec2-user/wsi-cloud/scripts/run-stage6a-tier2-chunked-multimodel.sh",
+    "--models",
+    "virchow2,gigapath,uni2-h",
+    "--n-gpus",
+    "4",
+    "--gpu-csv",
+    "0,1,2,3",
+    "--output-dir-base",
+    "/mnt/weka/features/6.A",
+    "--run-dir",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4",
+    "--chunk-size",
+    "200"
+  ],
+  "note": "[PENDING-APPROVAL-DO-NOT-EXTERNALIZE] Stage 6.A Tier 2 MULTI-MODEL chunked cell: models=virchow2,gigapath,uni2-h backend=kvikio N=4 dataset=brca_full (the uniform-magnification cohort per STAGES.md D5, chunked into batches of 200 slides). Cross-model conversion sharing: each chunk SVS→raw-TIFF converts ONCE, then extracts for each model in turn, then cleans up. Sharing conversion across models is STRUCTURAL: the chunk cadence (convert→extract→delete) is itself the measured production pattern (Stage-4 register: transient by design, independent of 4.D's retained artifact, which this cell never touches — it converts into its own chunk dirs), and conversion is a large share of per-chunk wallclock. Cache regime=na-mixed-rw-chunk-resident: each chunk's extraction reads raw-TIFF this cell wrote minutes earlier — server-cache-resident BY CONSTRUCTION, which is the workload, not a contamination; no cold arm exists by construction (D13 route-4 stated ground); the reader still discards client page cache per slide, achieved recorded in the per-chunk summaries under chunk-artifacts/. Per-cell LD_PRELOAD scoping: kvikIO cells preload the system libcufile (cuCIM cells never do — it links its own bundled copy and segfaults on its first read under the ABI clash).",
+  "wallclock_s": 94114,
+  "started_utc": "2026-08-20T03:42:10Z",
+  "ended_utc": "2026-08-21T05:50:44Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 13.699,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

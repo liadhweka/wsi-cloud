@@ -1,0 +1,1 @@
+/home/ec2-user/wsi-cloud/scripts/run-stage6a-tier2-chunked-multimodel.sh --models virchow2\,gigapath\,uni2-h --n-gpus 4 --gpu-csv 0\,1\,2\,3 --output-dir-base /mnt/weka/features/6.A --run-dir /home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4 --chunk-size 200 

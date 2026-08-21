@@ -1,0 +1,21 @@
+{
+  "model": "gigapath",
+  "backend": "kvikio",
+  "world_size": 4,
+  "orchestrator": "run-stage6a-tier2-chunked-multimodel.sh",
+  "n_chunks_with_data": 6,
+  "chunk_size_target": 200,
+  "n_slides_manifest": 1064,
+  "n_slides_extracted_total": 1064,
+  "total_tiles_steady_phase": 11692802.0,
+  "total_steady_steps": 46193.0,
+  "cell_wallclock_s": 13748.443431594118,
+  "tiles_per_sec_aggregate_steady": 850.4818787798025,
+  "embedding_dim": 1536,
+  "extraction_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/extraction-steps-gigapath.csv",
+  "per_slide_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/per-slide-gigapath.csv",
+  "output_dir": "/mnt/weka/features/6.A/gigapath/brca_full",
+  "dataset_tag": "brca_full",
+  "n_ramp_steps_excluded": 10,
+  "dtype_out": "fp32"
+}

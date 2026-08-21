@@ -1,0 +1,21 @@
+{
+  "model": "uni2-h",
+  "backend": "kvikio",
+  "world_size": 4,
+  "orchestrator": "run-stage6a-tier2-chunked-multimodel.sh",
+  "n_chunks_with_data": 6,
+  "chunk_size_target": 200,
+  "n_slides_manifest": 1064,
+  "n_slides_extracted_total": 1064,
+  "total_tiles_steady_phase": 11692802.0,
+  "total_steady_steps": 46193.0,
+  "cell_wallclock_s": 11348.512351418147,
+  "tiles_per_sec_aggregate_steady": 1030.3378661379197,
+  "embedding_dim": 1536,
+  "extraction_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/extraction-steps-uni2-h.csv",
+  "per_slide_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/per-slide-uni2-h.csv",
+  "output_dir": "/mnt/weka/features/6.A/uni2-h/brca_full",
+  "dataset_tag": "brca_full",
+  "n_ramp_steps_excluded": 10,
+  "dtype_out": "fp32"
+}

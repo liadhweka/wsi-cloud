@@ -1,0 +1,22 @@
+{
+  "orchestrator": "run-stage6a-tier2-chunked-multimodel.sh",
+  "models": [
+    "virchow2",
+    "gigapath",
+    "uni2-h"
+  ],
+  "backend": "kvikio",
+  "world_size": 4,
+  "n_chunks": 6,
+  "chunk_size_target": 200,
+  "n_slides_manifest": 1064,
+  "cell_wallclock_s": 94113.5,
+  "per_chunk_summary_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/per-chunk-summary.csv",
+  "per_model_summaries": [
+    "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/extraction-summary-virchow2.json",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/extraction-summary-gigapath.json",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-20-034202-weka-s6.A-extract-multimodel-kvikio-brca_full-N4/extraction-summary-uni2-h.json"
+  ],
+  "dataset_tag": "brca_full",
+  "note": "Multi-model chunked Tier 2 \u2014 convert-once-per-chunk shared across models. Per-model headlines in extraction-summary-<model>.json (aggregator picks these up)."
+}
