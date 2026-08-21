@@ -692,6 +692,21 @@ EOF
     log "        wallclock and cost_inputs were NOT added to metadata.json for this cell."
   fi
 
+  # D-39: FSx server-side CloudWatch window dump (lustre only) — the RUNBOOK's
+  # declared server-side Primary. Runs after metadata.json has the cell's
+  # [started_utc, ended_utc]. WARN-ONLY and deliberately NOT in the
+  # required-streams list: CloudWatch publishes with ~1-2 min lag, so the
+  # immediate dump may be right-truncated (marked "final": false) — the
+  # run-leg.sh per-step backfill re-fetches non-final dumps, and CloudWatch's
+  # 15-month retention means a missed window stays repairable, unlike every
+  # client-side stream.
+  if [[ "$FS" == "lustre" && -n "${WALLCLOCK_S:-}" && -x "$SCRIPT_DIR/fsx-cloudwatch-dump.py" ]]; then
+    log "D-39: dumping FSx CloudWatch window..."
+    "$SCRIPT_DIR/fsx-cloudwatch-dump.py" "$RUN_DIR" \
+      >> "$RUN_DIR/raw/fsx-cloudwatch.log" 2>&1 \
+      || log "  WARN: FSx CloudWatch dump failed (see raw/fsx-cloudwatch.log) — the per-step backfill or a by-hand re-run repairs it; the window is retained server-side"
+  fi
+
   # Run parser
   if [[ -x "$SCRIPT_DIR/parse-results.py" ]]; then
     log "parsing results..."

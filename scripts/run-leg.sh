@@ -287,6 +287,17 @@ for s in "${STEPS[@]}"; do
   log "OK    $id"
   ran=$((ran+1))
 
+  # D-39 backfill (lustre only), BEFORE the sync so the dumps ride this step's
+  # upload: re-fetch any cell's FSx CloudWatch window whose post-cell dump was
+  # taken inside CloudWatch's publish lag ("final": false). Idempotent — final
+  # dumps are skipped — so the pass stays cheap at leg scale. Warn-only: the
+  # window is retained server-side for 15 months, so a failed backfill is
+  # repairable by hand, unlike a failed telemetry sync (which still aborts).
+  if [ "$LEG" = "lustre" ] && [ -x "$LIB/fsx-cloudwatch-dump.py" ]; then
+    "$LIB/fsx-cloudwatch-dump.py" "$REPO"/runs/*-lustre-s*/ 2>&1 | tee -a "$MASTER_LOG" \
+      || log "WARN: D-39 CloudWatch backfill failed after $id — post-cell dumps stand; re-run by hand"
+  fi
+
   # Guard 3: get this step's telemetry off the ephemeral disk immediately.
   if ! "$LIB/sync-to-s3.sh" --mode full 2>&1 | tee -a "$MASTER_LOG"; then
     log "FAILED S3 sync after $id — aborting"

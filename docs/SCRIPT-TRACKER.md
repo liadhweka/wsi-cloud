@@ -51,7 +51,7 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-33** | **Stage 7's `## 7.1` headline grid is structurally always empty** | `aggregate-stage7-clinical.py` | The grid filters on `cell_name.startswith('7.1')`, but `RUN_NAME_RE` strips the stage segment, so a `record-run.sh`-named dir `…-s7.1-baseline-…` yields `cell_name='baseline-…'` and never matches. 7.2 only appears because its driver pre-computes a `-s7-7.2-…` dir, leaving the sub-tier inside the name. Either match on the recorded `stage` field or stop stripping the segment — but the two naming shapes must be reconciled first, which is why this is not a one-line fix. **Also found 2026-08-21:** its RDMA extraction hardcodes device `mlx5_0`, which exists on neither leg (no RDMA devices on WEKA-on-AWS; `efa_0`/`efa_1` on Lustre) — the column reads empty on every cell; point it at the recorded devices when the grid fix lands |
 | **D-35** | **Remaining: fold relocate-after-verified-sync into `run-leg.sh`'s per-step sync for ordinary cells** | `run-leg.sh` (per-step sync) | The 2026-08-16 ENOSPC abort: `runs/*/raw` accumulates locally although S3 already held every byte via the per-step verified sync. Two halves are closed: `record-run.sh` honours `RECORD_RAW_ON_SCRATCH=1` (raw/ born on the local-NVMe overflow, symlinked — for cells whose telemetry exceeds root headroom; sync follows symlinks, S3 authoritative), and the rebuilt Leg-B client carries a **200 GB root** (verified live, `df /`, 2026-08-21; confirm Leg A's at its next rebuild). The fold remains so ordinary long legs reclaim root space mechanically instead of by session intervention |
 | **D-37** | **`sync-to-s3.sh --mode full` duration grows linearly with run-dir count** (one `aws s3 sync` invocation per run dir → S3 LIST round-trips even with nothing to upload; ~5 min at ~190 dirs, plausibly 15+ min at leg scale) | `sync-to-s3.sh` | Not a correctness issue — the per-dir verify is honest work — but it sits inside `backup.sh` on the commit path and inside `teardown-prep.sh`. Batch the per-dir syncs (one sync over `runs/` with include patterns) or skip dirs whose raw was already relocated + verified, keeping the archive semantics and the post-sync count verification intact |
-| **D-39** | **FSx server-side CloudWatch dump — RATIFIED (2026-08-21, option A): build in R2 before the first measured cell** | a new post-cell step + its wiring into the per-cell flow (`record-run.sh` cleanup or `run-leg.sh` per-step) | The RUNBOOK's Lustre source table declares "CloudWatch per-OST/MDT metrics" **Primary** — the server-side view, the one source not measured from the client — but nothing captures it, so the multiple-sources rule silently runs a declared Primary short on this leg. CloudWatch is 1-minute resolution, so it cannot join the 1 Hz ratio checks; the shape is a post-cell window dump (`aws cloudwatch get-metric-data` for the FSx `FileSystemId` over the cell's recorded [start,end], written into the run dir beside the other raw sources). Build steps: FIRST fetch the current FSx-for-Lustre CloudWatch metrics doc for which metrics/dimensions actually exist — per-target granularity is a docs question, never recalled; if per-OST/MDT turns out not to exist, the file-system-level dump IS the server-side view and the RUNBOOK row is updated to say so in the same edit |
+| **D-39** | **FSx server-side CloudWatch dump — BUILT + WIRED; remaining: the [USER] IAM grant, then the end-to-end proof, before the first measured cell** | `wsi-liad-client-role` (IAM, human); then re-run `fsx-cloudwatch-dump.py` on the stage-0 proof cell | The dump (`fsx-cloudwatch-dump.py` entry), the `record-run.sh` cleanup hook and the `run-leg.sh` per-step backfill are built. The doc fetch (2026-08-21) settled the granularity question: per-OST/MDT **exists** (`StorageTargetId`), per-OSS/MDS via `FileServer` — the RUNBOOK row stands as declared. **Blocked:** the instance role denies `cloudwatch:ListMetrics` + `cloudwatch:GetMetricData` (verified live 2026-08-21, both AccessDenied) — grant both (no resource-level scoping exists for either action), then prove the dump on the existing stage-0 proof cell and close this row. Gates `run-leg.sh` start (the first measured cell), NOT calibration/Phase-0 — those are never-quote diagnostics, and CloudWatch's 15-month retention makes their windows retro-dumpable |
 | **D-34** | **Short-cell recorder poll rate — DECIDED (ratified 2026-08-16, Stage-2 register): raise the filesystem-side poll rate for short cells (~10 Hz), identically on both legs; build it** | `record-run.sh` (recorder set) | Sub-second high-concurrency Stage 2/3 cells yield 1–3 samples at 1 Hz, so any sustained mean is ill-defined and both legs lose filesystem-side evidence exactly where the metadata architectures differ most. Implement before the first Stage 2/3 cell; verify the higher rate does not itself perturb the measurement (the recorded `_sample_interval_s` block is the evidence) |
 
 **Closed ids** — rows deleted (git holds their text); each id still resolves to where its constraint lives
@@ -229,6 +229,29 @@ refuses on a header-vs-tensor count mismatch, which downstream loads cannot dete
 fingerprinting a partial corpus. `leg`/`basis` fields are excluded from compare (expected to differ /
 descriptive). `features-6a` loads with `mmap=True`, so the capture reads tensor metadata, not the ~160 GB
 of values — fast, and it does not pull the feature corpus through the caches ahead of 6.B.3.
+
+### `fsx-cloudwatch-dump.py` — the D-39 FSx server-side CloudWatch window dump ⭐ NEW
+**What.** Dumps every `AWS/FSx` (metric, dimension-set) combination CloudWatch lists for this file system —
+deliberately uncurated, five statistics per series — over a cell's recorded `[started_utc, ended_utc]`
+(±1-bin padding) into `raw/fsx-cloudwatch.{json,csv}`. Takes many run dirs (the backfill passes a glob);
+skips non-lustre dirs and cells without a recorded window, loudly.
+**Why.** The RUNBOOK's Lustre table declares the server-side view Primary; this is the one source not
+measured from the client. Doc basis fetched 2026-08-21 (`fs-metrics.html`): per-OST/MDT via
+`StorageTargetId`, per-OSS/MDS via `FileServer`, 1-minute period — so it **never joins the 1 Hz ratio
+checks**; it is the server-side record, not a canary input.
+**Two-phase capture, and why the hook is warn-only.** CloudWatch publishes with ~1–2 min lag, so the
+immediate post-cell dump (the `record-run.sh` cleanup hook, lustre-only) may be right-truncated — recorded
+as `"final": false`, never hidden. The `run-leg.sh` per-step backfill re-fetches non-final dumps and skips
+final ones (idempotent, cheap at leg scale). Making the dump verdict-gating would flip false INCOMPLETEs on
+the lag, and unlike every client-side stream the window is repairable for 15 months — hence warn-only and
+NOT in the required-streams list.
+**I/O.** `FSX_ID` from env or `/etc/wsi-bootstrap.conf` (terraform-fed, never retyped); `AWS_REGION` from
+env; refuses without either. `--force` re-fetches even final dumps.
+**Caveats.** Needs `cloudwatch:ListMetrics` + `cloudwatch:GetMetricData` on the instance role (D-39's
+remaining gate). `Sum` on the utilization/percent metrics is meaningless — recorded anyway rather than
+curated (over-capture beats a prediction about which axis matters). `ListMetrics` only lists series active
+in the trailing two weeks — irrelevant per-cell, but do not reuse this enumerator for historical re-dumps
+months later.
 
 ### `rerun-cell.sh` — the D18 repeat runner ⭐ NEW
 **What.** `rerun-cell.sh <run-dir> <rep>` re-invokes a recorded cell's exact command as `REP=<rep>` with the
