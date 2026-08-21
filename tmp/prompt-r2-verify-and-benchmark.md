@@ -101,7 +101,12 @@ the binding bound — both in the basis string).
 ### 5 — Run the leg per `run-leg.sh` under the stage-lag rule
 
 Numbers into the roadmaps as they land. Substage closeouts are mechanical:
-`scripts/verify-substage-closeout.sh` must exit 0 before the next phase. Leg-B session discipline
+`scripts/verify-substage-closeout.sh` must exit 0 before the next phase. **Deferred-work sweep (standing):**
+the tracker's deferred table was audited + cleaned 2026-08-21 — every remaining row names its own gate, and
+several gate YOUR work (D-36 resume-skip and D-38 FAILED-dir exclusion before the 1.0 sweeps; D-19 at 1.8;
+D-34 before any short/high-concurrency cell; D-39 before the first measured cell; D-5 bands). **Close as
+many rows as you can as you pass their scope** — do the row's work in the same edit that touches its scope,
+and update the row itself in that edit. Leg-B session discipline
 throughout: own files only, structural docs proposed as numbered items, `cloud-session-open-items-lustre`
 kept current, commits per work block via `backup.sh` + push-safe, **never while a measured cell is in
 flight**.

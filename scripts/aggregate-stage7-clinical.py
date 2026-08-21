@@ -493,8 +493,9 @@ def aggregate_cell(run_dir: Path) -> dict:
         out['weka_ops_per_sec_full_mean'] = sum(weka_ops) / len(weka_ops)
         out['weka_ops_per_sec_max'] = max(weka_ops)
 
-    # RDMA mlx5_0 (the data-path device per the mlx5 mystery — verified
-    # to be re-derived on the real client — ⏳ D-9).
+    # ⏳ D-33: 'mlx5_0' exists on neither leg (no RDMA devices on WEKA-on-AWS;
+    # efa_0/efa_1 on Lustre), so this column reads empty on every cell — point
+    # it at the recorded devices when the stage-7 grid fix lands.
     # Recorder schema: rcv_bytes/xmit_bytes are already in BYTES (cumulative);
     # diff between timestamps recovers bytes/sec.
     rdma_rcv = rdma_per_sec_diff(run_dir, 'mlx5_0', 'rcv_bytes')
