@@ -114,6 +114,21 @@ drop_caches_evidenced() { # drop_caches_evidenced <evidence-file>
     echo "server_side=not clearable from the client; state recorded, not asserted (D13)"
   } > "$ev"
   rm -f "$ev.tmp"
+  # Lustre cold set (ratified 2026-08-21, D13/D-4): ALSO clear the client's DLM
+  # locks — a held lock can keep data/attrs servable client-side after the
+  # page-cache drop. Second acknowledgment appended; the reconciler requires it
+  # on lustre cold cells.
+  if [ "${LEG:-}" = "lustre" ] && (( rc == 0 )); then
+    sudo -n lctl set_param -n ldlm.namespaces.*.lru_size=clear > "$ev.tmp" 2>&1
+    rc=$?
+    {
+      echo "action=ldlm.namespaces.*.lru_size=clear (client DLM locks, lustre cold set)"
+      echo "timestamp=$(date -u +%FT%TZ)"
+      echo "rc=$rc"
+      cat "$ev.tmp"
+    } >> "$ev"
+    rm -f "$ev.tmp"
+  fi
   return $rc
 }
 

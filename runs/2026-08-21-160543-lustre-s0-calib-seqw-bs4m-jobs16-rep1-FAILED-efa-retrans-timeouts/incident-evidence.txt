@@ -1,0 +1,89 @@
+=== dmesg (lustre/lnet/efa) window:
+[Fri Aug 21 00:02:24 2026] kefalnd: module is from the staging directory, the quality is unknown, you have been warned.
+[Fri Aug 21 16:10:42 2026] Lustre: 118474:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328519/real 1787328519]  req@00000000fee8829c x1874089092837248/t0(0) o4->krvlrbev-OST0005-osc-ffff8a0c24d60000@10.1.1.104@tcp:6/4 lens 488/448 e 2 to 1 dl 1787328644 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:10:42 2026] Lustre: krvlrbev-OST0005-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0005 (at 10.1.1.104@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:10:43 2026] Lustre: 118433:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328519/real 1787328521]  req@00000000719e1600 x1874089092859264/t0(0) o4->krvlrbev-OST0005-osc-ffff8a0c24d60000@10.1.1.104@tcp:6/4 lens 488/448 e 2 to 1 dl 1787328645 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:10:43 2026] Lustre: 118433:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 2 previous similar messages
+[Fri Aug 21 16:10:44 2026] Lustre: krvlrbev-OST0003-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0003 (at 10.1.1.61@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:10:45 2026] Lustre: 118493:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328519/real 1787328520]  req@0000000074b21df5 x1874089092845376/t0(0) o4->krvlrbev-OST0005-osc-ffff8a0c24d60000@10.1.1.104@tcp:6/4 lens 488/448 e 2 to 1 dl 1787328644 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:10:45 2026] Lustre: 118493:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 4 previous similar messages
+[Fri Aug 21 16:10:48 2026] Lustre: 118442:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328522/real 1787328522]  req@00000000c997dff8 x1874089092901312/t0(0) o4->krvlrbev-OST0002-osc-ffff8a0c24d60000@10.1.1.227@tcp:6/4 lens 488/448 e 2 to 1 dl 1787328649 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:10:48 2026] Lustre: 118442:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 2 previous similar messages
+[Fri Aug 21 16:10:48 2026] Lustre: krvlrbev-OST0002-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0002 (at 10.1.1.227@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:11:17 2026] Lustre: 118456:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for sent delay: [sent 1787328607/real 1787328679]  req@00000000ee4165f8 x1874089094765248/t0(0) o4->krvlrbev-OST0004-osc-ffff8a0c24d60000@10.1.1.50@tcp:6/4 lens 488/448 e 0 to 1 dl 1787328679 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:11:17 2026] Lustre: krvlrbev-OST0004-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0004 (at 10.1.1.50@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:11:50 2026] Lustre: 118445:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328607/real 1787328608]  req@00000000e5b32f17 x1874089094764096/t0(0) o4->krvlrbev-OST0001-osc-ffff8a0c24d60000@10.1.1.207@tcp:6/4 lens 488/448 e 1 to 1 dl 1787328711 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:11:50 2026] Lustre: krvlrbev-OST0001-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0001 (at 10.1.1.207@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:12:47 2026] Lustre: 118470:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328608/real 1787328608]  req@000000004ddb0157 x1874089094774272/t0(0) o4->krvlrbev-OST0000-osc-ffff8a0c24d60000@10.1.1.21@tcp:6/4 lens 488/448 e 2 to 1 dl 1787328769 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:12:47 2026] Lustre: krvlrbev-OST0000-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0000 (at 10.1.1.21@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:13:16 2026] Lustre: krvlrbev-OST0003-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0003 (at 10.1.1.61@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:13:16 2026] Lustre: krvlrbev-OST0003-osc-ffff8a0c24d60000: Connection restored to 10.1.1.61@tcp (at 10.1.1.61@tcp)
+[Fri Aug 21 16:13:20 2026] Lustre: 118464:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328679/real 1787328679]  req@000000005f148da6 x1874089094757760/t0(0) o4->krvlrbev-OST0004-osc-ffff8a0c24d60000@10.1.1.50@tcp:6/4 lens 488/448 e 2 to 1 dl 1787328801 ref 2 fl Rpc:XQr/2/ffffffff rc -11/-1 job:''
+[Fri Aug 21 16:13:20 2026] Lustre: 118464:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 1 previous similar message
+[Fri Aug 21 16:13:20 2026] Lustre: krvlrbev-OST0004-osc-ffff8a0c24d60000: Connection restored to 10.1.1.50@tcp (at 10.1.1.50@tcp)
+[Fri Aug 21 16:13:28 2026] LNet: 118333:0:(efalnd.c:949:kefalnd_force_cancel_tx()) Device[efa_1] canceling TX type[IMMEDIATE] to peer NI[1.61.71.0@efa]
+[Fri Aug 21 16:14:56 2026] Lustre: 118435:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787328710/real 1787328710]  req@00000000e57926a1 x1874089095163712/t0(0) o4->krvlrbev-OST0005-osc-ffff8a0c24d60000@10.1.1.104@tcp:6/4 lens 488/448 e 0 to 1 dl 1787328898 ref 2 fl Rpc:XQr/2/ffffffff rc -11/-1 job:''
+[Fri Aug 21 16:14:56 2026] Lustre: 118435:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 14 previous similar messages
+[Fri Aug 21 16:14:56 2026] Lustre: krvlrbev-OST0005-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0005 (at 10.1.1.104@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:14:56 2026] Lustre: krvlrbev-OST0005-osc-ffff8a0c24d60000: Connection restored to 10.1.1.104@tcp (at 10.1.1.104@tcp)
+[Fri Aug 21 16:15:59 2026] Lustre: krvlrbev-OST0003-osc-ffff8a0c24d60000: Connection restored to 10.1.1.61@tcp (at 10.1.1.61@tcp)
+[Fri Aug 21 16:16:21 2026] Lustre: krvlrbev-OST0002-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0002 (at 10.1.1.227@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:16:21 2026] Lustre: krvlrbev-OST0002-osc-ffff8a0c24d60000: Connection restored to 10.1.1.227@tcp (at 10.1.1.227@tcp)
+[Fri Aug 21 16:21:30 2026] Lustre: 118475:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787329123/real 1787329123]  req@000000003e697c49 x1874089107959232/t0(0) o4->krvlrbev-OST0000-osc-ffff8a0c24d60000@10.1.1.21@tcp:6/4 lens 488/448 e 0 to 1 dl 1787329278 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:21:30 2026] Lustre: krvlrbev-OST0000-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0000 (at 10.1.1.21@tcp) was lost; in progress operations using this service will wait for recovery to complete
+[Fri Aug 21 16:21:30 2026] Lustre: 118475:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 4 previous similar messages
+[Fri Aug 21 16:24:00 2026] Lustre: krvlrbev-OST0000-osc-ffff8a0c24d60000: Connection restored to 10.1.1.21@tcp (at 10.1.1.21@tcp)
+[Fri Aug 21 16:24:26 2026] Lustre: krvlrbev-OST0002-osc-ffff8a0c24d60000: Connection restored to 10.1.1.227@tcp (at 10.1.1.227@tcp)
+[Fri Aug 21 16:24:54 2026] LNet: 118338:0:(efalnd.c:949:kefalnd_force_cancel_tx()) Device[efa_0] canceling TX type[IMMEDIATE] to peer NI[1.207.71.0@efa]
+[Fri Aug 21 16:24:54 2026] LNet: 118338:0:(efalnd.c:949:kefalnd_force_cancel_tx()) Skipped 13 previous similar messages
+[Fri Aug 21 16:36:45 2026] Lustre: 118449:0:(client.c:2313:ptlrpc_expire_one_request()) @@@ Request sent has timed out for slow reply: [sent 1787330086/real 1787330087]  req@0000000078122017 x1874089124103680/t0(0) o4->krvlrbev-OST0000-osc-ffff8a0c24d60000@10.1.1.21@tcp:6/4 lens 488/448 e 1 to 1 dl 1787330184 ref 2 fl Rpc:XQr/0/ffffffff rc 0/-1 job:''
+[Fri Aug 21 16:36:45 2026] Lustre: 118449:0:(client.c:2313:ptlrpc_expire_one_request()) Skipped 21 previous similar messages
+[Fri Aug 21 16:36:45 2026] Lustre: krvlrbev-OST0000-osc-ffff8a0c24d60000: Connection to krvlrbev-OST0000 (at 10.1.1.21@tcp) was lost; in progress operations using this service will wait for recovery to complete
+
+=== efa hw_counters at capture:
+efa_0 impaired_remote_conn_events=0
+efa_0 lifespan=10
+efa_0 rdma_read_bytes=93278175232
+efa_0 rdma_read_resp_bytes=294020448256
+efa_0 rdma_read_wr_err=0
+efa_0 rdma_read_wrs=88957
+efa_0 rdma_write_bytes=0
+efa_0 rdma_write_recv_bytes=0
+efa_0 rdma_write_wr_err=0
+efa_0 rdma_write_wrs=0
+efa_0 recv_bytes=358839325
+efa_0 recv_wrs=1131461
+efa_0 retrans_bytes=145922194
+efa_0 retrans_pkts=17852
+efa_0 retrans_timeout_events=1011
+efa_0 rx_bytes=93637014557
+efa_0 rx_drops=0
+efa_0 rx_pkts=17004528
+efa_0 send_bytes=338936819
+efa_0 send_wrs=939907
+efa_0 tx_bytes=294359385075
+efa_0 tx_pkts=37987529
+efa_0 unresponsive_remote_events=0
+efa_1 impaired_remote_conn_events=0
+efa_1 lifespan=10
+efa_1 rdma_read_bytes=92599746560
+efa_1 rdma_read_resp_bytes=295103102976
+efa_1 rdma_read_wr_err=0
+efa_1 rdma_read_wrs=88310
+efa_1 rdma_write_bytes=0
+efa_1 rdma_write_recv_bytes=0
+efa_1 rdma_write_wr_err=0
+efa_1 rdma_write_wrs=0
+efa_1 recv_bytes=359308057
+efa_1 recv_wrs=1133539
+efa_1 retrans_bytes=246109450
+efa_1 retrans_pkts=30104
+efa_1 retrans_timeout_events=1832
+efa_1 rx_bytes=92959054617
+efa_1 rx_drops=0
+efa_1 rx_pkts=16940304
+efa_1 send_bytes=339302847
+efa_1 send_wrs=940373
+efa_1 tx_bytes=295442405823
+efa_1 tx_pkts=38111731
+efa_1 unresponsive_remote_events=0

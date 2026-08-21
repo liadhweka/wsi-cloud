@@ -1,0 +1,13 @@
+  0 UP mgc MGC10.1.1.154@tcp c2db2b18-c317-40e8-b2cf-e1ba0e20342b 6
+  1 UP lov krvlrbev-clilov-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 5
+  2 UP lmv krvlrbev-clilmv-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  3 UP mdc krvlrbev-MDT0000-mdc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  4 UP mdc krvlrbev-MDT0001-mdc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  5 UP mdc krvlrbev-MDT0003-mdc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  6 UP mdc krvlrbev-MDT0002-mdc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  7 UP osc krvlrbev-OST0001-osc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  8 UP osc krvlrbev-OST0004-osc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+  9 UP osc krvlrbev-OST0002-osc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+ 10 UP osc krvlrbev-OST0000-osc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+ 11 UP osc krvlrbev-OST0005-osc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6
+ 12 UP osc krvlrbev-OST0003-osc-ffff8a0c24d60000 f6e2cd26-b56f-42df-be7d-27e31f2cf58c 6

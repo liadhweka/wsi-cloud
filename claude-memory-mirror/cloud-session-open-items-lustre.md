@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T16:02:46.840Z
+  modified: 2026-08-21T19:46:39.630Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -51,15 +51,21 @@ emergency-rebuild insurance only.
 4. **Calibrate this leg's canary bands** (**D18**/**D-5**) on the Lustre client before the baseline.
    The relation is DERIVED and built (raid0 layout → wire/app centers 1.0/1.0, `wsi_agg_helper`; empirical
    wire/osc = 1.002 on the 2026-08-21 stage-0 proof) — calibration only fills the BANDS
-   (`runs/.leg-state/lustre/canary-bands.json`, dies with the filesystem, R2 work). Recorder half of D-4 is
-   DONE + capture-verified; at calibration also decide the lustre cold-cell evidence set (D-4 remainder:
-   page-cache drop is leg-neutral, ldlm/osc client caches are the open question).
-5. **[USER-side, GATES run-leg start] D-39 IAM grant:** the dump + hooks are BUILT (tracker D-39 /
-   `fsx-cloudwatch-dump.py` entry) but the instance role `wsi-liad-client-role` denies
-   `cloudwatch:ListMetrics` + `cloudwatch:GetMetricData` (verified 2026-08-21). Grant both (no
-   resource-level scoping exists for these actions), then prove the dump on the stage-0 proof cell and
-   close tracker D-39. Calibration/Phase-0 may run first — never-quote diagnostics, retro-dumpable
-   (15-month CloudWatch retention); the first MEASURED cell (run-leg C0/1.0a) must not.
+   (`runs/.leg-state/lustre/canary-bands.json`, dies with the filesystem, R2 work). The lustre cold-cell
+   evidence set is RATIFIED (2026-08-21): `drop_caches=3` + `ldlm lru_size=clear`, both acknowledged —
+   enforced by the reconciler, wired into the three shell drivers; python-side workers get it at their
+   gates (6.B.2, 7.1 — tracker D-4). Demonstration cell: `probe-lustre-coldset.sh` (run at calibration
+   close).
+5. **⛔ LEG STOPPED — EFA bulk-write instability (2026-08-21 ~16:05–16:45Z), unresolved.** All three seqw
+   calibration cells (16j×4M direct, 300 s) failed under sustained bulk writes: fio EAGAIN/hang, efalnd
+   TX cancellations on BOTH efa devices, ptlrpc bulk timeouts, OST reconnect flaps; EFA hw_counters show
+   ~48k retrans_pkts + ~2,850 retrans_timeout_events; FSx CloudWatch shows the OSSes ≤1% network / ≤5%
+   disk utilization during the failures — client↔server EFA-path loss, not server overload. Short cells
+   (19 s proof, 100 MiB probes) are clean; failure engages under SUSTAINED bulk. Evidence: the three
+   `runs/2026-08-21-1*-FAILED-efa-*` dirs (notes.md + incident-evidence.txt + fsx-cloudwatch dumps).
+   Two fio workers left in D state — clears only with a reboot (phase-2 re-proves transport per boot).
+   **Next (human-ratified plan pending): reboot → short reproduce probe → if it reproduces, AWS support
+   case as a provisioning question (D16/L7 discipline); no calibration, no run-leg until resolved.**
 6. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
    included IOPS (register L6 has both readings + sources). Verify against the first invoice / Cost
    Explorer; if all 48,000 bill, correct to $30.6279/hr, dated, as a provisioning-cost event.

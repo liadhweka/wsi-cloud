@@ -37,7 +37,7 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
-| **D-4** | **Remaining: the head-to-head `--fs` pivot column; the Lustre cold-cell cache-evidence source** | `aggregate-sweep.py` + the per-stage aggregators (pivot); the Leg-B calibration session (cache evidence) | Both recorder halves and the shared helper are BUILT and proven on each leg's live instance (evidence: the `record-run.sh` / `parse-results.py` / `wsi_agg_helper.py` entries). (1) The aggregators still don't pivot on `metadata.json`'s `fs` field to emit head-to-head columns — the deliverable IS the cross-filesystem delta, so this lands before the first cross-leg synthesis (`prove-recording.sh` SKIPs its assertion until then). (2) The Lustre cold-cell achieved-evidence set for D13: the client page-cache drop is leg-neutral, but the lustre client also holds ldlm/osc caches — decide what "cold" requires at R2's band calibration, where cold cells first matter |
+| **D-4** | **Remaining: the head-to-head `--fs` pivot column; the lustre cold set's python-side workers** | `aggregate-sweep.py` + the per-stage aggregators (pivot); `read-feature-files-stage6b.py` (at 6.B.2) and Stage 7's cold cells (at 7.1) | Both recorder halves and the shared helper are BUILT and proven on each leg's live instance (evidence: the `record-run.sh` / `parse-results.py` / `wsi_agg_helper.py` entries). (1) The aggregators still don't pivot on `metadata.json`'s `fs` field to emit head-to-head columns — the deliverable IS the cross-filesystem delta, so this lands before the first cross-leg synthesis (`prove-recording.sh` SKIPs its assertion until then). (2) The Lustre cold-cell evidence set is **DECIDED (ratified 2026-08-21): `vm.drop_caches=3` + `ldlm.namespaces.*.lru_size=clear`, both acknowledged in `cache-evidence.txt`** — the reconciler enforces it (`wsi_agg_helper.py`), the three shell drivers with `drop_caches_evidenced` carry the leg-guarded second step, and `probe-lustre-coldset.sh` is the measured demonstration. Remaining: the clearing-based cold cells whose mechanism lives in python workers get the ldlm step at their gates — 6.B.2's discard child before 6.B, Stage 7's cold cells before 7.1 |
 | **D-5** | **Remaining: Lustre band calibration (R2); mixed-cell widening before 1.6; canary-abort wiring (D-7)** | `wsi_agg_helper.py` (`check <run-dir>`) | Both relations are derived and built — WEKA (D+P)/D with calibrated bands (anchors reproduce; Stage-1 register + helper docstring), Lustre from the recorded stripe layout (raid0 → 1.0/1.0, R1 anchors). Bands load from `runs/.leg-state/$LEG/canary-bands.json`; absent → the canary exits non-zero as UNCALIBRATED rather than inventing a tolerance — Lustre's file is written by R2's calibration cells (REP≥3 per direction + bs4k). Mixed-cell widening needs mixed calibration cells before 1.6: a guessed widening can mask a real inconsistency. Until D-7 wires canary-abort, run `check` after every sweep by hand |
 | **D-6** | **Remaining: the nvidia-fs block parser in `parse-results.py`; the pre-cuFile-cell canary requirement (with D-7); Leg B's recorded Phase-0 determination cell (R2); the Stage-7 worker's path-accounting wiring** (`inference-per-slide-stage7.py` records no split — found 2026-08-21; its kvikIO cells now declare `RECORD_KVIKIO_CELL=1`, so they fail loud as INCOMPLETE until this lands — **wire before Stage 7 runs**) | `parse-results.py`; `record-run.sh` (canary); R2 session (Phase-0 cell); `inference-per-slide-stage7.py` | The shared accounting module (`wsi_cufile_accounting.py`), the 4.C/5/6 worker wiring, the D-30 INCOMPLETE rule, and Leg A's Phase-0 determination (no true GDS on WEKA-over-ENA; outcome + consequences in `Stage-4-Patching.md`) are done and smoke-verified. The standing three-layer caveat: kvikio's own compat can serve reads via POSIX without entering cuFile at all, so the per-cell recorded split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged` — is the only proof of path; an accounting-off state reports as unknown, never zero. On the known-good compat legs the pre-cell canary signature is bounce-accounting non-zero |
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
@@ -49,7 +49,6 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-33** | **Stage 7's `## 7.1` headline grid is structurally always empty** | `aggregate-stage7-clinical.py` | The grid filters on `cell_name.startswith('7.1')`, but `RUN_NAME_RE` strips the stage segment, so a `record-run.sh`-named dir `…-s7.1-baseline-…` yields `cell_name='baseline-…'` and never matches. 7.2 only appears because its driver pre-computes a `-s7-7.2-…` dir, leaving the sub-tier inside the name. Either match on the recorded `stage` field or stop stripping the segment — but the two naming shapes must be reconciled first, which is why this is not a one-line fix. **Also found 2026-08-21:** its RDMA extraction hardcodes device `mlx5_0`, which exists on neither leg (no RDMA devices on WEKA-on-AWS; `efa_0`/`efa_1` on Lustre) — the column reads empty on every cell; point it at the recorded devices when the grid fix lands. **`aggregate-stage6b.py` carries the same hardcoded `mlx5_0` in its `extract_rdma_rcv`** — harmless on Leg A (no RDMA devices, column empty by physics), but on Leg B the client NIC is the data path, so fix it before Leg B's 6.B aggregation |
 | **D-35** | **Remaining: fold relocate-after-verified-sync into `run-leg.sh`'s per-step sync for ordinary cells** | `run-leg.sh` (per-step sync) | The 2026-08-16 ENOSPC abort: `runs/*/raw` accumulates locally although S3 already held every byte via the per-step verified sync. Two halves are closed: `record-run.sh` honours `RECORD_RAW_ON_SCRATCH=1` (raw/ born on the local-NVMe overflow, symlinked — for cells whose telemetry exceeds root headroom; sync follows symlinks, S3 authoritative), and the rebuilt Leg-B client carries a **200 GB root** (verified live, `df /`, 2026-08-21; confirm Leg A's at its next rebuild). The fold remains so ordinary long legs reclaim root space mechanically instead of by session intervention |
 | **D-37** | **`sync-to-s3.sh --mode full` duration grows linearly with run-dir count** (one `aws s3 sync` invocation per run dir → S3 LIST round-trips even with nothing to upload; ~5 min at ~190 dirs, plausibly 15+ min at leg scale) | `sync-to-s3.sh` | Not a correctness issue — the per-dir verify is honest work — but it sits inside `backup.sh` on the commit path and inside `teardown-prep.sh`. Batch the per-dir syncs (one sync over `runs/` with include patterns) or skip dirs whose raw was already relocated + verified, keeping the archive semantics and the post-sync count verification intact |
-| **D-39** | **FSx server-side CloudWatch dump — BUILT + WIRED; remaining: the [USER] IAM grant, then the end-to-end proof, before the first measured cell** | `wsi-liad-client-role` (IAM, human); then re-run `fsx-cloudwatch-dump.py` on the stage-0 proof cell | The dump (`fsx-cloudwatch-dump.py` entry), the `record-run.sh` cleanup hook and the `run-leg.sh` per-step backfill are built. The doc fetch (2026-08-21) settled the granularity question: per-OST/MDT **exists** (`StorageTargetId`), per-OSS/MDS via `FileServer` — the RUNBOOK row stands as declared. **Blocked:** the instance role denies `cloudwatch:ListMetrics` + `cloudwatch:GetMetricData` (verified live 2026-08-21, both AccessDenied) — grant both (no resource-level scoping exists for either action), then prove the dump on the existing stage-0 proof cell and close this row. Gates `run-leg.sh` start (the first measured cell), NOT calibration/Phase-0 — those are never-quote diagnostics, and CloudWatch's 15-month retention makes their windows retro-dumpable |
 | **D-34** | **Short-cell recorder poll rate — DECIDED (ratified 2026-08-16, Stage-2 register): raise the filesystem-side poll rate for short cells (~10 Hz), identically on both legs; build it** | `record-run.sh` (recorder set) | Sub-second high-concurrency Stage 2/3 cells yield 1–3 samples at 1 Hz, so any sustained mean is ill-defined and both legs lose filesystem-side evidence exactly where the metadata architectures differ most. Implement before the first Stage 2/3 cell; verify the higher rate does not itself perturb the measurement (the recorded `_sample_interval_s` block is the evidence) |
 
 **Closed ids** — rows deleted (git holds their text); each id still resolves to where its constraint lives
@@ -71,7 +70,10 @@ entry · **D-38** → the FAILED-dir exclusion applied across every aggregator's
 rationale in the Stage-6 register + Table 5's `EXTRACT_GPUS` row (the NUMA order within the set remains
 D-8's) · **D-30** → every stage 3–7 driver now declares `RECORD_CACHE_STATE` per cell (kvikIO cells also
 `RECORD_KVIKIO_CELL=1`); the verdict semantics live in register **D21**, each stage's values in its
-roadmap's cache-discipline rows, and the reconciler in the `wsi_agg_helper.py` entry.
+roadmap's cache-discipline rows, and the reconciler in the `wsi_agg_helper.py` entry ·
+**D-39** → the FSx server-side CloudWatch window dump: `fsx-cloudwatch-dump.py` (its entry) + the
+`record-run.sh` lustre post-cell hook + the `run-leg.sh` per-step backfill; proven end-to-end on the
+stage-0 proof cell (720 series, all OSTs/MDTs per-target).
 
 > **Nothing was deleted.** An earlier plan assumed GPUDirect Storage would be dropped, which would have
 > removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**), so
@@ -215,6 +217,17 @@ non-zero only when it cannot determine (mode mismatch, accounting off). Test fil
 backend-RAM-resident by construction — the PATH is the question, not the rate. Cells declare
 `RECORD_KVIKIO_CELL=1`, so the D-30 wrapper check enforces the recorded split.
 
+### `probe-lustre-coldset.sh` — the lustre cold-mechanism demonstration (D13/D-4) ⭐ NEW
+**What.** One stage-0 diagnostic cell (never quote a rate) that times a fixed buffered re-read and a fixed
+2000-file re-stat under three regimes — no clearing / `drop_caches=3` only / `drop_caches=3` + ldlm
+lru-clear — recording per phase the wallclock, the osc read-bytes delta (data actually re-fetched from the
+servers) and the mdc RPC delta summed across MDTs (metadata RPCs actually issued).
+**Why.** The ratified lustre cold set (2026-08-21) adds the DLM-lock clear to the leg-neutral page-cache
+drop; this cell is the measured evidence behind that call — "load-bearing vs belt-and-braces" is its C-vs-B
+delta, a number instead of an argument.
+**Caveats.** Lustre-only by `LEG` guard. Reads a `fio-canary-calib` fixture (run calibration first, or set
+`COLDSET_DATA_FILE`). Needs `sudo -n` for sysctl/lctl, like the recorders.
+
 ### `fingerprint.py` — cross-leg artifact fingerprints: capture + compare (was `D-24`) ⭐ NEW
 **What.** `capture <class>` computes a storage-independent fingerprint into
 `runs/.leg-state/<leg>/fingerprints/<class>.json` (git-tracked, so Leg B compares against Leg A's committed
@@ -250,11 +263,13 @@ the lag, and unlike every client-side stream the window is repairable for 15 mon
 NOT in the required-streams list.
 **I/O.** `FSX_ID` from env or `/etc/wsi-bootstrap.conf` (terraform-fed, never retyped); `AWS_REGION` from
 env; refuses without either. `--force` re-fetches even final dumps.
-**Caveats.** Needs `cloudwatch:ListMetrics` + `cloudwatch:GetMetricData` on the instance role (D-39's
-remaining gate). `Sum` on the utilization/percent metrics is meaningless — recorded anyway rather than
-curated (over-capture beats a prediction about which axis matters). `ListMetrics` only lists series active
-in the trailing two weeks — irrelevant per-cell, but do not reuse this enumerator for historical re-dumps
-months later.
+**Caveats.** Needs `cloudwatch:ListMetrics` + `cloudwatch:GetMetricData` on the instance role (granted via
+inline policy `wsi-d39-cloudwatch-read`; if the role is ever terraform-managed with exclusive inline
+policies, the grant must move there or a future apply strips it). `Sum` on the utilization/percent metrics
+is meaningless — recorded anyway rather than curated (over-capture beats a prediction about which axis
+matters). `ListMetrics` only lists series active in the trailing two weeks — irrelevant per-cell, but do
+not reuse this enumerator for historical re-dumps months later. Query batches go to the CLI via `file://`
+— hundreds of queries inline exceed the kernel's per-argument size limit.
 
 ### `rerun-cell.sh` — the D18 repeat runner ⭐ NEW
 **What.** `rerun-cell.sh <run-dir> <rep>` re-invokes a recorded cell's exact command as `REP=<rep>` with the

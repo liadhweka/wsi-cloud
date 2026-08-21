@@ -1,0 +1,25 @@
+statistics:
+    msgs_alloc: 0
+    msgs_max: 323
+    rst_alloc: 0
+    errors: 0
+    send_count: 1134498
+    resend_count: 0
+    response_timeout_count: 0
+    local_interrupt_count: 0
+    local_dropped_count: 0
+    local_aborted_count: 0
+    local_no_route_count: 0
+    local_timeout_count: 0
+    local_error_count: 0
+    remote_dropped_count: 0
+    remote_error_count: 0
+    remote_timeout_count: 0
+    network_timeout_count: 0
+    recv_count: 1580374
+    route_count: 0
+    drop_count: 61
+    send_length: 468050701560
+    recv_length: 186263279816
+    route_length: 0
+    drop_length: 13856

@@ -141,11 +141,20 @@ def fetch_window(series, start, end, region):
                 "ReturnData": True,
             })
     results = []
+    import tempfile
     for lo in range(0, len(queries), MAX_QUERIES_PER_CALL):
-        out = aws(["cloudwatch", "get-metric-data",
-                   "--metric-data-queries", json.dumps(queries[lo:lo + MAX_QUERIES_PER_CALL]),
-                   "--start-time", iso(start), "--end-time", iso(end),
-                   "--scan-by", "TimestampAscending"], region)
+        # file:// rather than inline: a batch of hundreds of queries exceeds the
+        # kernel's per-argument size limit (E2BIG) as one argv string.
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as tf:
+            json.dump(queries[lo:lo + MAX_QUERIES_PER_CALL], tf)
+            qfile = tf.name
+        try:
+            out = aws(["cloudwatch", "get-metric-data",
+                       "--metric-data-queries", f"file://{qfile}",
+                       "--start-time", iso(start), "--end-time", iso(end),
+                       "--scan-by", "TimestampAscending"], region)
+        finally:
+            Path(qfile).unlink(missing_ok=True)
         results.extend(out.get("MetricDataResults", []))
     rows = []
     for r in results:

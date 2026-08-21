@@ -203,11 +203,17 @@ ours on a managed service, so what was achieved is recorded rather than assumed 
 | `O_DIRECT` on the I/O itself | the client page cache, for that I/O | dentry/attribute caches; anything server-side |
 | `vm.drop_caches=1` | the client page cache | **dentries and inodes** — so `open()`/`stat()` can still be served locally |
 | `vm.drop_caches=3` | page cache **plus dentries and inodes** | anything server-side |
+| `lctl set_param ldlm.namespaces.*.lru_size=clear` *(lustre client only)* | the client's DLM locks — and with them the client-side validity of cached data and attributes a held lock could still serve after the page-cache drop | anything server-side |
 | unmount / remount | client-side caches wholesale | anything server-side |
 | whatever the filesystem exposes | its own server-side cache, where it exposes anything at all | — |
 
 **Use `3`, not `1`, on any cell whose subject is metadata** — the dentry and attribute caches are the ones that
 matter there, and leaving them warm makes the cell measure the client's VFS on both legs alike.
+
+**On the lustre leg, clearing-based cold is BOTH steps** — `vm.drop_caches=3` plus the DLM-lock clear, each
+acknowledged in the cell's `cache-evidence.txt` (ratified 2026-08-21; the demonstration cell is
+`probe-lustre-coldset.sh`). The cache reconciler marks a lustre cold declaration whose evidence lacks the
+ldlm acknowledgment, so a half-cleared cell can never be quoted as cold.
 
 ### 2. Post-cell: cross-source consistency
 

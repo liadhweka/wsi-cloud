@@ -22,7 +22,14 @@ set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 : "${FS_MOUNT:?FS_MOUNT is unset -- source env.sh}"
 : "${LEG:?LEG is unset -- source env.sh}"
-: "${WEKA_EC_SCHEME:?WEKA_EC_SCHEME is unset -- the relation cannot be derived without it (D12)}"
+# The D12 relation input is per-leg (the relation is never ported across):
+# WEKA derives (D+P)/D from the EC scheme; Lustre derives from the recorded
+# stripe layout. Requiring the other leg's input refuses a healthy leg.
+case "$LEG" in
+  weka)   : "${WEKA_EC_SCHEME:?WEKA_EC_SCHEME is unset -- the WEKA relation cannot be derived without it (D12)}" ;;
+  lustre) : "${LUSTRE_STRIPE_LAYOUT:?LUSTRE_STRIPE_LAYOUT is unset -- the Lustre relation cannot be derived without it (D12)}" ;;
+  *) echo "calibrate: FATAL: unknown LEG='$LEG'" >&2; exit 2 ;;
+esac
 RECORD="$REPO/scripts/record-run.sh"
 HELPER="$REPO/scripts/wsi_agg_helper.py"
 CALIB_DIR="$FS_MOUNT/benchmarks/fio-canary-calib"

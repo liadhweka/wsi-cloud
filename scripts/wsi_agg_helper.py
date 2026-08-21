@@ -325,7 +325,8 @@ def reconcile_cache_state(run_dir):
     Verdicts: CONSISTENT | DECLARED_WITHOUT_EVIDENCE | CONTRADICTED |
     NOT_APPLICABLE (na-* declarations, write cells) | UNDECLARED.
     A cell that is not CONSISTENT is marked and never quoted as its declared
-    regime. The Lustre-side evidence source gets named during the Leg-B build.
+    regime. Lustre cold set (ratified 2026-08-21): drop_caches=3 + ldlm
+    lru_size=clear, BOTH acknowledged in cache-evidence.txt.
     """
     run_dir = Path(run_dir)
     meta = json.loads((run_dir / "metadata.json").read_text())
@@ -342,8 +343,22 @@ def reconcile_cache_state(run_dir):
     ev_file = run_dir / "cache-evidence.txt"
     if ev_file.exists():
         txt = ev_file.read_text()
-        rc = re.search(r"^rc=(\d+)", txt, re.M)
-        ok = bool(rc and rc.group(1) == "0")
+        # Every acknowledged step must have succeeded (the file may carry more
+        # than one action block — the lustre cold set is two steps).
+        rcs = re.findall(r"^rc=(\d+)", txt, re.M)
+        ok = bool(rcs) and all(r == "0" for r in rcs)
+        # Lustre cold set (ratified 2026-08-21, D13/D-4): vm.drop_caches=3 PLUS
+        # the client DLM-lock clear (ldlm.namespaces.*.lru_size=clear) — a held
+        # lock can keep data/attributes servable client-side after the
+        # page-cache drop. A lustre cold declaration whose evidence lacks the
+        # ldlm acknowledgment is missing half its evidence: marked, never
+        # quoted as cold.
+        if meta.get("fs") == "lustre" and declared == "cold" and "ldlm" not in txt:
+            out["verdict"] = "DECLARED_WITHOUT_EVIDENCE"
+            out["detail"] = ("cache-evidence.txt lacks the ldlm lru_size=clear acknowledgment — "
+                             "the lustre cold set is drop_caches=3 + ldlm clear (ratified 2026-08-21)")
+            out["evidence"] = ["cache-evidence.txt (partial: drop_caches only)"]
+            return out
         evidence.append(("cache-evidence.txt", ok))
     for name in ("reader-summary.json", "extraction-summary.json", "file-io-summary.json"):
         p = run_dir / name
