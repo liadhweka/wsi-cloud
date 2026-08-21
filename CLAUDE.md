@@ -245,11 +245,13 @@ Two sessions — one per leg, one repo, one branch. The rules that make that saf
    leg's lines. **The summary CSVs are per-leg files** (`…-summary-<leg>.csv`): aggregators rewrite them
    whole, so the two legs never share a CSV write target; the head-to-head pivot reads both legs' files
    (the D-4 helper).
-3. **File ownership.** Each leg writes: its own run dirs, its own `.leg-state/<leg>/`, its own memory file
-   (`cloud-session-open-items` = Leg A, `cloud-session-open-items-lustre` = Leg B), its own contract, and its
-   own leg's rows/columns in the stage roadmaps. **Structural doc edits (tracker, STAGES, THESIS, RUNBOOK
-   prose) belong to Leg A's session**; Leg B proposes them as numbered items instead of editing. Cross-cutting
-   script changes go through the human.
+3. **Ownership is by CONTENT, not by document.** Each leg owns its leg's material wherever it lives: its own
+   run dirs, `.leg-state/<leg>/`, memory file (`cloud-session-open-items` = Leg A,
+   `cloud-session-open-items-lustre` = Leg B), its contract, and **its leg's rows, columns and sections in
+   any doc** — a Lustre column in the RUNBOOK table is Leg B's to edit. No document is solely owned by one
+   leg (the few exceptions: the per-leg memory files and `.leg-state` dirs above). **Leg-neutral prose** —
+   THESIS methodology, cross-leg conventions, shared table structure — and cross-cutting script changes go
+   through the human as numbered proposals.
 4. **The stage-lag rule:** Leg B never starts stage N until Leg A has completed stage N (see D6). A shared-code
    fix after Leg A ran a stage re-runs that stage on both legs.
 

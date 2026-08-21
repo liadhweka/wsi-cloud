@@ -153,9 +153,9 @@ stream.
 | **App-level** (`cmd.log`, per-step / per-file CSVs) | **Primary** | **Primary** |
 | **`weka stats realtime`** | **Primary** — throughput, latency, ops | n/a |
 | **Wire counters for the DPDK data path** | **Primary** | n/a |
-| **`/proc/fs/lustre` + `lctl get_param`** | n/a | **Primary** — per-OSC/MDC throughput, RPCs, latency |
+| **`lctl get_param` client stats** (`lustre-stats.log`: llite/osc/mdc, 1 Hz verbatim) | n/a | **Primary** — the quotable byte series is **osc summed across OSTs** (every byte moved to storage; per-OST spread is the striping evidence). **llite is Diagnostic: blind to libaio traffic** (proven 2026-08-21) — its shortfall vs osc doubles as cache/aio-path evidence, never the cell's rate |
 | **CloudWatch per-OST/MDT metrics** | n/a | **Primary** — server-side view |
-| **Client network counters** (`sar -n DEV`) | **Diagnostic** — DPDK bypasses the kernel network stack, so this is control-plane only | **PRIMARY — this IS the data path** (kernel LNet over TCP, or the EFA provider's counters when EFA-mounted; **determine which, don't assume**) |
+| **Client network counters** | **Diagnostic** (`sar -n DEV`) — DPDK bypasses the kernel network stack, so this is control-plane only | **PRIMARY — this IS the data path.** As built (EFA-mounted, counter-proven per boot, D16): the **EFA devices' hw_counters** (`rdma-counters.csv`) are the wire Primary; kernel netdev / `sar -n DEV` carries only the tcp side (control plane, S3 on 1.7). Phase-2 re-proves the transport each boot — a tcp-mounted boot demotes nothing silently, it unmounts |
 | **cuFile path accounting** (`CUFILE_STATS`, nvidia-fs stats) | **Primary** on every kvikIO cell | **Primary** on every kvikIO cell |
 | **`nvidia-smi`** | Primary from Stage 4 onward | same |
 | **`sar -u`** over **application-available** cores | Primary where compute matters (**D15**). **Raw CPU-busy over *all* cores is diagnostic-only on this leg** — thesis §7 puts it there because the DPDK cores spin-poll regardless of load, so it is the restriction to application-available cores that makes the reading quotable | same, but **the excluded core set differs** — WEKA reserves cores for DPDK, Lustre does not |
@@ -217,8 +217,10 @@ derived per filesystem and never ported across** (**D12**):
 - **WEKA** — erasure coding implies a specific wire-vs-app write amplification set by the EC scheme captured at
   provisioning; reads carry no equivalent amplification. Derive the ratio from the actual scheme.
 - **Lustre** — data is striped across OSTs with no default erasure coding, so the relation follows from the
-  **actual stripe layout** (`lfs getstripe`) plus any replication. Derive it from the layout in use, and record
-  that layout per cell.
+  **actual stripe layout** plus any replication. Built (`wsi_agg_helper.parse_stripe_layout`, from the
+  recorded `LUSTRE_STRIPE_LAYOUT`): raid0-only components, mirror_count 1 → wire/app centers 1.0 both
+  directions; a mirrored or non-raid0 layout refuses rather than assumes. The layout is recorded per cell by
+  the snapshot (`lfs-getstripe-root.txt`).
 
 Additional rules that apply on both legs:
 

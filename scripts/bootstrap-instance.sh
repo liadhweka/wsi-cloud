@@ -101,8 +101,10 @@ step "2. NVIDIA driver / CUDA / GDS (AL2023 NVIDIA repo)"
 # the OTHER leg's contract would write weka facts into a lustre env.sh.
 PINREF=/tmp/env-contract-leg-weka.json
 PIN_DRIVER=""
+PIN_NVFS=""
 if aws s3 cp "s3://$S3_BUCKET/env-contracts/env-contract-leg-weka.json" "$PINREF" 2>/dev/null; then
   PIN_DRIVER=$(python3 -c "import json;c=json.load(open('$PINREF'));print(c.get('driver_version') or '')" 2>/dev/null)
+  PIN_NVFS=$(python3 -c "import json;c=json.load(open('$PINREF'));print(c.get('nvidia_fs_version') or '')" 2>/dev/null)
 fi
 CONTRACT=/tmp/env-contract-leg-$LEG.json
 REBUILD=0
@@ -121,7 +123,17 @@ fi
 # system libcufile preloaded over cuCIM's bundled one segfaults (standing constraint),
 # and gdscheck must come from the line the kvikIO cells actually preload.
 dnf install -y cuda-toolkit-12-9 || dnf install -y cuda-toolkit || warn "CUDA toolkit install failed"
-dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until resolved by hand"
+# nvidia-fs pinned to the contract-recorded NVR, same shape as the driver pin
+# above (D-17, ratified 2026-08-21): NVIDIA_FS_VERSION is MUST_MATCH, and an
+# unpinned install let it track the repo instead of the contract.
+if [ -n "$PIN_NVFS" ]; then
+  dnf install -y "nvidia-fs-$PIN_NVFS*" \
+    || { warn "pinned nvidia-fs $PIN_NVFS unavailable — installing latest (POSSIBLE MUST_MATCH DRIFT)"; \
+         touch /var/lib/wsi-DRIVER-DRIFT-CHECK-ME; \
+         dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until resolved by hand"; }
+else
+  dnf install -y nvidia-fs || dnf install -y nvidia-gds || warn "nvidia-fs/GDS not installed — kvikIO cells run compat-only until resolved by hand"
+fi
 systemctl enable --now nvidia-persistenced 2>/dev/null || true
 # nvidia-fs I/O counters default OFF, and a kvikIO cell run that way records a
 # GPU-direct-vs-bounced byte split that is present and entirely zero — read as

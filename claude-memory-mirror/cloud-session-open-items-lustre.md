@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T03:16:09.704Z
+  modified: 2026-08-21T04:01:27.641Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -70,8 +70,9 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 2. **Plateau trigger (register L7):** the interface count is 2 as built, so a knee/peak plateau below
    expectation with the efa net unsaturated no longer points there — next candidates are the CPT/LNet
    config and FSx-side limits; surface to the human as a provisioning question, never silent tuning.
-3. **Push only via `scripts/push-safe.sh`**; structural doc changes are proposed as numbered items to the
-   human, never edited from this session (the ratified Phase-4 baking scope was the one exception, spent).
+3. **Push only via `scripts/push-safe.sh`**. Ownership is by CONTENT (ratified 2026-08-21, CLAUDE.md):
+   lustre rows/columns/sections in ANY doc are this leg's to edit; leg-neutral prose and cross-cutting
+   scripts still go to the human as numbered proposals.
 4. **Reboot hygiene:** phase-2 re-proves the EFA data path per boot and UNMOUNTS on a failed counter-proof
    (`journalctl -u wsi-lustre-phase2.service`); `wsi-lustre-tuning.service` re-applies the D-11 lctl set.
    Never assume post-reboot state — the units are the mechanism, the D16 gate in `run-leg.sh` is the check.
