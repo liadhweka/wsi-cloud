@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T22:10:34.933Z
+  modified: 2026-08-21T22:27:09.093Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -15,11 +15,15 @@ Provisioning is DONE (2026-08-20): EFA-mounted (counter-proven, D16), contract v
 values ratified — decision register: `docs/cloud-setup/LUSTRE-PROVISIONING.md` (entries L1–L7). Phase-2 is
 baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + fallback moved to that doc).
 
-## A. Leg-end teardown — the only destroy left
+## A. Teardown / rebuild state
 
-NO second rebuild (ratified 2026-08-21): the leg runs 24/7 from benchmark start to completion on R1's
-box, then destroy → whitepaper. The contract-at-boot and NVIDIA-pin bakes therefore stay unexercised —
-emergency-rebuild insurance only.
+**Mid-incident destroy prepared 2026-08-21 (supersedes the no-second-rebuild ratification, human's
+call):** the client is being destroyed to stop idle burn while the AWS EFA case (B.5) runs. Teardown
+prep + preflight run by R3; the rebuild handoff is `TEMP/prompt-r4-post-rebuild-efa-case.md`. **Scope
+decision is the human's:** instance only (FSx keeps billing ~$29.6/hr, AWS keeps a live subject) vs
+instance + FSx (burn stops fully; re-provisioning per LUSTRE-PROVISIONING + new fs id + contract
+re-write on return; nothing data-bearing was on the mount — hydration never ran). The contract-at-boot
+and NVIDIA-pin bakes get exercised by this rebuild.
 
 1. **Teardown checklist is mandatory before the destroy** (`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`):
    `scripts/teardown-prep.sh` gated by `scripts/teardown-preflight.sh` must GO first — its order is
@@ -29,8 +33,8 @@ emergency-rebuild insurance only.
    filled handoff inline in its final message. Destroy/rebuild: OPTIONALLY (human's call, worth it
    mid-work) the filled handoff goes into `TEMP/` as a durable committed file — memory + repo are the
    designed continuity and the preflight only warns, never blocks, without one. A prompt is deleted once
-   its session has executed it (spent once read); none pending (R3 executed and deleted the post-reboot
-   one).
+   its session has executed it (spent once read); the pending one is
+   `TEMP/prompt-r4-post-rebuild-efa-case.md` (the post-destroy rebuild, written by R3).
 
 ## B. Before the first measured cell on this leg
 
