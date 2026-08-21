@@ -262,7 +262,7 @@ fi
 
 if [ "$DRY" -eq 0 ] && [ -f /etc/motd.d/50-wsi ]; then
   # flip the bootstrap's not-mounted triage block (3 lines) to the mounted state
-  sed -i 's|.*Lustre NOT mounted.*|  3. Lustre is MOUNTED with evidenced EFA (phase-2). Paste the tmp/ handoff the last session wrote.|' /etc/motd.d/50-wsi
+  sed -i 's|.*Lustre NOT mounted.*|  3. Lustre is MOUNTED with evidenced EFA (phase-2). Paste the TEMP/ handoff the last session wrote.|' /etc/motd.d/50-wsi
   sed -i '/journalctl -u wsi-lustre-phase2.service; manual fallback:/d;/docs\/cloud-setup\/LUSTRE-PROVISIONING.md/d' /etc/motd.d/50-wsi
 fi
 

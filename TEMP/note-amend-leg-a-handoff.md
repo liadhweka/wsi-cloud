@@ -1,10 +1,6 @@
-# Amend the Leg-A handoff — two past-due deferred items + a standing sweep (2026-08-21, via Leg B)
+# Amend the Leg-A handoff prompt (2026-08-21)
 
-To whoever holds the Leg-A handoff — the session that wrote it, or the incoming session reading
-it: **treat the block below as part of that handoff.** Facts verified on the repo (commits
-`3e77986`/`19238f6`, 2026-08-21), after 6.A's closeout landed.
-
----
+Please amend the handoff prompt you just produced to include the following:
 
 **Before starting any stage work, close two past-due deferred items (SCRIPT-TRACKER table):**
 
@@ -31,6 +27,4 @@ grid structurally empty; its RDMA column also reads a hardcoded `mlx5_0` that ex
 leg), **D-7** (canary-abort/watchdog — every unattended chain), **D-8** (GPU/NUMA map, still
 annotated per-cell as underived).
 
----
-
-*Spent once its content is in the handoff — delete this file then (handoff SOP).*
+*Spent once its content is in the handoff — delete this file then.*

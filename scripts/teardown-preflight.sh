@@ -80,12 +80,12 @@ fi
 # ── 2b. The next-session handoff prompt — REMINDER, NOT A GATE ───────────────────
 # Memory + repo are the DESIGNED continuity (CLAUDE.md: a fresh session loads
 # memory plus the rules and continues) — a handoff prompt is an accelerator on
-# top, written into tmp/ at the human's discretion when a teardown lands
+# top, written into TEMP/ at the human's discretion when a teardown lands
 # mid-work. So its absence warns; it never blocks a GO. (Same-instance session
 # turnover hands off inline and never runs this machinery at all.)
-hdr "Next-session handoff prompt (tmp/, optional)"
+hdr "Next-session handoff prompt (TEMP/, optional)"
 newest=""; newest_epoch=0
-for f in "$REPO"/tmp/*.md; do
+for f in "$REPO"/TEMP/*.md; do
   [ -f "$f" ] || continue
   [ "$(basename "$f")" = "README.md" ] && continue
   grep -qi "${LEG:-}" "$f" 2>/dev/null || continue
@@ -96,11 +96,11 @@ for f in "$REPO"/tmp/*.md; do
   if [ "$w_epoch" -gt "$newest_epoch" ]; then newest="$f"; newest_epoch=$w_epoch; newest_written=$written; fi
 done
 if [ -z "$newest" ]; then
-  warn "no tmp/ handoff naming leg '${LEG:-unset}' — the next session starts from memory + repo alone (the designed continuity); if this teardown lands mid-work, consider writing one from prompts/handoff-skeleton.md"
+  warn "no TEMP/ handoff naming leg '${LEG:-unset}' — the next session starts from memory + repo alone (the designed continuity); if this teardown lands mid-work, consider writing one from prompts/handoff-skeleton.md"
 else
   age=$(( ( $(date -u +%s) - newest_epoch ) / 86400 ))
   if [ "$age" -le 2 ]; then ok "handoff $(basename "$newest") written $newest_written (${age}d old)"
-  else warn "newest tmp/ handoff for this leg is ${age}d old ($(basename "$newest"), Written: $newest_written) — confirm it still describes the intended next-session state"; fi
+  else warn "newest TEMP/ handoff for this leg is ${age}d old ($(basename "$newest"), Written: $newest_written) — confirm it still describes the intended next-session state"; fi
 fi
 
 # ── 3. Git clean and pushed ──────────────────────────────────────────────────────

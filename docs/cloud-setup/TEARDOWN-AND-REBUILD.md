@@ -42,19 +42,19 @@ pgrep -fa 'record-run.sh|sweep-stage|run-leg.sh'      # must be empty
 If a sweep is running, let the current cell finish (or note it and forensically rename the partial run dir
 with a `-FAILED-interrupted` suffix — **don't delete it**, per the data-preservation rule).
 
-### 2. Leave continuity behind: memory current; a `tmp/` handoff if mid-work *(Claude — only it can)*
+### 2. Leave continuity behind: memory current; a `TEMP/` handoff if mid-work *(Claude — only it can)*
 Claude's context does not survive, so whatever isn't written down is genuinely gone. **The designed
 continuity is memory + repo** — the open-items memory current (resolved items deleted, new items added),
 docs cadence honored, resume markers pushed. **Optionally, at the human's discretion** — worth it whenever
 the teardown lands mid-work — also write a handoff prompt **from `prompts/handoff-skeleton.md`** (every
-`⟨...⟩` filled) into a durable committed file in `tmp/`: an inline chat handoff would die with the context,
+`⟨...⟩` filled) into a durable committed file in `TEMP/`: an inline chat handoff would die with the context,
 so for a rebuild only a file survives.
 
 *(This checklist is for destroy/rebuild only. Ordinary session turnover on a running instance uses the
 skeleton's same-instance mode — the handoff is printed inline, no teardown machinery — see the skeleton's
 header.)*
 
-> The pre-flight **warns** (never NO-GOes) when no dated `tmp/*.md` handoff names the current `$LEG`, and
+> The pre-flight **warns** (never NO-GOes) when no dated `TEMP/*.md` handoff names the current `$LEG`, and
 > when the newest one looks old — a reminder that the next session will start from memory + repo alone;
 > confirm that is intended rather than assuming.
 
@@ -87,7 +87,7 @@ It **re-verifies steps 3–4** (self-test, backup, contract — all idempotent, 
 then **commits and pushes** (the autonomous-git convention; `../CLAUDE.md`), fail-loud: an unpushed repo
 dies with this instance, and the push is what carries `runs/.leg-state/` — the resume markers — to the next
 build. It finishes by running `teardown-preflight.sh`, which prints **GO / NO-GO** after checking: nothing
-in flight · memories mirrored · a `tmp/` handoff for this leg (warn-only — optional) · git clean **and pushed** · contract
+in flight · memories mirrored · a `TEMP/` handoff for this leg (warn-only — optional) · git clean **and pushed** · contract
 complete **and in S3** · **`env.sh` agreeing with the instance's own metadata** · **every local run dir's
 raw telemetry present in S3** · nothing else stranded on ephemeral storage · rebuild inputs recorded.
 
@@ -140,8 +140,8 @@ Verify with `findmnt /mnt/lustre` + `journalctl -u wsi-lustre-phase2.service`; o
 unmounted by design — triage per `LUSTRE-PROVISIONING.md` (manual fallback there).
 
 ### 3. Paste the handoff, or start from memory + repo
-If the teardown left a `tmp/` handoff (the GO names it):
-> Read the file `tmp/<name>` and do everything it says, then report back.
+If the teardown left a `TEMP/` handoff (the GO names it):
+> Read the file `TEMP/<name>` and do everything it says, then report back.
 
 Otherwise the session starts from the designed continuity — the open-items memory is the work list and
 `CLAUDE.md`'s fresh-session reading order applies. Either way the sequence is the same: verifying the
@@ -165,13 +165,13 @@ as non-negotiable as the recording wrapper.
 
 ## Quick reference
 
-**Teardown:** *Claude, in order:* stop cleanly → memory current (+ optionally a `tmp/` handoff from
+**Teardown:** *Claude, in order:* stop cleanly → memory current (+ optionally a `TEMP/` handoff from
 `prompts/handoff-skeleton.md` if mid-work) → sync self-test + backup → write the contract →
 `scripts/teardown-prep.sh` (**commit+push** → **pre-flight**) → hand the human the GO with the rebuild
-inputs (naming the tmp/ handoff if one was written). *Human:* destroy (instance, then filesystem; **never
+inputs (naming the TEMP/ handoff if one was written). *Human:* destroy (instance, then filesystem; **never
 the bucket**).
 
-**Rebuild:** `terraform apply` → `claude /login` → paste the tmp/ handoff if one exists, else start from
+**Rebuild:** `terraform apply` → `claude /login` → paste the TEMP/ handoff if one exists, else start from
 memory + repo (the designed continuity) → contract **verify** → re-hydrate + byte-verify → Stage-0 proof →
 `run-leg.sh` resumes.
 

@@ -23,10 +23,10 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 2. **Handoff SOP (ratified 2026-08-20, repo-wide):** `prompts/handoff-skeleton.md` is a TEMPLATE, never
    pasted directly. Same-instance session turnover (the normal mode): the outgoing session prints the
    filled handoff inline in its final message. Destroy/rebuild: OPTIONALLY (human's call, worth it
-   mid-work) the filled handoff goes into `tmp/` as a durable committed file — memory + repo are the
+   mid-work) the filled handoff goes into `TEMP/` as a durable committed file — memory + repo are the
    designed continuity and the preflight only warns, never blocks, without one. A prompt is deleted once
    its session has executed it (spent once read); the pending one is
-   `tmp/prompt-r2-verify-and-benchmark.md` (updated 2026-08-21 to R1's as-left state).
+   `TEMP/prompt-r2-verify-and-benchmark.md` (updated 2026-08-21 to R1's as-left state).
 3. **2nd EFA interface: APPLIED and verified on the 2026-08-21 rebuild** — 2 devices, 2 efa NIs up, CPT
    options landed, `FS_CLIENT_RESERVED_CORES=none` holds; count-as-built recorded in register L7. The
    feared per-NUMA CPT failure did not fire (the configurator saw 1 NUMA node). Nothing left to do; delete
@@ -78,5 +78,5 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    lustre rows/columns/sections in ANY doc are this leg's to edit; leg-neutral prose and cross-cutting
    scripts still go to the human as numbered proposals.
 4. **Reboot hygiene:** phase-2 re-proves the EFA data path per boot and UNMOUNTS on a failed counter-proof
-   (`journalctl -u wsi-lustre-phase2.service`); `wsi-lustre-tuning.service` re-applies the D-11 lctl set.
+   (`journalctl -u wsi-lustre-phase2.service`); `wsi-lustre-tuning.service` re-applies the L4 lctl set.
    Never assume post-reboot state — the units are the mechanism, the D16 gate in `run-leg.sh` is the check.

@@ -9,9 +9,9 @@
 >   handoff **inline in its final message**; the human copies it, `exit` → `claude` → paste. No teardown
 >   machinery is involved.
 > - **Destroy/rebuild — exceptional.** At the human's discretion (worth it when the teardown lands
->   mid-work), the filled handoff is written to a **durable committed file in `tmp/`** — inline chat text
+>   mid-work), the filled handoff is written to a **durable committed file in `TEMP/`** — inline chat text
 >   dies with the context. Memory + repo remain the designed continuity either way; the preflight only
->   warns, never blocks, on a missing tmp/ handoff. The full checklist in
+>   warns, never blocks, on a missing TEMP/ handoff. The full checklist in
 >   `docs/cloud-setup/TEARDOWN-AND-REBUILD.md` applies.
 >
 > A received handoff with unfilled `⟨...⟩` blanks is a **NO-GO**: report it and stop. Each leg writes its
@@ -19,7 +19,7 @@
 
 ---
 
-Written: ⟨YYYY-MM-DD⟩ · Leg: ⟨weka|lustre⟩ · Kind: ⟨same-instance | rebuild (file: tmp/⟨name⟩.md)⟩
+Written: ⟨YYYY-MM-DD⟩ · Leg: ⟨weka|lustre⟩ · Kind: ⟨same-instance | rebuild (file: TEMP/⟨name⟩.md)⟩
 Mission in one line: ⟨what the receiving session exists to do⟩
 
 You are a fresh Claude Code session on the project's AWS GPU instance, working in this repo. Assume
