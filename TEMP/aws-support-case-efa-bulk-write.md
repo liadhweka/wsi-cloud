@@ -28,10 +28,11 @@ memory B.5).*
 Under **sustained bulk direct writes** (fio, 16 jobs × 4 MiB sequential, libaio, iodepth 8, O_DIRECT —
 aggregate demand a few GB/s), the client↔server EFA path destabilizes within ~60–120 s:
 
-- EFA hw_counters accumulate large retransmission counts on **both** EFA devices —
-  e.g. in the second occurrence (single 120 s job, counters zeroed at boot):
-  `efa_0 retrans_pkts=20,475 / retrans_timeout_events=1,200`;
-  `efa_1 retrans_pkts=35,903 / retrans_timeout_events=2,227`.
+- EFA hw_counters accumulate large retransmission counts on **both** EFA devices. The second
+  occurrence is exactly bracketed by pre/post snapshots around a single 120 s job:
+  `efa_0 +2,623 retrans_pkts / +189 retrans_timeout_events`;
+  `efa_1 +5,799 retrans_pkts / +395 retrans_timeout_events` — against **zero** counter movement
+  across the preceding reboot, the 100 MiB mount-time transport proof, and all small traffic.
 - Kernel log: `kefalnd_force_cancel_tx()` TX cancellations; ptlrpc `Request sent has timed out` on
   OST_WRITE (o4) with rc -11 network errors; `Connection to krvlrbev-OSTnnnn was lost` flaps across
   **all six OSTs**.

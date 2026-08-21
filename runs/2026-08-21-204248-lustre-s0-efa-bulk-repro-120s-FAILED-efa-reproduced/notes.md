@@ -19,9 +19,14 @@ clean reap, **no D-state survivors this time** (unlike the original incident; no
 
 1. **fio non-zero / did not complete** — killed while stuck; workers in fio's own "stuck, forceful exit"
    state (cmd.log tail).
-2. **retrans_timeout_events moved** — since-boot EFA hw_counters at capture: efa_0 retrans_pkts 20,475 /
-   retrans_timeout_events 1,200; efa_1 retrans_pkts 35,903 / retrans_timeout_events 2,227. The only bulk
-   traffic since boot is this probe (phase-2's 100 MiB proof was clean).
+2. **retrans_timeout_events moved** — and the movement is exactly bracketed. The EFA hw_counters
+   **persist across reboot** (device-level): the probe's own pre-start snapshot at 20:42:48Z
+   (`pre/efa-hw-counters-probe-prestart.txt`, recovered from its mktemp file) shows the counters
+   UNCHANGED from the post-incident-1 capture — efa_0 17,852/1,011, efa_1 30,104/1,832
+   (retrans_pkts/retrans_timeout_events) — i.e. **zero retransmissions across the reboot, phase-2's
+   100 MiB counter-proof, and all small traffic**. At the R3 capture (~20:52Z):
+   efa_0 20,475/1,200, efa_1 35,903/2,227. **Delta attributable to this 120 s bulk window alone:
+   efa_0 +2,623 retrans_pkts / +189 timeout events; efa_1 +5,799 / +395.**
 3. **New dmesg error lines** — ptlrpc timeouts, six-OST connection-lost flaps, efalnd TX cancellation
    (incident-evidence.txt carries the verbatim lines).
 

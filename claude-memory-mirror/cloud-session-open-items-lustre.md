@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T21:08:01.121Z
+  modified: 2026-08-21T22:10:34.933Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -62,7 +62,9 @@ emergency-rebuild insurance only.
    timeouts, OST reconnect flaps; server-side CloudWatch ≤1% network / ≤5% disk during the failures.
    **Reproduced on a clean boot (20:29:35Z boot, phase-2 gate + counter-proof PASSED): the 120 s
    `probe-efa-bulk-repro.sh` FAILED at 20:42Z** — all-six-OST connection flaps, efalnd TX cancel on
-   efa_0, since-boot retrans_timeout_events 1,200 (efa_0) + 2,227 (efa_1), servers again ≤5% utilized;
+   efa_0, bracketed retrans deltas +2,623/+189 (efa_0) and +5,799/+395 (efa_1) pkts/timeout-events
+   across the 120 s window alone (counters persist across reboot; zero movement on small traffic —
+   the probe's recovered pre-start snapshot is in the repro dir's pre/), servers again ≤5% utilized;
    short transfers (phase-2 100 MiB proof, 4 MiB writes) clean. Failure engages under SUSTAINED bulk
    only; a clean-boot reproduction rules out incident-day transient state. No D-state survivors this
    time; the filesystem recovered once load stopped (all OSTs FULL, direct writes OK).
