@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T03:12:57.218Z
+  modified: 2026-08-21T03:16:09.704Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -24,9 +24,9 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
    pasted directly. Same-instance session turnover (the normal mode): the outgoing session prints the
    filled handoff inline in its final message. Destroy/rebuild: OPTIONALLY (human's call, worth it
    mid-work) the filled handoff goes into `tmp/` as a durable committed file — memory + repo are the
-   designed continuity and the preflight only warns, never blocks, without one. The two provisioning
-   rebuilds already have theirs: `tmp/prompt-r1-validate-and-bake.md`,
-   `tmp/prompt-r2-verify-and-benchmark.md`.
+   designed continuity and the preflight only warns, never blocks, without one. A prompt is deleted once
+   its session has executed it (spent once read); the pending one is
+   `tmp/prompt-r2-verify-and-benchmark.md` (updated 2026-08-21 to R1's as-left state).
 3. **2nd EFA interface: APPLIED and verified on the 2026-08-21 rebuild** — 2 devices, 2 efa NIs up, CPT
    options landed, `FS_CLIENT_RESERVED_CORES=none` holds; count-as-built recorded in register L7. The
    feared per-NUMA CPT failure did not fire (the configurator saw 1 NUMA node). Nothing left to do; delete
