@@ -89,6 +89,26 @@ log "  consolidated log: $SWEEP_LOG"
 i=0
 FAILED_CELLS=0
 LAST_REGION=0
+CELL_RAN=1   # whether the most recent run_randr_cell actually ran (vs D-36 skip)
+
+# D-36 resume-skip: re-running the driver re-does only what is missing. A cell
+# whose exact name already has an OK-verdict run dir for this leg+stage is
+# skipped, keyed on the INDEX.md verdict. The glob is anchored at the cell name,
+# so -repN repeats and -FAILED-* renames never match; a REP invocation (a D18
+# repeat deliberately re-running a completed cell) never skips. Skip-safe for
+# the one-touch construction: a skipped cell's region was consumed by its OK
+# run, and every remaining cell reads its own untouched region.
+cell_done_ok() { # cell_done_ok <cell-name>
+  local name="$1" d
+  [ -n "${REP:-}" ] && return 1
+  for d in "$REPO"/runs/*-"$LEG"-s1.0d-"$name"; do
+    [ -d "$d" ] || continue
+    grep -F -- "\`$(basename "$d")\`" "$REPO/runs/INDEX.md" 2>/dev/null \
+      | grep -Eq 'rc=[^,]*, OK\)' && return 0
+  done
+  return 1
+}
+
 run_randr_cell() { # run_randr_cell <bs> <jobs> <region-idx> <cellindex> <cache-state> <extra-note>
   local bs="$1" jobs="$2" region="$3" idx="$4" cstate="$5" extra="$6"
   local slice_gib=$(( STAGE1_RANDR_REGION_GIB / jobs ))
@@ -97,6 +117,13 @@ run_randr_cell() { # run_randr_cell <bs> <jobs> <region-idx> <cellindex> <cache-
   [ -f "$region_file" ] || { log "FATAL: $region_file missing — restage the region pool."; exit 2; }
   local name="randr-bs${bs}-jobs${jobs}"
   [ "$cstate" = "warm" ] && name="randr-warmref-bs${bs}-jobs${jobs}"
+  if cell_done_ok "$name"; then
+    log ""
+    log "=== [cell $((idx+1))/$TOTAL] $name — SKIP: already recorded OK (D-36 resume) ==="
+    CELL_RAN=0
+    return 0
+  fi
+  CELL_RAN=1
   local note="Stage 1.0d cell $((idx+1))/$TOTAL: random read IOPS, bs=$bs jobs=$jobs iodepth=8 libaio --direct=1, region-${region}.bin (${STAGE1_RANDR_REGION_GIB} GiB; per-job disjoint ${slice_gib} GiB slices, fio random map on => each block at most once). ${extra} Fixed de-ordered cell order; stops at min(one-touch complete, 600s). Server-side residual recorded, not asserted."
 
   log ""
@@ -140,8 +167,15 @@ done
 # available — at a fixed mid config. Its delta against the grid is the
 # measured evidence the one-touch construction rests on, and it doubles as the
 # server-cache-served random-read rate.
+# On a D-36 resume where the last grid cell was skipped, the target region was
+# touched by a PRIOR invocation, not seconds ago — the warm premise is weakened,
+# and the recorded note must say so rather than let the cell claim it silently.
+WARMREF_EXTRA=""
+if (( ! CELL_RAN )); then
+  WARMREF_EXTRA=" RESUME CAVEAT (D-36): the target region was one-touch-read by a PRIOR driver invocation, not immediately before this cell — its bytes may have aged out of the server cache; weigh the warm-vs-grid delta evidence accordingly."
+fi
 run_randr_cell 4k 16 "$LAST_REGION" "$i" warm \
-  "WARM REFERENCE (D13 route 2, inverted — the grid's default regime is cold): deliberate re-read of the last grid cell's just-touched region."
+  "WARM REFERENCE (D13 route 2, inverted — the grid's default regime is cold): deliberate re-read of the last grid cell's just-touched region.${WARMREF_EXTRA}"
 
 log ""
 log "=== sweep done ==="

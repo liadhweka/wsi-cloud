@@ -1,0 +1,14 @@
+UUID                      Inodes       IUsed       IFree IUse% Mounted on
+krvlrbev-MDT0000_UUID    94003961         433    94003528   1% /mnt/lustre[MDT:0]
+krvlrbev-MDT0001_UUID   106463332         324   106463008   1% /mnt/lustre[MDT:1]
+krvlrbev-MDT0002_UUID   105512973         331   105512642   1% /mnt/lustre[MDT:2]
+krvlrbev-MDT0003_UUID   106463332         324   106463008   1% /mnt/lustre[MDT:3]
+krvlrbev-OST0000_UUID   603421895         551   603421344   1% /mnt/lustre[OST:0]
+krvlrbev-OST0001_UUID   603421862         550   603421312   1% /mnt/lustre[OST:1]
+krvlrbev-OST0002_UUID   603421863         551   603421312   1% /mnt/lustre[OST:2]
+krvlrbev-OST0003_UUID   603421863         551   603421312   1% /mnt/lustre[OST:3]
+krvlrbev-OST0004_UUID   603421863         551   603421312   1% /mnt/lustre[OST:4]
+krvlrbev-OST0005_UUID   603421862         550   603421312   1% /mnt/lustre[OST:5]
+
+filesystem_summary:    412443598        1412   412442186   1% /mnt/lustre
+

@@ -1,0 +1,10 @@
+Filesystem               Type      Size  Used Avail Use% Mounted on
+devtmpfs                 devtmpfs  4.0M     0  4.0M   0% /dev
+tmpfs                    tmpfs     373G     0  373G   0% /dev/shm
+tmpfs                    tmpfs     150G  1.4M  150G   1% /run
+/dev/nvme0n1p1           xfs       200G   16G  184G   8% /
+tmpfs                    tmpfs     373G  4.0M  373G   1% /tmp
+/dev/nvme0n1p128         vfat       10M  1.3M  8.7M  13% /boot/efi
+/dev/md127               xfs       3.5T   44G  3.5T   2% /data/local-nvme
+10.1.1.154@tcp:/krvlrbev lustre     27T  2.1G   27T   1% /mnt/lustre
+tmpfs                    tmpfs      75G     0   75G   0% /run/user/1000

@@ -1,0 +1,1 @@
+Linux ip-10-1-1-251.ap-northeast-2.compute.internal 6.1.177-224.371.amzn2023.x86_64 #1 SMP PREEMPT_DYNAMIC Mon Jul 27 20:28:29 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux

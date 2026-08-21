@@ -293,6 +293,9 @@ def main():
         print("usage: aggregate-stage4b-tilesread.py <glob>", file=sys.stderr)
         sys.exit(2)
     dirs = [Path(p) for p in sorted(glob.glob(sys.argv[1])) if Path(p).is_dir()]
+    # Forensically renamed (-FAILED-*) dirs are history, not subjects — a suffix
+    # rename does not escape a prefix glob, so exclude explicitly (D-38).
+    dirs = [d for d in dirs if "FAILED" not in d.name]
     dirs = [d for d in dirs if RUN_NAME_RE.search(d.name)]
     if not dirs:
         print("no sweep-cell dirs matched", file=sys.stderr)

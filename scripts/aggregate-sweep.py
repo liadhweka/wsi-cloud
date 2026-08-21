@@ -158,6 +158,10 @@ def main():
         sys.exit(2)
     pattern = sys.argv[1]
     dirs = [Path(p) for p in sorted(glob.glob(pattern)) if Path(p).is_dir()]
+    # Forensically renamed (-FAILED-*) dirs are history, not subjects — a suffix
+    # rename does not escape a prefix glob, so exclude explicitly (D-38; the
+    # name regex also rejects the suffix — this makes the rule visible, not implied).
+    dirs = [d for d in dirs if "FAILED" not in d.name]
     if not dirs:
         print(f"no dirs matched: {pattern}", file=sys.stderr)
         sys.exit(1)

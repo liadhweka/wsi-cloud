@@ -321,6 +321,7 @@ def main():
     for p in sorted(glob.glob(pattern)):
         d = Path(p)
         if not d.is_dir(): continue
+        if "FAILED" in d.name: continue  # forensic rename — history, not a subject (D-38)
         if "smoke" in d.name: continue
         row = extract_cell_summary(d)
         if row is None: continue

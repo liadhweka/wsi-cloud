@@ -1,9 +1,9 @@
 {
-  "verified_utc": "2026-08-21T00:40:11.337588+00:00",
+  "verified_utc": "2026-08-21T15:31:01.777038+00:00",
   "against": "/home/ec2-user/wsi-cloud/runs/env-contract-leg-weka.json",
   "against_sha256": "993c92db46f790cd5d1b31afb8be89bc9b503406459a805d1f0308a304ee8dbe",
   "advanced_script_commit": {
     "from": "b32185a8ccc41df978e2f10d7bbd25bc17d74794",
-    "to": "ba9c3b17b7f3cddf71834933cdaf549bcaf4b572"
+    "to": "b6eb2c60e6d57f37888e4057459e592b3c96ae6d"
   }
 }

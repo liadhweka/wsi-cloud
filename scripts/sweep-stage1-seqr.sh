@@ -73,12 +73,36 @@ log "  consolidated log: $SWEEP_LOG"
 
 i=0
 FAILED_CELLS=0
+
+# D-36 resume-skip: re-running the driver re-does only what is missing. A cell
+# whose exact name already has an OK-verdict run dir for this leg+stage is
+# skipped, keyed on the INDEX.md verdict. The glob is anchored at the cell name,
+# so -repN repeats and -FAILED-* renames never match; a REP invocation (a D18
+# repeat deliberately re-running a completed cell) never skips. Skip-safe by
+# construction here: each cell's offset slot is fixed by its index, and the scan
+# corpus is retained across invocations, so remaining cells are unaffected.
+cell_done_ok() { # cell_done_ok <cell-name>
+  local name="$1" d
+  [ -n "${REP:-}" ] && return 1
+  for d in "$REPO"/runs/*-"$LEG"-s1.0b-"$name"; do
+    [ -d "$d" ] || continue
+    grep -F -- "\`$(basename "$d")\`" "$REPO/runs/INDEX.md" 2>/dev/null \
+      | grep -Eq 'rc=[^,]*, OK\)' && return 0
+  done
+  return 1
+}
+
 run_seqr_cell() { # run_seqr_cell <bs> <jobs> <cellindex>
   local bs="$1" jobs="$2" idx="$3"
   local offset_gib=$(( (idx % ROT_SLOTS) * ROT_STRIDE_GIB ))
   local span_gib=$(( STAGE1_SEQ_CORPUS_GIB - offset_gib ))
   local slice_gib=$(( span_gib / jobs ))
   local name="seqr-bs${bs}-jobs${jobs}"
+  if cell_done_ok "$name"; then
+    log ""
+    log "=== [cell $((idx+1))/$TOTAL] $name — SKIP: already recorded OK (D-36 resume) ==="
+    return 0
+  fi
   local note="Stage 1.0b cell $((idx+1))/$TOTAL: sequential read, bs=$bs jobs=$jobs iodepth=1 libaio --direct=1. COLD BY CONSTRUCTION (D13 route 1): pre-staged ${STAGE1_SEQ_CORPUS_GIB} GiB scan corpus (>= ~2x the larger server cache; cyclic-scan LRU self-eviction), single pass per cell (no time_based; stops at min(slice, 600s)), per-cell offset rotation (slot $((idx % ROT_SLOTS)), offset ${offset_gib} GiB), fixed de-ordered cell order. Per-job disjoint slice ${slice_gib} GiB. Evidence cell: the sweep's warm reference. Server-side residual recorded, not asserted."
 
   log ""
@@ -114,21 +138,26 @@ done
 # construction, and pass 2 doubles as the server-cache-served read rate.
 i=$(( i + 1 ))
 name="seqr-warmref-bs1M-jobs4"
-log ""
-log "=== [cell $i/$TOTAL] $name (warm reference: 64 GiB head read twice) ==="
-RECORD_CACHE_STATE=warm "$REPO/scripts/record-run.sh" \
-  --run-name "$name" --stage "1.0b" \
-  --note "Stage 1.0b WARM REFERENCE cell (D13 route 2, inverted: the grid's default regime is cold, so the reference is warm). 4 jobs x 16 GiB disjoint head slices, --loops=2: pass 1 ~cold, pass 2 deliberately server-cache-warm. The split-window (first-half vs second-half) contrast is the evidence the grid's cold construction rests on; pass 2 is also the server-cache-served sequential read rate." \
-  -- fio \
-    --name="$name" \
-    --filename="$CORPUS_FILE" \
-    --rw=read --bs=1M \
-    --numjobs=4 --iodepth=1 --ioengine=libaio --direct=1 \
-    --offset=0 --offset_increment=16G --size=16G --loops=2 \
-    --group_reporting --output-format=json+ --status-interval=1 \
-  2>&1 | tee -a "$SWEEP_LOG"
-rc=${PIPESTATUS[0]}
-(( rc != 0 )) && { FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: warmref rc=$rc — INCOMPLETE"; }
+if cell_done_ok "$name"; then
+  log ""
+  log "=== [cell $i/$TOTAL] $name — SKIP: already recorded OK (D-36 resume) ==="
+else
+  log ""
+  log "=== [cell $i/$TOTAL] $name (warm reference: 64 GiB head read twice) ==="
+  RECORD_CACHE_STATE=warm "$REPO/scripts/record-run.sh" \
+    --run-name "$name" --stage "1.0b" \
+    --note "Stage 1.0b WARM REFERENCE cell (D13 route 2, inverted: the grid's default regime is cold, so the reference is warm). 4 jobs x 16 GiB disjoint head slices, --loops=2: pass 1 ~cold, pass 2 deliberately server-cache-warm. The split-window (first-half vs second-half) contrast is the evidence the grid's cold construction rests on; pass 2 is also the server-cache-served sequential read rate." \
+    -- fio \
+      --name="$name" \
+      --filename="$CORPUS_FILE" \
+      --rw=read --bs=1M \
+      --numjobs=4 --iodepth=1 --ioengine=libaio --direct=1 \
+      --offset=0 --offset_increment=16G --size=16G --loops=2 \
+      --group_reporting --output-format=json+ --status-interval=1 \
+    2>&1 | tee -a "$SWEEP_LOG"
+  rc=${PIPESTATUS[0]}
+  (( rc != 0 )) && { FAILED_CELLS=$(( FAILED_CELLS + 1 )); log "  WARN: warmref rc=$rc — INCOMPLETE"; }
+fi
 
 log ""
 log "=== sweep done ==="

@@ -540,6 +540,9 @@ def main():
     for p in sorted(runs_root.glob(f'*-{_LEG}-s7*-*')):
         if not p.is_dir():
             continue
+        if "FAILED" in p.name:
+            # Forensic rename — history, not a subject (D-38).
+            continue
         if SMOKE_PAT.search(p.name):
             continue
         cells.append(p)

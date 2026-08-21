@@ -252,6 +252,9 @@ def main():
         sys.exit(2)
     pattern = sys.argv[1]
     dirs = [Path(p) for p in sorted(glob.glob(pattern)) if Path(p).is_dir()]
+    # Forensically renamed (-FAILED-*) dirs are history, not subjects — a suffix
+    # rename does not escape a prefix glob, so exclude explicitly (D-38).
+    dirs = [d for d in dirs if "FAILED" not in d.name]
     # Filter out the prep run (it's not a sweep cell).
     dirs = [d for d in dirs if RUN_NAME_RE.search(d.name)]
     if not dirs:

@@ -22,6 +22,7 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 : "${FS_MOUNT:?FS_MOUNT is unset -- source env.sh. Refusing to guess a mount: a wrong mount silently measures the OTHER filesystem}"
+: "${LEG:?LEG is unset -- source env.sh (the D-36 resume-skip is leg-scoped)}"
 SCRATCH=${FS_MOUNT}/benchmarks/fio-scratch
 LOG_DIR=$REPO/runs/sweep-logs
 mkdir -p "$LOG_DIR" "$SCRATCH"
@@ -33,6 +34,22 @@ TOTAL=$(( ${#BLOCK_SIZES[@]} * ${#CONCURRENCIES[@]} ))
 
 log() { echo "[$(date -u +%FT%TZ)] $*" | tee -a "$SWEEP_LOG"; }
 FAILED_CELLS=0
+
+# D-36 resume-skip: re-running the driver re-does only what is missing. A cell
+# whose exact name already has an OK-verdict run dir for this leg+stage is
+# skipped, keyed on the INDEX.md verdict. The glob is anchored at the cell name,
+# so -repN repeats and -FAILED-* renames never match; a REP invocation (a D18
+# repeat deliberately re-running a completed cell) never skips.
+cell_done_ok() { # cell_done_ok <cell-name>
+  local name="$1" d
+  [ -n "${REP:-}" ] && return 1
+  for d in "$REPO"/runs/*-"$LEG"-s1.0a-"$name"; do
+    [ -d "$d" ] || continue
+    grep -F -- "\`$(basename "$d")\`" "$REPO/runs/INDEX.md" 2>/dev/null \
+      | grep -Eq 'rc=[^,]*, OK\)' && return 0
+  done
+  return 1
+}
 
 log "=== Stage 1.0a seqw sweep starting ==="
 log "  grid: bs ∈ {${BLOCK_SIZES[*]}} × jobs ∈ {${CONCURRENCIES[*]}}"
@@ -47,6 +64,12 @@ for bs in "${BLOCK_SIZES[@]}"; do
     i=$(( i + 1 ))
     name="seqw-bs${bs}-jobs${jobs}"
     note="Stage 1.0a cell $i/$TOTAL: sequential write, bs=$bs, $jobs jobs, iodepth=1, libaio --direct=1, 600s steady + 60s ramp, --unlink=1 to keep scratch clean."
+
+    if cell_done_ok "$name"; then
+      log ""
+      log "=== [cell $i/$TOTAL] $name — SKIP: already recorded OK (D-36 resume) ==="
+      continue
+    fi
 
     log ""
     log "=== [cell $i/$TOTAL] $name ==="
