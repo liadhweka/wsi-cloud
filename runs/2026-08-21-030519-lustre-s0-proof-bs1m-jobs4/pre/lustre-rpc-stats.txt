@@ -1,0 +1,188 @@
+osc.krvlrbev-OST0000-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281519.989449789 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281519.989449789 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         0   0   0   |          0   0   0
+osc.krvlrbev-OST0001-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281519.989493619 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281519.989493619 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		         0   0   0   |        100 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |        100 100 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         0   0   0   |          1   1   1
+1:		         0   0   0   |          0   0   1
+2:		         0   0   0   |          0   0   1
+4:		         0   0   0   |          0   0   1
+8:		         0   0   0   |          0   0   1
+16:		         0   0   0   |          0   0   1
+32:		         0   0   0   |          0   0   1
+64:		         0   0   0   |          0   0   1
+128:		         0   0   0   |          0   0   1
+256:		         0   0   0   |          1   1   2
+512:		         0   0   0   |          2   2   4
+1024:		         0   0   0   |          4   4   8
+2048:		         0   0   0   |          8   8  16
+4096:		         0   0   0   |         16  16  32
+8192:		         0   0   0   |         32  32  64
+16384:		         0   0   0   |         36  36 100
+osc.krvlrbev-OST0002-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281519.989529100 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281519.989529100 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		        64 100 100   |         64 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		        64 100 100   |         64 100 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         1   1   1   |          1   1   1
+1:		         0   0   1   |          0   0   1
+2:		         0   0   1   |          0   0   1
+4:		         0   0   1   |          0   0   1
+8:		         0   0   1   |          0   0   1
+16:		         0   0   1   |          0   0   1
+32:		         0   0   1   |          0   0   1
+64:		         0   0   1   |          0   0   1
+128:		         0   0   1   |          0   0   1
+256:		         1   1   3   |          1   1   3
+512:		         2   3   6   |          2   3   6
+1024:		         4   6  12   |          4   6  12
+2048:		         8  12  25   |          8  12  25
+4096:		        16  25  50   |         16  25  50
+8192:		        32  50 100   |         32  50 100
+osc.krvlrbev-OST0003-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281519.989566801 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281519.989566801 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         0   0   0   |          0   0   0
+osc.krvlrbev-OST0004-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281519.989586922 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281519.989586922 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		         0   0   0   |        100 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |        100 100 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         0   0   0   |          1   1   1
+1:		         0   0   0   |          0   0   1
+2:		         0   0   0   |          0   0   1
+4:		         0   0   0   |          0   0   1
+8:		         0   0   0   |          0   0   1
+16:		         0   0   0   |          0   0   1
+32:		         0   0   0   |          0   0   1
+64:		         0   0   0   |          0   0   1
+128:		         0   0   0   |          0   0   1
+256:		         0   0   0   |          1   1   2
+512:		         0   0   0   |          2   2   4
+1024:		         0   0   0   |          4   4   8
+2048:		         0   0   0   |          8   8  16
+4096:		         0   0   0   |         16  16  32
+8192:		         0   0   0   |         32  32  64
+16384:		         0   0   0   |         36  36 100
+osc.krvlrbev-OST0005-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281519.989618172 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281519.989618172 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         0   0   0   |          0   0   0

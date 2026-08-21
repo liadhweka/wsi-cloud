@@ -1,0 +1,14 @@
+UUID                       bytes        Used   Available Use% Mounted on
+krvlrbev-MDT0000_UUID      549.9G       11.1M      549.9G   1% /mnt/lustre[MDT:0]
+krvlrbev-MDT0001_UUID      549.9G        7.4M      549.9G   1% /mnt/lustre[MDT:1]
+krvlrbev-MDT0002_UUID      549.9G        7.6M      549.9G   1% /mnt/lustre[MDT:2]
+krvlrbev-MDT0003_UUID      549.9G        7.5M      549.9G   1% /mnt/lustre[MDT:3]
+krvlrbev-OST0000_UUID        4.5T       10.0M        4.5T   1% /mnt/lustre[OST:0]
+krvlrbev-OST0001_UUID        4.5T       10.0M        4.5T   1% /mnt/lustre[OST:1]
+krvlrbev-OST0002_UUID        4.5T       10.2M        4.5T   1% /mnt/lustre[OST:2]
+krvlrbev-OST0003_UUID        4.5T       10.2M        4.5T   1% /mnt/lustre[OST:3]
+krvlrbev-OST0004_UUID        4.5T       10.2M        4.5T   1% /mnt/lustre[OST:4]
+krvlrbev-OST0005_UUID        4.5T       10.2M        4.5T   1% /mnt/lustre[OST:5]
+
+filesystem_summary:        27.0T       61.0M       27.0T   1% /mnt/lustre
+

@@ -13,8 +13,17 @@ What lives here
               = 1.0 (healthy reads carry no parity).
               Empirical anchors, this leg's 5+2 Stage-0 probes (2026-08-15):
               write 1.455 (= 1.40 x ~1.04 protocol), read 1.034.
-      Lustre: follows from the actual stripe layout (lfs getstripe) — BUILT ON
-              LEG B against the live cluster; asking for it here raises.
+      Lustre: derived from the RECORDED stripe layout (`lfs getstripe -d`, the
+              contract's lustre_stripe_layout / env LUSTRE_STRIPE_LAYOUT):
+              every component of the provisioned layout is pattern raid0 with
+              lcm_mirror_count 1 — striping DISTRIBUTES bytes across OSTs but
+              never amplifies them, and FSx redundancy is server-side, invisible
+              to the client NIC — so wire/app = mirror_count = 1.0 for writes
+              and 1.0 for reads. A mirrored (FLR) or non-raid0 layout would
+              change that, so the parser refuses those rather than assuming.
+              Empirical anchors, this leg's Leg-B build (2026-08-21): EFA
+              tx+rx / app = 1.0016 across a 128 MiB direct dd round-trip, and
+              wire/osc = 1.002 per direction on the ~6 GB/s stage-0 proof cell.
   - CANARY BANDS: loaded from the leg's calibration file
     (runs/.leg-state/<leg>/canary-bands.json), written by the calibration
     cells on the PROVISIONED cluster. No calibration file -> the canary
@@ -61,24 +70,51 @@ def parse_ec_scheme(scheme):
     return d, p
 
 
-def expected_relation(fs, direction, ec_scheme=None):
+def parse_stripe_layout(layout):
+    """Recorded `lfs getstripe -d <mount>` text (the contract's
+    lustre_stripe_layout / env LUSTRE_STRIPE_LAYOUT) -> {mirror_count,
+    patterns, stripe_counts}. Refuses empty/malformed input rather than
+    defaulting — the relation must come from the RECORDED layout (D12/L2)."""
+    txt = str(layout or "")
+    mm = re.search(r"lcm_mirror_count:\s*(\d+)", txt)
+    pats = re.findall(r"pattern:\s*(\S+)", txt)
+    scs = re.findall(r"stripe_count:\s*(-?\d+)", txt)
+    if not (mm and pats and scs):
+        raise ValueError(
+            "LUSTRE_STRIPE_LAYOUT is not a recorded `lfs getstripe -d` layout "
+            f"(need lcm_mirror_count/pattern/stripe_count), got {txt[:80]!r}...")
+    return {"mirror_count": int(mm.group(1)),
+            "patterns": pats,
+            "stripe_counts": [int(s) for s in scs]}
+
+
+def expected_relation(fs, direction, ec_scheme=None, stripe_layout=None):
     """Center of the wire/app ratio for a healthy cluster.
 
     fs='weka': write -> (D+P)/D from the ACTUAL provisioned scheme; read -> 1.0.
-    fs='lustre': derived from the actual stripe layout on the Leg-B cluster —
-    deliberately NotImplemented until that adapter is built there (D-4).
+    fs='lustre': derived from the RECORDED stripe layout: raid0 striping
+    distributes bytes but never amplifies them and FSx redundancy is
+    server-side, so read -> 1.0 and write -> mirror_count (1 on the
+    provisioned unmirrored layout). A non-raid0 component is a layout this
+    derivation was never validated on — refuse, don't assume.
     """
+    if direction not in ("read", "write"):
+        raise ValueError(f"direction must be read|write, got {direction!r}")
     if fs == "weka":
         if direction == "write":
             d, p = parse_ec_scheme(ec_scheme)
             return (d + p) / d
-        if direction == "read":
-            return 1.0
-        raise ValueError(f"direction must be read|write, got {direction!r}")
+        return 1.0
     if fs == "lustre":
-        raise NotImplementedError(
-            "The Lustre consistency relation is derived from the actual stripe "
-            "layout on the provisioned Leg-B cluster (D-5/D-4) — never ported or recalled.")
+        lay = parse_stripe_layout(stripe_layout)
+        bad = [p for p in lay["patterns"] if p != "raid0"]
+        if bad:
+            raise NotImplementedError(
+                f"stripe layout has non-raid0 component(s) {bad} — the wire/app "
+                "relation was derived for raid0-only layouts; re-derive before use (D12)")
+        if direction == "write":
+            return float(lay["mirror_count"])
+        return 1.0
     raise ValueError(f"fs must be weka|lustre, got {fs!r}")
 
 
@@ -99,7 +135,8 @@ def load_bands(repo_root, leg):
 
 
 def consistency_verdict(app_bps, wire_bps, *, fs, direction, ec_scheme=None,
-                        bands=None, bs_bytes=None, mixed=False, sample_count=None):
+                        stripe_layout=None, bands=None, bs_bytes=None,
+                        mixed=False, sample_count=None):
     """One direction's post-cell cross-source check.
 
     Returns a dict with ratio, expected center, band used, and verdict in
@@ -111,7 +148,7 @@ def consistency_verdict(app_bps, wire_bps, *, fs, direction, ec_scheme=None,
         out["verdict"] = "NO_DATA"
         out["detail"] = "app or wire series missing/zero — a missing Primary source is a recording failure, not a pass"
         return out
-    center = expected_relation(fs, direction, ec_scheme)
+    center = expected_relation(fs, direction, ec_scheme, stripe_layout)
     ratio = wire_bps / app_bps
     out.update(ratio=round(ratio, 4), expected_center=round(center, 4))
     if sample_count is not None and sample_count < 5:
@@ -186,6 +223,47 @@ def active_window_mean(seq):
         return statistics.fmean(seq)
     idx = [i for i, v in enumerate(seq) if v >= 0.05 * peak]
     return statistics.fmean(seq[idx[0]:idx[-1] + 1]) if idx else statistics.fmean(seq)
+
+
+def client_rate_metrics(results, fs):
+    """The four canary inputs (app/wire x read/write, active-window means) from
+    a parsed results.json dict, per leg (THESIS §4 source table):
+      weka:   app  = weka_stats_client Read/Write_client_sum (fs-level, this client)
+              wire = weka_stats_client L6 Recv/Sent_client_sum (WEKA's own wire accounting)
+      lustre: app  = lustre_stats_client read/write_bytes_per_sec (osc bytes summed
+                     across OSTs — every byte the client moved to storage, aio
+                     included; llite is aio-blind, proven on the 2026-08-21 build)
+              wire = rdma_counters rcv/xmit_bytes_per_sec (the recorder's column
+                     names) summed across the EFA devices' hw_counters rows — the
+                     client's network counters ARE the data path on this leg
+                     (THESIS §4 inversion). Summing device means is sound because
+                     every device is sampled on the same ticks.
+    A missing series comes back None (NO_DATA upstream), never zero."""
+    src = results.get("sources", {}) or {}
+
+    def awm(d, k):
+        return ((d.get(k) or {}).get("active_window_mean")) if d else None
+
+    if fs == "weka":
+        m = (src.get("weka_stats_client") or {}).get("metrics") or {}
+        return {"app_read": awm(m, "Read_client_sum"),
+                "wire_read": awm(m, "L6 Recv_client_sum"),
+                "app_write": awm(m, "Write_client_sum"),
+                "wire_write": awm(m, "L6 Sent_client_sum")}
+    if fs == "lustre":
+        m = (src.get("lustre_stats_client") or {}).get("metrics") or {}
+        devs = (src.get("rdma_counters") or {}).get("devices") or {}
+
+        def wire(col):
+            vals = [awm(d, col) for k, d in devs.items() if k.endswith("/hw_counters")]
+            vals = [v for v in vals if v is not None]
+            return sum(vals) if vals else None
+
+        return {"app_read": awm(m, "read_bytes_per_sec"),
+                "wire_read": wire("rcv_bytes_per_sec"),
+                "app_write": awm(m, "write_bytes_per_sec"),
+                "wire_write": wire("xmit_bytes_per_sec")}
+    raise ValueError(f"fs must be weka|lustre, got {fs!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -325,7 +403,7 @@ def normalize_metric_key(key):
 # ---------------------------------------------------------------------------
 
 def _cli_check(run_dir):
-    """Post-cell consistency canary for one run dir (WEKA leg)."""
+    """Post-cell consistency canary for one run dir (both legs)."""
     import os
     run_dir = Path(run_dir)
     meta = json.loads((run_dir / "metadata.json").read_text())
@@ -334,11 +412,9 @@ def _cli_check(run_dir):
     leg = fs
     bands = load_bands(repo_root, leg)
     ec = os.environ.get("WEKA_EC_SCHEME")
+    layout = os.environ.get("LUSTRE_STRIPE_LAYOUT")
     results = json.loads((run_dir / "results.json").read_text())
-    cl = (results.get("sources", {}).get("weka_stats_client", {}) or {}).get("metrics", {})
-
-    def m(k):
-        return (cl.get(k) or {}).get("active_window_mean")
+    rm = client_rate_metrics(results, fs)
 
     # Block size, from the run-dir name segment every 1.0 cell carries
     # (-bs4k- / -bs1M- ...): without it the calibrated small-bs widening never
@@ -350,8 +426,8 @@ def _cli_check(run_dir):
         bs_bytes = int(mb.group(1)) * (1024 if mb.group(2).lower() == "k" else 1024**2)
 
     verdicts = []
-    app_r, wire_r = m("Read_client_sum"), m("L6 Recv_client_sum")
-    app_w, wire_w = m("Write_client_sum"), m("L6 Sent_client_sum")
+    app_r, wire_r = rm["app_read"], rm["wire_read"]
+    app_w, wire_w = rm["app_write"], rm["wire_write"]
     # A direction is evaluated (and counts as "mixed" for the other) only above
     # a materiality floor — metadata dribble on an idle direction is not a
     # mixed workload, and evaluating it would ratio noise against noise.
@@ -359,11 +435,13 @@ def _cli_check(run_dir):
     r_live, w_live = bool(app_r and app_r > MATERIAL), bool(app_w and app_w > MATERIAL)
     if r_live:
         verdicts.append(consistency_verdict(app_r, wire_r, fs=fs, direction="read",
-                                            ec_scheme=ec, bands=bands, bs_bytes=bs_bytes,
+                                            ec_scheme=ec, stripe_layout=layout,
+                                            bands=bands, bs_bytes=bs_bytes,
                                             mixed=w_live))
     if w_live:
         verdicts.append(consistency_verdict(app_w, wire_w, fs=fs, direction="write",
-                                            ec_scheme=ec, bands=bands, bs_bytes=bs_bytes,
+                                            ec_scheme=ec, stripe_layout=layout,
+                                            bands=bands, bs_bytes=bs_bytes,
                                             mixed=r_live))
     print(json.dumps({"run_dir": str(run_dir), "verdicts": verdicts}, indent=2))
     bad = [v for v in verdicts if v["verdict"] not in ("PASS",)]
@@ -395,6 +473,7 @@ def _cli_calibrate(run_dirs):
     leg = None
     repo_root = None
     ec = os.environ.get("WEKA_EC_SCHEME")
+    layout = os.environ.get("LUSTRE_STRIPE_LAYOUT")
     norms = {"read": [], "write": []}      # large-bs normalized ratios
     small_norms = []                       # small-bs normalized ratios (both dirs)
     cells = []
@@ -405,11 +484,11 @@ def _cli_calibrate(run_dirs):
         leg = leg or fs
         repo_root = repo_root or rd.parent.parent
         results = json.loads((rd / "results.json").read_text())
-        cl = (results.get("sources", {}).get("weka_stats_client", {}) or {}).get("metrics", {})
-        m = lambda k: (cl.get(k) or {}).get("active_window_mean") or 0.0
+        rm = client_rate_metrics(results, fs)
+        m = lambda k: rm.get(k) or 0.0
         small = "bs4k" in rd.name
-        pairs = (("read", m("Read_client_sum"), m("L6 Recv_client_sum")),
-                 ("write", m("Write_client_sum"), m("L6 Sent_client_sum")))
+        pairs = (("read", m("app_read"), m("wire_read")),
+                 ("write", m("app_write"), m("wire_write")))
         for direction, app, wire in pairs:
             if app < 50e6:   # idle direction on a single-direction probe cell
                 continue
@@ -418,7 +497,7 @@ def _cli_calibrate(run_dirs):
                       f"({direction}); a calibration cell with a dead Primary source calibrates nothing",
                       file=sys.stderr)
                 return 1
-            n = (wire / app) / expected_relation(fs, direction, ec)
+            n = (wire / app) / expected_relation(fs, direction, ec, layout)
             (small_norms if small else norms[direction]).append(n)
             cells.append({"run_dir": rd.name, "direction": direction,
                           "ratio": round(wire / app, 4), "normalized": round(n, 4),
@@ -444,7 +523,11 @@ def _cli_calibrate(run_dirs):
               "Supply bs4k calibration cells.", file=sys.stderr)
     out["calibrated_utc"] = __import__("datetime").datetime.now(
         __import__("datetime").timezone.utc).isoformat()
+    # The scheme input the centers were normalized against, per leg — recorded so
+    # a band file can be audited against the contract it was calibrated under.
     out["ec_scheme"] = ec
+    if leg == "lustre":
+        out["stripe_layout"] = layout
     out["cells"] = cells
     p = Path(repo_root) / "runs" / ".leg-state" / leg / "canary-bands.json"
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -458,11 +541,41 @@ def _selftest():
     assert parse_ec_scheme("5+2") == (5, 2)
     assert abs(expected_relation("weka", "write", "5+2") - 1.4) < 1e-9
     assert expected_relation("weka", "read") == 1.0
+    # Lustre relation: derives from the recorded layout; refuses without one and
+    # on layouts (mirrored / non-raid0) the derivation was never validated for.
+    _LAY = ("lcm_layout_gen: 0 lcm_mirror_count: 1 lcm_entry_count: 4 "
+            "stripe_count: 1 stripe_size: 1048576 pattern: raid0 stripe_offset: -1 "
+            "stripe_count: 8 stripe_size: 1048576 pattern: raid0 stripe_offset: -1")
+    assert expected_relation("lustre", "read", stripe_layout=_LAY) == 1.0
+    assert expected_relation("lustre", "write", stripe_layout=_LAY) == 1.0
     try:
         expected_relation("lustre", "read")
-        raise AssertionError("lustre relation must refuse until built on Leg B")
+        raise AssertionError("lustre relation must refuse without a recorded layout")
+    except ValueError:
+        pass
+    try:
+        expected_relation("lustre", "write",
+                          stripe_layout=_LAY.replace("pattern: raid0", "pattern: mdt", 1))
+        raise AssertionError("lustre relation must refuse a non-raid0 component")
     except NotImplementedError:
         pass
+    fake_lustre_results = {"sources": {
+        "lustre_stats_client": {"metrics": {
+            "read_bytes_per_sec": {"active_window_mean": 5.0e9},
+            "write_bytes_per_sec": {"active_window_mean": 2.0e9}}},
+        "rdma_counters": {"devices": {
+            "efa_0/hw_counters": {"rcv_bytes_per_sec": {"active_window_mean": 3.0e9},
+                                  "xmit_bytes_per_sec": {"active_window_mean": 1.1e9}},
+            "efa_1/hw_counters": {"rcv_bytes_per_sec": {"active_window_mean": 2.0e9},
+                                  "xmit_bytes_per_sec": {"active_window_mean": 0.9e9}}}}}}
+    rm = client_rate_metrics(fake_lustre_results, "lustre")
+    assert rm == {"app_read": 5.0e9, "wire_read": 5.0e9,
+                  "app_write": 2.0e9, "wire_write": 2.0e9}, rm
+    v = consistency_verdict(rm["app_read"], rm["wire_read"], fs="lustre",
+                            direction="read", stripe_layout=_LAY,
+                            bands={"bands": {"read": {"lo": 0.95, "hi": 1.10},
+                                             "write": {"lo": 0.95, "hi": 1.10}}})
+    assert v["verdict"] == "PASS", v
     bands = {"bands": {"write": {"lo": 0.95, "hi": 1.10}, "read": {"lo": 0.95, "hi": 1.10},
                        "mixed_widening": 1.15, "smallbs_bytes": 65536, "smallbs_widening": 1.25}}
     v = consistency_verdict(5.2e9, 7.56e9, fs="weka", direction="write",

@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 19527a50-12a1-449d-ab4b-e5df495e7353
-  modified: 2026-08-21T02:43:21.545Z
+  modified: 2026-08-21T03:12:57.218Z
 ---
 
 Leg B runs CONCURRENT with Leg A under the stage-lag rule (STAGES.md **D6**): never start stage N until Leg A
@@ -48,14 +48,16 @@ baked (`scripts/wsi-lustre-phase2.sh`); the walk prompt was deleted (register + 
 3. **Metadata IOPS is provisioned at the placeholder (48,000)** — before this leg's metadata-heavy stages,
    verify against Leg A's measured Stage-2/6.B metadata peaks + margin and **raise online if needed** (a
    recorded provisioning event, human-ratified, priced into `FS_USD_PER_HR`).
-4. **Calibrate this leg's canary bands** (**D18**/**D-5**) on the Lustre client before the baseline. The
-   Lustre consistency relation derives from the recorded stripe layout (register L2), never ported from WEKA.
-5. **D-4 Lustre recorder schemas are live-derived here** — `/proc/fs/lustre`, `lctl get_param` shapes from
-   the real client, never a recalled format. The mount is live, so this is unblocked.
-6. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
+4. **Calibrate this leg's canary bands** (**D18**/**D-5**) on the Lustre client before the baseline.
+   The relation is DERIVED and built (raid0 layout → wire/app centers 1.0/1.0, `wsi_agg_helper`; empirical
+   wire/osc = 1.002 on the 2026-08-21 stage-0 proof) — calibration only fills the BANDS
+   (`runs/.leg-state/lustre/canary-bands.json`, dies with the filesystem, R2 work). Recorder half of D-4 is
+   DONE + capture-verified; at calibration also decide the lustre cold-cell evidence set (D-4 remainder:
+   page-cache drop is leg-neutral, ldlm/osc client caches are the open question).
+5. **[USER-side check] `FS_USD_PER_HR` metadata-IOPS assumption** — recorded $29.6088/hr assumes 12,000
    included IOPS (register L6 has both readings + sources). Verify against the first invoice / Cost
    Explorer; if all 48,000 bill, correct to $30.6279/hr, dated, as a provisioning-cost event.
-7. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
+6. **[COSMETIC, no behavior change — batch when convenient] Two D8-symmetric label leftovers in scripts:**
    (a) docstring/comment headers describing the kvikio backend as "kvikIO+GDS" in
    `train-resnet50-stage5.py`, `extract-features-foundation-stage6.py`, `read-tiles-kvikio.py` — the
    backend is kvikIO/cuFile (compat on both legs per D8); (b) `cufile-full-rdma.template.json`'s header

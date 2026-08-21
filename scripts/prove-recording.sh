@@ -7,9 +7,10 @@
 #   11  the INDEX.md row for this cell says OK
 #   12  the leg's core streams exist with data (defence in depth on top of the
 #       wrapper's own required-list verdict, which INDEX OK already encodes)
-#   13  results.json carries a non-zero client-summed filesystem-side rate
-#       (weka_stats_client — the pattern-#1 series; a present-but-zero series
-#       means the client filter matched nothing and the cell measured nothing)
+#   13  results.json carries a non-zero client filesystem-side rate (the leg's
+#       pattern-#1 series via wsi_agg_helper.client_rate_metrics — a
+#       present-but-zero series means the client series matched nothing and
+#       the cell measured nothing)
 #   14  the run's raw/ telemetry is verifiably in S3 (every local file listed)
 #   15  the generic aggregator emits a summary row for the cell
 #
@@ -56,25 +57,30 @@ grep -F "\`${RUN_ID}\`" "$REPO/runs/INDEX.md" | grep -q ', OK)' \
   || fail 11 "INDEX.md row for $RUN_ID is missing or not OK (the wrapper's required-stream verdict failed)"
 note "OK  INDEX.md row says OK"
 
-# 12 — core streams exist with data
-for f in weka-stats.csv nvidia-smi.csv netdev-counters.csv sar-cpu.csv; do
+# 12 — core streams exist with data (the leg's own set, D-4)
+case "$LEG" in
+  weka)   CORE_STREAMS="weka-stats.csv nvidia-smi.csv netdev-counters.csv sar-cpu.csv" ;;
+  lustre) CORE_STREAMS="lustre-stats.log lnet-stats.log rdma-counters.csv nvidia-smi.csv netdev-counters.csv sar-cpu.csv" ;;
+  *)      fail 12 "unknown LEG '$LEG'" ;;
+esac
+for f in $CORE_STREAMS; do
   [ -s "$RECORD_RUN_DIR/raw/$f" ] && [ "$(wc -l < "$RECORD_RUN_DIR/raw/$f")" -ge 2 ] \
     || fail 12 "core stream raw/$f missing or under 2 lines"
 done
 note "OK  core streams present with data"
 
-# 13 — client-summed filesystem-side rate is present and non-zero
-python3 - "$RECORD_RUN_DIR/results.json" <<'EOF' || fail 13 "weka_stats_client absent, or its client-summed Read+Write rates are zero"
+# 13 — the leg's client filesystem-side rate is present and non-zero, extracted
+# by the SAME helper the canary uses, so this asserts the real consumption path.
+python3 - "$RECORD_RUN_DIR/results.json" "$LEG" "$REPO/scripts" <<'EOF' || fail 13 "client filesystem-side series absent, or its read+write rates are zero (leg's pattern-#1 series)"
 import json, sys
+sys.path.insert(0, sys.argv[3])
+from wsi_agg_helper import client_rate_metrics
 d = json.load(open(sys.argv[1]))
-c = d["sources"].get("weka_stats_client") or {}
-if not c.get("present"):
-    sys.exit(1)
-m = c.get("metrics") or {}
-rw = (m.get("Read_client_sum") or {}).get("max", 0) + (m.get("Write_client_sum") or {}).get("max", 0)
+rm = client_rate_metrics(d, sys.argv[2])
+rw = (rm.get("app_read") or 0) + (rm.get("app_write") or 0)
 sys.exit(0 if rw > 0 else 1)
 EOF
-note "OK  client-summed filesystem-side rate non-zero"
+note "OK  client filesystem-side rate non-zero"
 
 # 14 — every local raw/ file is in S3 after a run-mode sync
 "$REPO/scripts/sync-to-s3.sh" --mode run --run-dir "$RECORD_RUN_DIR" >/dev/null \

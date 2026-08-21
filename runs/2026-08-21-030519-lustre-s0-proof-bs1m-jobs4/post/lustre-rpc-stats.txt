@@ -1,0 +1,288 @@
+osc.krvlrbev-OST0000-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281544.369110799 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281544.369110799 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          1   0   0
+128:		         0   0   0   |          0   0   0
+256:		     16087 100 100   |      16495  99 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		      5371  33  33   |       6367  38  38
+2:		      6135  38  71   |       6038  36  75
+3:		      3251  20  91   |       2916  17  92
+4:		      1060   6  98   |        928   5  98
+5:		       235   1  99   |        221   1  99
+6:		        33   0  99   |         23   0  99
+7:		         2   0 100   |          3   0 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		        43   0   0   |         44   0   0
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		        43   0   0   |         45   0   0
+512:		        86   0   1   |         88   0   1
+1024:		       172   1   2   |        176   1   2
+2048:		       344   2   4   |        352   2   4
+4096:		      3326  20  24   |       3423  20  25
+8192:		      6880  42  67   |       7062  42  67
+16384:		      5193  32 100   |       5306  32 100
+osc.krvlrbev-OST0001-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281544.369170690 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281544.369170690 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		     16132 100 100   |      16743 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		      5315  32  32   |       6513  38  38
+2:		      6128  37  70   |       6124  36  75
+3:		      3244  20  91   |       2965  17  93
+4:		      1162   7  98   |        967   5  98
+5:		       253   1  99   |        156   0  99
+6:		        27   0  99   |         17   0  99
+7:		         3   0 100   |          1   0 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		        43   0   0   |         46   0   0
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		        43   0   0   |         46   0   0
+512:		        86   0   1   |         92   0   1
+1024:		       172   1   2   |        184   1   2
+2048:		       344   2   4   |        368   2   4
+4096:		      3371  20  25   |       3501  20  25
+8192:		      6880  42  67   |       7127  42  67
+16384:		      5193  32 100   |       5379  32 100
+osc.krvlrbev-OST0002-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281544.369212541 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281544.369212541 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		     11894 100 100   |      12205 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		      5519  46  46   |       6469  53  53
+2:		      4693  39  85   |       4575  37  90
+3:		      1501  12  98   |       1092   8  99
+4:		       181   1 100   |         69   0 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         1   0   0   |          1   0   0
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		         1   0   0   |          1   0   0
+512:		         2   0   0   |          2   0   0
+1024:		         4   0   0   |          4   0   0
+2048:		         8   0   0   |          8   0   0
+4096:		      2654  22  22   |       2736  22  22
+8192:		      5536  46  68   |       5687  46  69
+16384:		      3688  31 100   |       3766  30 100
+osc.krvlrbev-OST0003-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281544.369246102 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281544.369246102 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		     16232 100 100   |      16641 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		      5311  32  32   |       6386  38  38
+2:		      6248  38  71   |       6372  38  76
+3:		      3320  20  91   |       2854  17  93
+4:		      1084   6  98   |        852   5  98
+5:		       241   1  99   |        157   0  99
+6:		        24   0  99   |         19   0  99
+7:		         4   0 100   |          1   0 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		        44   0   0   |         45   0   0
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		        44   0   0   |         45   0   0
+512:		        88   0   1   |         90   0   1
+1024:		       176   1   2   |        180   1   2
+2048:		       352   2   4   |        360   2   4
+4096:		      3387  20  25   |       3485  20  25
+8192:		      6912  42  67   |       7094  42  67
+16384:		      5229  32 100   |       5342  32 100
+osc.krvlrbev-OST0004-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281544.369280443 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281544.369280443 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		     11832 100 100   |      12243 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		      5413  45  45   |       6519  53  53
+2:		      4792  40  86   |       4537  37  90
+3:		      1476  12  98   |       1101   8  99
+4:		       151   1 100   |         86   0 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		         0   0   0   |          1   0   0
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		         0   0   0   |          1   0   0
+512:		         0   0   0   |          2   0   0
+1024:		         0   0   0   |          4   0   0
+2048:		         0   0   0   |          8   0   0
+4096:		      2640  22  22   |       2737  22  22
+8192:		      5504  46  68   |       5687  46  68
+16384:		      3688  31 100   |       3803  31 100
+osc.krvlrbev-OST0005-osc-ffff8a0c24d60000.rpc_stats=
+snapshot_time:            1787281544.369315644 secs.nsecs
+start_time:               0.000000000 secs.nsecs
+elapsed_time:             1787281544.369315644 secs.nsecs
+read RPCs in flight:  0
+write RPCs in flight: 0
+pending write pages:  0
+pending read pages:   0
+
+			read			write
+pages per rpc         rpcs   % cum % |       rpcs   % cum %
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		     16189 100 100   |      16596 100 100
+
+			read			write
+rpcs in flight        rpcs   % cum % |       rpcs   % cum %
+1:		      5376  33  33   |       6459  38  38
+2:		      6258  38  71   |       6307  38  76
+3:		      3309  20  92   |       2819  16  93
+4:		      1039   6  98   |        822   4  98
+5:		       190   1  99   |        176   1  99
+6:		        17   0 100   |         12   0  99
+7:		         0   0 100   |          1   0 100
+
+			read			write
+offset                rpcs   % cum % |       rpcs   % cum %
+0:		        44   0   0   |         45   0   0
+1:		         0   0   0   |          0   0   0
+2:		         0   0   0   |          0   0   0
+4:		         0   0   0   |          0   0   0
+8:		         0   0   0   |          0   0   0
+16:		         0   0   0   |          0   0   0
+32:		         0   0   0   |          0   0   0
+64:		         0   0   0   |          0   0   0
+128:		         0   0   0   |          0   0   0
+256:		        44   0   0   |         45   0   0
+512:		        88   0   1   |         90   0   1
+1024:		       176   1   2   |        180   1   2
+2048:		       352   2   4   |        360   2   4
+4096:		      3343  20  24   |       3440  20  25
+8192:		      6912  42  67   |       7094  42  67
+16384:		      5230  32 100   |       5342  32 100

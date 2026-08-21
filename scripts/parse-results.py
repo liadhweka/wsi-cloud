@@ -9,6 +9,8 @@ wrapper so improving the parser does NOT require re-running the benchmark.
 
 Reads:
     raw/weka-stats.csv        WEKA per-process per-second (client rows summed per timestamp)
+    raw/lustre-stats.log      verbatim 1 Hz llite/osc/mdc cumulative stats blocks (Lustre leg)
+    raw/lnet-stats.log        verbatim 1 Hz `lnetctl net show -v 4` blocks (Lustre leg)
     raw/nvidia-smi.csv        GPU per-second
     raw/netdev-counters.csv   kernel NIC cumulative counters per-second
     raw/rdma-counters.csv     RDMA/EFA device counters (absent -> header-only)
@@ -385,6 +387,246 @@ def derive_weka_client(path: Path):
     }
 
 
+# ---- Lustre client stats (Lustre leg, D-4) ----------------------------------
+# raw/lustre-stats.log holds verbatim 1 Hz blocks of
+#   lctl get_param llite.*.stats osc.*OST*.stats mdc.*MDT*.stats
+# each stamped "=== <iso ts>" by the recorder. Stat lines are CUMULATIVE since
+# mount:  <key> <count> samples [<unit>] [<min> <max> <sum> [<sumsq>]]
+# (format derived live on the Leg-B build, 2026-08-21). A key appears only after
+# its first use, so an absent key reads as cumulative 0; min/max/sum are absent
+# on count-only lines (e.g. "ioctl 3 samples [reqs]"). Rates come from
+# consecutive block pairs divided by the real dt, exactly like _delta_aggregate,
+# and negative deltas (reset/remount) drop the pair rather than pollute.
+
+_LUSTRE_PARAM = re.compile(r"^(llite|osc|mdc)\.(\S+)\.stats=$")
+_LUSTRE_STAT = re.compile(
+    r"^(\w+)\s+(\d+) samples \[(\w+)\](?:\s+(-?\d+)\s+(-?\d+)\s+(-?\d+))?")
+_LUSTRE_TARGET = re.compile(r"(OST[0-9a-fA-F]+|MDT[0-9a-fA-F]+)")
+
+
+def _iso_epoch(ts):
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _parse_lustre_blocks(path: Path):
+    """[(epoch, {"llite": {key: (count, sum|None, unit)},
+                 "osc": {tgt: {...}}, "mdc": {tgt: {...}}}), ...]"""
+    if not path.exists() or path.stat().st_size == 0:
+        return []
+    blocks = []
+    ts, tree, cur = None, None, None
+    with path.open(errors="replace") as f:
+        for line in f:
+            line = line.rstrip("\n")
+            if line.startswith("=== "):
+                if ts is not None and tree is not None:
+                    blocks.append((ts, tree))
+                ts = _iso_epoch(line[4:].strip())
+                tree = {"llite": {}, "osc": {}, "mdc": {}}
+                cur = None
+                continue
+            if tree is None:
+                continue
+            m = _LUSTRE_PARAM.match(line.strip())
+            if m:
+                sect, inst = m.group(1), m.group(2)
+                if sect == "llite":
+                    cur = tree["llite"]
+                else:
+                    tm = _LUSTRE_TARGET.search(inst)
+                    tgt = tm.group(1) if tm else inst
+                    cur = tree[sect].setdefault(tgt, {})
+                continue
+            if cur is None:
+                continue
+            sm = _LUSTRE_STAT.match(line.strip())
+            if sm:
+                key, count, unit = sm.group(1), int(sm.group(2)), sm.group(3)
+                total = int(sm.group(6)) if sm.group(6) is not None else None
+                cur[key] = (count, total, unit)
+    if ts is not None and tree is not None:
+        blocks.append((ts, tree))
+    return [(t, tr) for t, tr in blocks if t is not None]
+
+
+def _lustre_rate_metrics(blocks, getter):
+    """Aggregated per-second rates for every cumulative counter one getter
+    exposes. getter(tree) -> {key: (count, sum|None, unit)}. For [bytes] keys
+    emits <key>_per_sec (BYTE rate from the cumulative sum) plus
+    <key>_calls_per_sec (call rate); for the rest <key>_per_sec is the count
+    rate. Absent key = cumulative 0 (not yet used, live-derived semantics)."""
+    keys = {}
+    for _, tree in blocks:
+        for k, (_, total, unit) in (getter(tree) or {}).items():
+            keys.setdefault(k, unit)
+    series = {}
+    prev_t, prev_d = None, None
+    for t, tree in blocks:
+        d = getter(tree) or {}
+        if prev_t is not None:
+            dt = t - prev_t
+            if dt > 0:
+                for k, unit in keys.items():
+                    c0, s0, _ = prev_d.get(k, (0, 0, unit))
+                    c1, s1, _ = d.get(k, (0, 0, unit))
+                    if unit == "bytes":
+                        if (s1 or 0) >= (s0 or 0):
+                            series.setdefault(f"{k}_per_sec", []).append(((s1 or 0) - (s0 or 0)) / dt)
+                        if c1 >= c0:
+                            series.setdefault(f"{k}_calls_per_sec", []).append((c1 - c0) / dt)
+                    elif c1 >= c0:
+                        series.setdefault(f"{k}_per_sec", []).append((c1 - c0) / dt)
+                series.setdefault("_dt", []).append(dt)
+        prev_t, prev_d = t, d
+    metrics = {}
+    for k, vals in series.items():
+        if k == "_dt":
+            continue
+        agg = aggregate(vals)
+        if agg is not None:
+            metrics[k] = agg
+    dts = series.get("_dt", [])
+    if dts:
+        metrics["_sample_interval_s"] = {"count": len(dts), "mean": sum(dts) / len(dts),
+                                         "min": min(dts), "max": max(dts)}
+    return metrics
+
+
+def derive_lustre_sources(path: Path):
+    """(lustre_stats_client, lustre_llite, lustre_osc, lustre_mdc) from
+    raw/lustre-stats.log.
+
+    lustre_stats_client — the QUOTABLE filesystem-side series (pattern #1) — is
+    built from the OSC layer summed across OSTs, NOT from llite: the 2026-08-21
+    Leg-B recording proof showed llite read_bytes/write_bytes are blind to
+    libaio traffic (io_submit does not tick them; fio's synchronous layout
+    phase was the only llite movement, while osc and the EFA wire agreed at
+    ratio ~1.002 on the full ~6 GB/s each way). osc read_bytes/write_bytes
+    count every byte the client actually moved to storage, post-page-cache.
+    lustre_llite keeps the VFS-level view (cache analysis; its shortfall vs osc
+    is client-cache service plus the aio blind spot — diagnostic, never
+    quoted as the cell's rate). lustre_osc is per-OST: the per-target spread is
+    the striping-distribution evidence (D12/L2), '_total' sums the cumulative
+    counters across OSTs per tick before taking rates. lustre_mdc is per-MDT
+    metadata-RPC rates. NOTE: osc stats' ost_read/ost_write keys are RPC
+    LATENCY stats ([usec]); the byte truth is osc's read_bytes/write_bytes."""
+    blocks = _parse_lustre_blocks(path)
+    absent = {"present": False}
+    if len(blocks) < 2:
+        return absent, absent, absent, absent
+
+    llite = {"present": True, "tick_count": len(blocks),
+             "note": "llite (client VFS-level) rates — DIAGNOSTIC: blind to libaio "
+                     "traffic (proven 2026-08-21); llite-vs-osc shortfall is "
+                     "client-cache + aio-path evidence, never the cell's rate",
+             "metrics": _lustre_rate_metrics(blocks, lambda tr: tr["llite"])}
+
+    def targets(sect):
+        seen = set()
+        for _, tree in blocks:
+            seen.update(tree[sect].keys())
+        return sorted(seen)
+
+    def total_getter(sect):
+        def g(tree):
+            out = {}
+            for tgt in tree[sect].values():
+                for k, (c, s, u) in tgt.items():
+                    c0, s0, _ = out.get(k, (0, 0, u))
+                    out[k] = (c0 + c, (s0 or 0) + (s or 0) if s is not None or s0 else None, u)
+            return out
+        return g
+
+    osc = {"present": True,
+           "note": "per-OST RPC-layer rates; the per-target spread is the striping evidence (D12)",
+           "targets": {t: _lustre_rate_metrics(blocks, lambda tr, t=t: tr["osc"].get(t))
+                       for t in targets("osc")}}
+    total = {}
+    if osc["targets"]:
+        total = _lustre_rate_metrics(blocks, total_getter("osc"))
+        osc["targets"]["_total"] = total
+    mdc = {"present": True,
+           "note": "per-MDT metadata-RPC rates",
+           "targets": {t: _lustre_rate_metrics(blocks, lambda tr, t=t: tr["mdc"].get(t))
+                       for t in targets("mdc")}}
+    if mdc["targets"]:
+        mdc["targets"]["_total"] = _lustre_rate_metrics(blocks, total_getter("mdc"))
+
+    client_metrics = {k: total[k] for k in
+                      ("read_bytes_per_sec", "write_bytes_per_sec",
+                       "read_bytes_calls_per_sec", "write_bytes_calls_per_sec",
+                       "_sample_interval_s") if k in total}
+    client = {"present": bool(client_metrics), "tick_count": len(blocks),
+              "note": "osc read/write bytes summed across OSTs — every byte this "
+                      "client moved to storage (post-page-cache, counts aio; the "
+                      "quotable filesystem-side series for this cell); "
+                      "*_calls_per_sec are RPC rates",
+              "metrics": client_metrics}
+    return client, llite, osc, mdc
+
+
+def derive_lnet_stats(path: Path):
+    """raw/lnet-stats.log: verbatim 1 Hz `lnetctl net show -v 4` blocks, stamped
+    "=== <iso ts>". Per net type, the NIs' statistics counters (send_count /
+    recv_count / drop_count — unique key names in the -v 4 YAML, live-derived
+    2026-08-21) are summed per block, then rated across block pairs. This is the
+    per-cell transport proof: data moving with the efa net near-flat is exactly
+    the silent D16 failure."""
+    if not path.exists() or path.stat().st_size == 0:
+        return {"present": False}
+    blocks = []
+    ts, nets, cur_net = None, None, None
+    with path.open(errors="replace") as f:
+        for line in f:
+            s = line.strip()
+            if s.startswith("=== "):
+                if ts is not None:
+                    blocks.append((ts, nets))
+                ts = _iso_epoch(s[4:])
+                nets, cur_net = {}, None
+                continue
+            if nets is None:
+                continue
+            if s.startswith("- net type:"):
+                cur_net = s.split(":", 1)[1].strip()
+                nets.setdefault(cur_net, {"send_count": 0, "recv_count": 0, "drop_count": 0})
+                continue
+            if cur_net:
+                for key in ("send_count", "recv_count", "drop_count"):
+                    if s.startswith(f"{key}:"):
+                        try:
+                            nets[cur_net][key] += int(s.split(":", 1)[1])
+                        except ValueError:
+                            pass
+    if ts is not None:
+        blocks.append((ts, nets))
+    blocks = [(t, n) for t, n in blocks if t is not None]
+    if len(blocks) < 2:
+        return {"present": False}
+    out = {"present": True, "tick_count": len(blocks),
+           "note": "per-net LNet message rates — the per-cell transport proof (D16)",
+           "nets": {}}
+    net_names = set()
+    for _, n in blocks:
+        net_names.update(n.keys())
+    for net in sorted(net_names - {"lo"}):
+        series = {k: [] for k in ("send_count", "recv_count", "drop_count")}
+        for (t0, n0), (t1, n1) in zip(blocks, blocks[1:]):
+            dt = t1 - t0
+            if dt <= 0:
+                continue
+            for k in series:
+                d = n1.get(net, {}).get(k, 0) - n0.get(net, {}).get(k, 0)
+                if d >= 0:
+                    series[k].append(d / dt)
+        out["nets"][net] = {f"{k}_per_sec": agg for k, vals in series.items()
+                            if (agg := aggregate(vals)) is not None}
+    return out
+
+
 def parse_fio_from_log(cmd_log: Path):
     """If cmd.log contains fio's --output-format=json+ output, extract the
     final complete JSON object and pull out the headline numbers."""
@@ -476,6 +718,16 @@ def main():
     # itself a check that the filter matched.
     results["sources"]["weka_stats"]        = summarize_csv(raw / "weka-stats.csv")
     results["sources"]["weka_stats_client"] = derive_weka_client(raw / "weka-stats.csv")
+    # The Lustre-leg trio (llite client view / per-OST RPC layer / per-MDT
+    # metadata) plus the LNet transport proof — present:False on the WEKA leg,
+    # exactly as the weka sources read on Lustre. Keeping both sets always
+    # emitted keeps results.json's shape leg-invariant for the aggregators.
+    lus_client, lus_llite, lus_osc, lus_mdc = derive_lustre_sources(raw / "lustre-stats.log")
+    results["sources"]["lustre_stats_client"] = lus_client
+    results["sources"]["lustre_llite"] = lus_llite
+    results["sources"]["lustre_osc"] = lus_osc
+    results["sources"]["lustre_mdc"] = lus_mdc
+    results["sources"]["lnet"] = derive_lnet_stats(raw / "lnet-stats.log")
     results["sources"]["nvidia_smi"]   = summarize_csv(raw / "nvidia-smi.csv")
     results["sources"]["netdev_counters"] = derive_netdev_rates(raw / "netdev-counters.csv")
     results["sources"]["rdma_counters"]   = derive_rdma_rates(raw / "rdma-counters.csv")

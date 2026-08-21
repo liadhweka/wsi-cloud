@@ -141,9 +141,12 @@ def extract_cell_summary(run_dir: Path):
     out["rdma_rcv_bytes_sustained"] = max_rcv
     out["rdma_rcv_dev"] = max_rcv_dev
 
-    # Sanity: weka_stats present?
+    # Sanity: the leg's own fs-side stream present? (the other leg's column
+    # reads 0 by construction — results.json is leg-invariant in shape)
     wk = (d.get("sources") or {}).get("weka_stats") or {}
     out["weka_stats_rows"] = wk.get("row_count", 0)
+    ls = (d.get("sources") or {}).get("lustre_stats_client") or {}
+    out["lustre_stats_ticks"] = ls.get("tick_count", 0)
 
     out["status"] = "OK"
     return out

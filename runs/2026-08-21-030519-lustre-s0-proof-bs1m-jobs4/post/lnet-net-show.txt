@@ -1,0 +1,200 @@
+net:
+    - net type: lo
+      local NI(s):
+        - nid: 0@lo
+          status: up
+          statistics:
+              send_count: 0
+              recv_count: 0
+              drop_count: 0
+          udsp info:
+              net priority: -1
+              nid priority: -1
+          sent_stats:
+              put: 0
+              get: 0
+              reply: 0
+              ack: 0
+              hello: 0
+          received_stats:
+              put: 0
+              get: 0
+              reply: 0
+              ack: 0
+              hello: 0
+          dropped_stats:
+              put: 0
+              get: 0
+              reply: 0
+              ack: 0
+              hello: 0
+          health stats:
+              fatal_error: 0
+              health value: 0
+              interrupts: 0
+              dropped: 0
+              aborted: 0
+              no route: 0
+              timeouts: 0
+              error: 0
+              ping_count: 0
+              next_ping: 0
+          tunables:
+              peer_timeout: 0
+              peer_credits: 0
+              peer_buffer_credits: 0
+              credits: 0
+          lnd tunables:
+          dev cpt: 0
+          CPT: "[0,1]"
+    - net type: tcp
+      local NI(s):
+        - nid: 10.1.1.251@tcp
+          status: up
+          interfaces:
+              0: enp71s0
+          statistics:
+              send_count: 51092
+              recv_count: 51084
+              drop_count: 0
+          udsp info:
+              net priority: -1
+              nid priority: -1
+          sent_stats:
+              put: 51061
+              get: 31
+              reply: 0
+              ack: 0
+              hello: 0
+          received_stats:
+              put: 51033
+              get: 10
+              reply: 35
+              ack: 6
+              hello: 0
+          dropped_stats:
+              put: 0
+              get: 0
+              reply: 0
+              ack: 0
+              hello: 0
+          health stats:
+              fatal_error: 0
+              health value: 1000
+              interrupts: 0
+              dropped: 0
+              aborted: 0
+              no route: 0
+              timeouts: 0
+              error: 0
+              ping_count: 0
+              next_ping: 0
+          tunables:
+              peer_timeout: 180
+              peer_credits: 8
+              peer_buffer_credits: 0
+              credits: 2560
+          lnd tunables:
+              conns_per_peer: 1
+          dev cpt: 0
+          CPT: "[0,1]"
+    - net type: efa
+      local NI(s):
+        - nid: 1.251.92.0@efa
+          status: up
+          interfaces:
+              0: efa_1
+          statistics:
+              send_count: 189044
+              recv_count: 234550
+              drop_count: 0
+          udsp info:
+              net priority: 0
+              nid priority: -1
+          sent_stats:
+              put: 189041
+              get: 3
+              reply: 0
+              ack: 0
+              hello: 0
+          received_stats:
+              put: 189041
+              get: 0
+              reply: 45509
+              ack: 0
+              hello: 0
+          dropped_stats:
+              put: 0
+              get: 0
+              reply: 0
+              ack: 0
+              hello: 0
+          health stats:
+              fatal_error: 0
+              health value: 1000
+              interrupts: 0
+              dropped: 0
+              aborted: 0
+              no route: 0
+              timeouts: 0
+              error: 0
+              ping_count: 0
+              next_ping: 0
+          tunables:
+              peer_timeout: 200
+              peer_credits: 32
+              peer_buffer_credits: 0
+              credits: 256
+          lnd tunables:
+              nqps: 8
+          dev cpt: 1
+          CPT: "[1]"
+        - nid: 1.251.91.0@efa
+          status: up
+          interfaces:
+              0: efa_0
+          statistics:
+              send_count: 189722
+              recv_count: 235140
+              drop_count: 0
+          udsp info:
+              net priority: 0
+              nid priority: -1
+          sent_stats:
+              put: 189719
+              get: 3
+              reply: 0
+              ack: 0
+              hello: 0
+          received_stats:
+              put: 189719
+              get: 0
+              reply: 45421
+              ack: 0
+              hello: 0
+          dropped_stats:
+              put: 0
+              get: 0
+              reply: 0
+              ack: 0
+              hello: 0
+          health stats:
+              fatal_error: 0
+              health value: 1000
+              interrupts: 0
+              dropped: 0
+              aborted: 0
+              no route: 0
+              timeouts: 0
+              error: 0
+              ping_count: 0
+              next_ping: 0
+          tunables:
+              peer_timeout: 200
+              peer_credits: 32
+              peer_buffer_credits: 0
+              credits: 256
+          lnd tunables:
+              nqps: 8
+          dev cpt: 0
+          CPT: "[0]"

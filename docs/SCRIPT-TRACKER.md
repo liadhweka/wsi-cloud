@@ -33,7 +33,7 @@ for a valid cell.
 
 | # | Work | Scope | Why it can't be done yet |
 |---|---|---|---|
-| **D-4** | **Per-filesystem recording adapters — WEKA-leg recorder half DONE; remaining: the shared aggregation helper, and the Lustre half on Leg B** | the aggregators' filesystem-side parsers (helper); `record-run.sh` + `parse-results.py` (Lustre half) | **Done on the Leg-A instance against live streams:** `record-run.sh` now carries a per-`$FS` recorder set and required-stream list, the INCOMPLETE rule evaluates against the leg's own list, and a Stage-0 cell records `OK` with the WEKA primaries live (verified: client-summed WEKA-side vs fio app-level agree within ~5%). `parse-results.py` emits `weka_stats_client` — the pattern-#1 client-filtered per-timestamp-summed series — beside the whole-stream context aggregates. The wrapper **refuses `--fs lustre`** until the Lustre recorder set is written against the live `/proc/fs/lustre` + `lctl get_param` (`osc.*.stats` / `llite.*.stats`) streams on the provisioned Leg-B cluster — never a recalled format. **Still deferred:** the **shared per-leg schema helper** (one module the aggregators import) replacing the per-file filesystem-side parsers; B-1's `_reserved_cores` folds into it; it owns **metric-key naming** (normalize the `non_dpdk_*` / `agg_cpu_busy_ex_dpdk_*` keys to leg-neutral names while no sweep exists), groups rep-indexed runs (**D18**) reporting **median + spread**, computes the stability-canary noise band per leg, and **reconciles declared vs achieved cache state per cell** (**D13**) — a declaration without its achieved evidence is marked and never quoted as its declared regime; the Lustre-side evidence source gets named during the Leg-B build. Capture note: flag-less `sar -o` verified on this instance's sysstat — all converted categories populated on the Stage-0 smoke |
+| **D-4** | **Per-filesystem recording adapters — BOTH recorder halves DONE against each leg's live streams (WEKA on Leg A; Lustre on the 2026-08-21 Leg-B build); the shared helper is BUILT. Remaining: the head-to-head `--fs` pivot column, and naming the Lustre cold-cell cache-evidence source** | `aggregate-sweep.py` + the per-stage aggregators (pivot); the Leg-B calibration session (cache evidence) | **Recorder halves:** `record-run.sh` carries a per-`$FS` recorder set and required-stream list and the INCOMPLETE rule evaluates against the leg's own list; each leg's set was written against its instance's live streams and proven by a stage-0 recording-proof cell (WEKA: client-summed WEKA-side vs fio app-level within ~5%; Lustre: wire/osc = 1.002 per direction on ~6 GB/s each way, all `prove-recording.sh` assertions passed). `parse-results.py` emits `weka_stats_client` on Leg A and the `lustre_stats_client`/`lustre_llite`/`lustre_osc`/`lustre_mdc`/`lnet` set on Leg B (osc-derived quotable series — llite is aio-blind; see the parser entry). The consistency relation derives per leg from recorded provisioning (`WEKA_EC_SCHEME`; `LUSTRE_STRIPE_LAYOUT` via `parse_stripe_layout`) — `wsi_agg_helper.py` holds it plus D18 rep grouping, D13 reconciliation, and the canary evaluator. **Remaining:** (1) the aggregators still don't pivot on `metadata.json`'s `fs` field to emit head-to-head columns — the deliverable IS the cross-filesystem delta, so this lands before the first cross-leg synthesis (prove-recording SKIPs its assertion until then); (2) the Lustre cold-cell achieved-evidence source for D13 (client page-cache drop is leg-neutral, but the lustre client also holds ldlm/osc caches — decide what "cold" requires at R2's band calibration, where cold cells first matter). Capture note: flag-less `sar -o` verified per instance — all converted categories populated on each stage-0 smoke |
 | **D-5** | **Per-filesystem consistency relation — WEKA derivation + evaluator BUILT; remaining: band calibration on the post-switch cluster, and the Lustre half on Leg B** | `wsi_agg_helper.py` (`check <run-dir>`) | The WEKA relation is derived and written down (helper docstring + Stage-1 register): clients place EC stripes on backends directly, so write wire/app = (D+P)/D from `WEKA_EC_SCHEME` and read = 1.0 — anchored by the 2026-08-15 Stage-0 probes (5+2: write 1.455 = 1.40 × ~1.04 protocol; read 1.034). **Bands are loaded from `runs/.leg-state/$LEG/canary-bands.json` — absent, the canary exits non-zero as UNCALIBRATED rather than inventing a tolerance. The WEKA leg is CALIBRATED (2026-08-16, `calibrate-canary-bands.sh`, 12 cells on the 6xlarge cluster): anchors reproduce (write 1.456, read 1.042); 4K derived separately (read 1.424, write 1.372 → smallbs_widening 1.366); `check` PASSES end-to-end.** Remaining: chain wiring (D-7 canary-abort — until then run `check` after every sweep by hand); mixed-cell widening needs mixed calibration cells before 1.6; the Lustre relation derives from the actual stripe layout on Leg B (the helper refuses until then) |
 | **D-6** | **cuFile path accounting — 4.C recorded source + consumer BUILT; remaining: the Stage-5/6 worker wiring, the recorded Phase-0 verification cell, and the INCOMPLETE-requirement wiring** | `wsi_cufile_accounting.py` (new shared module); `read-tiles-kvikio.py` + `aggregate-stage4c-kvikio.py` (done); `train-resnet50-stage5.py` + `extract-features-foundation-stage6.py` (pending); `record-run.sh` (pending, with **D-30**) | **Done:** the shared module snapshots `/proc/driver/nvidia-fs/stats` (live ver-4.0 format), emits the per-cell `path_accounting` split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged ∈ {gds, partial, none, no-reads, unknown-accounting-off}` — plus both kvikio compat fields, because path accounting has **three layers** (kvikio's own compat can serve reads via POSIX without entering cuFile at all — verified live 2026-08-15). `aggregate-stage4c-kvikio.py`'s `gds_engaged` now carries the recorded value (per-process consensus on mp cells; disagreement reports as `mixed(...)`); an accounting-off state reports as unknown, never zero. **The Phase-0 determination ran on the 6xlarge cluster (2026-08-16, `probe-gds-phase0.sh`): no true GDS on WEKA-over-ENA — cuFile = compat/bounce; strict-GDS open refused; outcome + consequences in `Stage-4-Patching.md`.** The INCOMPLETE wiring is DONE (D-30/register D21: `RECORD_KVIKIO_CELL=1` without a recorded split → INCOMPLETE). **The Stage-5 trainer AND Stage-6 extractor wiring are DONE** (same pattern in both: the kvikIO reader accumulates per-rank aligned cuFile bytes, all-reduced; rank 0 holds one cell-global `PathAccounting` window — nvidia-fs deltas are device-global, so it covers all ranks — and emits `path_accounting` into `training-summary.json` / `extraction-summary.json`, which the D-30 wrapper check finds; drivers set `RECORD_KVIKIO_CELL=1` on kvikIO cells only). Smoke-verified live on the Stage-5 cell 2026-08-18. **Remaining:** the nvidia-fs block parser in `parse-results.py`; the pre-cuFile-cell canary requirement (with D-7 — on this leg the known-good signature is bounce-accounting non-zero) |
 | **D-7** | **During-run sync, watchdog, canary-abort** | `record-run.sh` | **Partly done:** `sync-to-s3.sh` exists and `run-leg.sh` syncs after every step. Still needed: per-**cell** sync inside `record-run.sh`, the per-cell watchdog timeout, and making the canary abort the chain |
@@ -130,15 +130,24 @@ realtime` 1 Hz poll (all processes; client rows filtered at parse time), `nvidia
 counters (Diagnostic here except 1.7), RDMA/EFA device counters (header-only where absent, not required on
 this leg), and a **verbatim 1 Hz `/proc/driver/nvidia-fs/stats` capture** (the kernel half of cuFile path
 accounting). Snapshots also capture nvidia-fs params and the cell's cuFile config. `metadata.json` carries
-`fs_transport` from `FS_TRANSPORT`. **Refuses `--fs lustre`** until the Lustre recorder adapter is built on
-Leg B (D-4).
-**⏳ DEFER:** the Lustre recorder half (D-4); cuFile path accounting's reader half + the kvikIO-cell
+`fs_transport` from `FS_TRANSPORT`. **The Lustre-leg set (live-derived on the 2026-08-21 Leg-B build,
+capture-verified by its stage-0 proof):** verbatim 1 Hz `lustre-stats.log` (cumulative llite/osc/mdc
+counters via one `lctl get_param`) and `lnet-stats.log` (`lnetctl net show -v 4` — the per-cell transport
+proof, D16), plus the EFA `rdma-counters.csv` promoted to REQUIRED (the client NIC is the data path there).
+The stats live in root-only debugfs and lnetctl needs `/dev/lnet`, so each lustre loop runs under ONE
+`sudo -n` and stops on a sentinel file (an unprivileged cleanup cannot signal a root process; the loop also
+exits if the wrapper dies, so a kill -9 cannot orphan a root writer). Lustre snapshots add `lfs df`,
+`getstripe -d` (the D12 layout), `lctl dl`, health, cumulative stats / rpc_stats / read_ahead_stats
+(whole-run deltas as defence in depth), the D-11 tunables, and the LNet state.
+**⏳ DEFER:** cuFile path accounting's reader half + the kvikIO-cell
 requirement wiring (D-6); during-run S3 sync, per-cell watchdog, canary-abort (D-7).
 
 ### `wsi_agg_helper.py` — the shared per-leg aggregation helper (D-4 remainder, D-5, D-13, D-18)
 **What.** One importable module (stdlib-only, same directory as the aggregators) holding the per-leg logic:
-the **consistency relation** (WEKA: (D+P)/D writes, 1.0 reads, from `WEKA_EC_SCHEME`; Lustre: refuses until
-built on Leg B), the **canary evaluator** (`check <run-dir>` — verdict per direction with every widening
+the **consistency relation** (WEKA: (D+P)/D writes, 1.0 reads, from `WEKA_EC_SCHEME`; Lustre: derived from
+the RECORDED stripe layout via `parse_stripe_layout` — raid0-only components, so wire/app = mirror_count = 1.0
+both directions; refuses a missing, mirrored or non-raid0 layout rather than assuming — from
+`LUSTRE_STRIPE_LAYOUT`), the **canary evaluator** (`check <run-dir>` — verdict per direction with every widening
 named; bands from `runs/.leg-state/$LEG/canary-bands.json`, and **UNCALIBRATED exits non-zero** rather than
 inventing a tolerance), the pattern-#1 **client series**, **D18 rep grouping** (median + spread;
 `single_shot` flagged) and the **stability noise band**, **D13 cache reconciliation** (`cache <run-dir>` —
@@ -259,9 +268,17 @@ sub-second slip is quantised away; that residual is an open item, not silently a
 Emits **`weka_stats_client`** — the pattern-#1 series: `Mode=="client"` rows only, summed across the
 client's processes per timestamp (latencies and CPU% averaged, since a latency does not sum) — the quotable
 filesystem-side number; the whole-stream `weka_stats` aggregates stay alongside as context, and divergence
-between the two is itself a check that the filter matched. `nvidia-fs-stats.log` is presence-only until its
+between the two is itself a check that the filter matched. **Lustre sources (live-derived 2026-08-21):**
+`lustre_stats_client` — the quotable series — is the **osc** bytes summed across OSTs (every byte the client
+moved to storage, aio included); **`lustre_llite` is DIAGNOSTIC: llite read_bytes/write_bytes are blind to
+libaio traffic** (proven on the stage-0 proof — fio's aio phase moved osc+wire ~6 GB/s each way, wire/osc
+1.002, while llite ticked only the synchronous layout writes), its shortfall vs osc doubling as
+cache/aio-path evidence; `lustre_osc` per-OST rates are the striping-distribution evidence (D12);
+`lustre_mdc` per-MDT metadata-RPC rates; `lnet` per-net message rates are the per-cell transport proof (D16).
+Both legs' source keys are always emitted (present:false on the other leg) so results.json stays
+leg-invariant in shape. `nvidia-fs-stats.log` is presence-only until its
 parser is written against the enabled-under-load format (D-6).
-**⏳ DEFER:** the Lustre source schemas (D-4, Leg B); the nvidia-fs block parser (D-6).
+**⏳ DEFER:** the nvidia-fs block parser (D-6).
 
 ### `aggregate-sweep.py` — generic sweep aggregator
 **What.** Rolls N run dirs into a summary CSV, including block-size × concurrency grids.
@@ -384,10 +401,13 @@ step is currently MISSING by design: 6.B.1 (needs the corpus-size decision, the 
 
 ### `prove-recording.sh` — the scripted Stage-0 recording proof (was `D-20`)
 **What.** Runs one real ~15 s fio cell through `record-run.sh` and asserts, each with a named non-zero
-exit: the cell recorded and `INDEX.md` says OK; the leg's core streams carry data; `results.json` has a
-**non-zero client-summed filesystem-side rate** (a present-but-zero series means the client filter matched
-nothing); every `raw/` file is verifiably in S3 after a run-mode sync; and the generic aggregator emits the
-cell's row (the proof cell is named `-bs1m-jobs4` so `aggregate-sweep.py` can parse it).
+exit: the cell recorded and `INDEX.md` says OK; the leg's core streams carry data (per-`$LEG` list — the
+lustre list adds `lustre-stats.log`, `lnet-stats.log` and `rdma-counters.csv`); `results.json` has a
+**non-zero client filesystem-side rate**, extracted via `wsi_agg_helper.client_rate_metrics` — the same
+per-leg path the canary consumes, so the assertion exercises the real plumbing (a present-but-zero series
+means the client series matched nothing); every `raw/` file is verifiably in S3 after a run-mode sync; and
+the generic aggregator emits the cell's row (the proof cell is named `-bs1m-jobs4` so `aggregate-sweep.py`
+can parse it).
 **Why.** The rebuild checklist's five eyeball checks are where one gets skipped; this runs on every rebuild
 before wallclock is spent.
 **Caveats.** Three assertions print **loud SKIPs until their subjects exist**: the mechanical pre-cell

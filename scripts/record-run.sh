@@ -131,19 +131,11 @@ fi
 
 mkdir -p "$RUN_DIR/pre" "$RUN_DIR/post" "$RUN_DIR/raw/.pids" "$RUN_DIR/plots"
 
-# Per-filesystem recorder set (D-4). The WEKA set below is written against this
-# instance's live streams. The Lustre set must be written against the live
-# /proc/fs/lustre and `lctl get_param` streams on the provisioned Leg-B cluster —
-# never from a recalled format — so until that build exists, recording a lustre
-# cell would produce a run with a hole where that leg's Primary sources belong,
-# which the INCOMPLETE flag would catch only after the wallclock is spent.
-# Refuse up front instead.
-if [[ "$FS" == "lustre" ]]; then
-  echo "FATAL: the Lustre recorder adapter is not built (SCRIPT-TRACKER D-4, Lustre half)." >&2
-  echo "       Build it on the Leg-B instance against the live stats streams, then" >&2
-  echo "       extend the per-leg recorder set and required-stream list here." >&2
-  exit 2
-fi
+# Per-filesystem recorder set (D-4). Each leg's set is written against that
+# instance's LIVE streams, never a recalled format: the WEKA set on the Leg-A
+# instance; the Lustre set on the 2026-08-21 Leg-B build (llite/osc/mdc stats
+# and `lnetctl net show -v 4` shapes derived from the running client, and
+# capture-verified by that build's stage-0 recording proof).
 
 # Kernel netdevs, discovered not named ("capture every device, let analysis pick
 # the active ones"). On the WEKA leg these are Diagnostic — DPDK owns the data
@@ -168,12 +160,35 @@ dump() {
 snapshot() {
   local dir="$1"
 
-  # WEKA cluster state
-  dump "$dir/weka-status.txt"          weka status
-  dump "$dir/weka-cluster.txt"         weka cluster container
-  dump "$dir/weka-alerts.txt"          weka alerts
-  dump "$dir/weka-events.txt"          weka events --num-results 200
-  dump "$dir/weka-version.txt"         weka version current
+  if [[ "$FS" == "weka" ]]; then
+    # WEKA cluster state
+    dump "$dir/weka-status.txt"          weka status
+    dump "$dir/weka-cluster.txt"         weka cluster container
+    dump "$dir/weka-alerts.txt"          weka alerts
+    dump "$dir/weka-events.txt"          weka events --num-results 200
+    dump "$dir/weka-version.txt"         weka version current
+    dump "$dir/proc-mounts-weka.txt"     bash -c 'grep wekafs /proc/mounts'
+  else
+    # Lustre client + file-system state. The stats live in root-only debugfs and
+    # lnetctl needs /dev/lnet, so those run under sudo -n (passwordless on this
+    # box by build); lfs runs unprivileged. The cumulative stats / rpc_stats /
+    # read_ahead_stats snapshots give whole-run deltas as defence in depth under
+    # the 1 Hz series, and the getstripe/tunables dumps pin the layout (D12/L2)
+    # and the D-11 set the cell actually ran under.
+    dump "$dir/lfs-df.txt"               lfs df -h
+    dump "$dir/lfs-df-inodes.txt"        lfs df -i
+    dump "$dir/lustre-version.txt"       lctl get_param version
+    dump "$dir/lfs-getstripe-root.txt"   lfs getstripe -d "${FS_MOUNT:-/mnt/lustre}"
+    dump "$dir/lctl-devices.txt"         sudo -n lctl dl
+    dump "$dir/lustre-health.txt"        sudo -n lctl get_param health_check
+    dump "$dir/lustre-stats-cumulative.txt" sudo -n lctl get_param 'llite.*.stats' 'osc.*OST*.stats' 'mdc.*MDT*.stats'
+    dump "$dir/lustre-rpc-stats.txt"     sudo -n lctl get_param 'osc.*OST*.rpc_stats'
+    dump "$dir/lustre-readahead.txt"     sudo -n lctl get_param 'llite.*.read_ahead_stats'
+    dump "$dir/lustre-tunables.txt"      sudo -n lctl get_param 'ldlm.namespaces.*.lru_max_age' 'ldlm.namespaces.*.lru_size' 'osc.*OST*.max_rpcs_in_flight' 'mdc.*.max_rpcs_in_flight' 'mdc.*.max_mod_rpcs_in_flight' 'llite.*.statahead_max' 'llite.*.statahead_agl'
+    dump "$dir/lnet-net-show.txt"        sudo -n lnetctl net show -v 4
+    dump "$dir/lnet-stats-show.txt"      sudo -n lnetctl stats show
+    dump "$dir/proc-mounts-lustre.txt"   bash -c 'grep lustre /proc/mounts'
+  fi
 
   # Host state
   dump "$dir/nvidia-smi-q.txt"         nvidia-smi -q
@@ -185,7 +200,6 @@ snapshot() {
   dump "$dir/uname.txt"                uname -a
   dump "$dir/lscpu.txt"                lscpu
   dump "$dir/free.txt"                 free -h
-  dump "$dir/proc-mounts-weka.txt"     bash -c 'grep wekafs /proc/mounts'
   dump "$dir/fio-version.txt"          fio --version
   dump "$dir/python-version.txt"       python3 --version
 
@@ -305,6 +319,29 @@ EOF
 # Plain-English README at the top of the run dir. Auto-generated; no extra
 # args from the caller. Future humans (or future Claude sessions) can read
 # this and immediately understand what this run was without parsing JSON.
+# The raw/ stream list is per-leg (D-4) — each leg documents its own set.
+if [[ "$FS" == "weka" ]]; then
+  RAW_STREAMS_DOC='  - `weka-stats.csv` — per-process cluster stats, 1 Hz poll (filter `Mode==client` for this client).
+  - `nvidia-smi.csv` — per-GPU per-second.
+  - `sar-{cpu,disk,net,mem,swap,paging,queue,ctxsw}.csv` — host-side categories.
+  - `netdev-counters.csv` — kernel NIC counters (Diagnostic here — DPDK bypasses
+    the kernel — except on 1.7, where the S3 source traffic makes them Primary).
+  - `rdma-counters.csv` — RDMA/EFA device counters; header-only where no such device exists.
+  - `nvidia-fs-stats.log` — verbatim 1 Hz nvidia-fs accounting (cuFile path proof, D8).'
+else
+  RAW_STREAMS_DOC='  - `lustre-stats.log` — verbatim 1 Hz cumulative llite (client VFS) / osc (per-OST
+    RPC) / mdc (per-MDT metadata) stats blocks; the parser derives per-second rates.
+    The quotable client series is the OSC bytes summed across OSTs (llite is blind
+    to libaio traffic — diagnostic only).
+  - `lnet-stats.log` — verbatim 1 Hz `lnetctl net show -v 4` blocks: the per-cell
+    transport proof (D16 — data on the efa net, tcp near-flat).
+  - `rdma-counters.csv` — EFA hw_counters byte/packet rates: the wire-level Primary
+    on this leg (the client NIC IS the data path).
+  - `nvidia-smi.csv` — per-GPU per-second.
+  - `sar-{cpu,disk,net,mem,swap,paging,queue,ctxsw}.csv` — host-side categories.
+  - `netdev-counters.csv` — kernel NIC counters (the tcp/metadata side here).
+  - `nvidia-fs-stats.log` — verbatim 1 Hz nvidia-fs accounting (cuFile path proof, D8).'
+fi
 cat > "$RUN_DIR/0_README.md" <<EOF
 # ${RUN_ID}
 
@@ -332,13 +369,7 @@ ${NOTE:-(no note provided)}
 - \`raw/\` — during-run time series at 1-second resolution. The recorder set is
   per-filesystem (\`docs/RUNBOOK.md\` holds each leg's Primary-vs-Diagnostic
   table). On this leg:
-  - \`weka-stats.csv\` — per-process cluster stats, 1 Hz poll (filter \`Mode==client\` for this client).
-  - \`nvidia-smi.csv\` — per-GPU per-second.
-  - \`sar-{cpu,disk,net,mem,swap,paging,queue,ctxsw}.csv\` — host-side categories.
-  - \`netdev-counters.csv\` — kernel NIC counters (Diagnostic here — DPDK bypasses
-    the kernel — except on 1.7, where the S3 source traffic makes them Primary).
-  - \`rdma-counters.csv\` — RDMA/EFA device counters; header-only where no such device exists.
-  - \`nvidia-fs-stats.log\` — verbatim 1 Hz nvidia-fs accounting (cuFile path proof, D8).
+${RAW_STREAMS_DOC}
 - \`post/\` — same snapshot taken after the run, for delta computation.
 - \`results.json\` — parsed aggregates. Re-runnable any time via \`scripts/parse-results.py <this-dir>\`.
 
@@ -354,25 +385,56 @@ EOF
 log "starting recorders in $RUN_DIR/raw/"
 PIDS_DIR="$RUN_DIR/raw/.pids"
 
-# (1) WEKA stats realtime — `--format csv` returns ONE snapshot of all
-# processes per invocation, NOT a stream. Poll once per second and prepend
-# our own timestamp so we get a real time series.
-WEKA_COLS="node,hostname,role,mode,writeps,writebps,wlatency,readps,readbps,rlatency,ops,cpu,l6recv,l6send,upload,download,rdmarecv,rdmasend"
-{
-  HEADER_PRINTED=0
-  while true; do
-    out=$(weka stats realtime --format csv --raw-units --UTC --output "$WEKA_COLS" 2>/dev/null)
-    if [[ -z "$out" ]]; then sleep 1; continue; fi
-    if (( HEADER_PRINTED == 0 )); then
-      printf "timestamp,%s\n" "$(echo "$out" | head -1)"
-      HEADER_PRINTED=1
-    fi
-    ts=$(date -u +%FT%T.%3NZ)
-    echo "$out" | tail -n +2 | sed "s|^|${ts},|"
-    sleep 1
-  done
-} > "$RUN_DIR/raw/weka-stats.csv" 2> "$RUN_DIR/raw/weka-stats.err" &
-echo $! > "$PIDS_DIR/weka-stats.pid"
+if [[ "$FS" == "weka" ]]; then
+  # (1) WEKA stats realtime — `--format csv` returns ONE snapshot of all
+  # processes per invocation, NOT a stream. Poll once per second and prepend
+  # our own timestamp so we get a real time series.
+  WEKA_COLS="node,hostname,role,mode,writeps,writebps,wlatency,readps,readbps,rlatency,ops,cpu,l6recv,l6send,upload,download,rdmarecv,rdmasend"
+  {
+    HEADER_PRINTED=0
+    while true; do
+      out=$(weka stats realtime --format csv --raw-units --UTC --output "$WEKA_COLS" 2>/dev/null)
+      if [[ -z "$out" ]]; then sleep 1; continue; fi
+      if (( HEADER_PRINTED == 0 )); then
+        printf "timestamp,%s\n" "$(echo "$out" | head -1)"
+        HEADER_PRINTED=1
+      fi
+      ts=$(date -u +%FT%T.%3NZ)
+      echo "$out" | tail -n +2 | sed "s|^|${ts},|"
+      sleep 1
+    done
+  } > "$RUN_DIR/raw/weka-stats.csv" 2> "$RUN_DIR/raw/weka-stats.err" &
+  echo $! > "$PIDS_DIR/weka-stats.pid"
+else
+  # (1L) Lustre client stats, verbatim 1 Hz blocks (D-4): cumulative llite
+  # (client VFS level) / osc (per-OST RPC level) / mdc (per-MDT metadata)
+  # counters; the parser derives rates from consecutive blocks against the
+  # real dt. The stats live in root-only debugfs, so the whole loop runs under
+  # ONE sudo -n. It stops on the sentinel file — an unprivileged cleanup
+  # cannot signal a root process — and also exits when the wrapper dies, so a
+  # kill -9 on the wrapper (no cleanup, sentinel left behind) cannot leave a
+  # root loop appending forever.
+  touch "$PIDS_DIR/lustre-recorders.alive"
+  sudo -n bash -c '
+    while [[ -e "$1" ]] && kill -0 "$2" 2>/dev/null; do
+      echo "=== $(date -u +%FT%T.%3NZ)"
+      lctl get_param "llite.*.stats" "osc.*OST*.stats" "mdc.*MDT*.stats" 2>/dev/null || echo "(unreadable)"
+      sleep 1
+    done' _ "$PIDS_DIR/lustre-recorders.alive" "$$" \
+    > "$RUN_DIR/raw/lustre-stats.log" 2> "$RUN_DIR/raw/lustre-stats.err" &
+
+  # (2L) LNet per-net counters, verbatim 1 Hz — the per-cell transport proof
+  # (D16): app bytes moving while the efa net's counters stay near-flat is
+  # exactly the silent tcp fallback this leg refuses to measure. Reads
+  # /dev/lnet (root-only): same sudo + sentinel discipline as (1L).
+  sudo -n bash -c '
+    while [[ -e "$1" ]] && kill -0 "$2" 2>/dev/null; do
+      echo "=== $(date -u +%FT%T.%3NZ)"
+      lnetctl net show -v 4 2>/dev/null || echo "(unreadable)"
+      sleep 1
+    done' _ "$PIDS_DIR/lustre-recorders.alive" "$$" \
+    > "$RUN_DIR/raw/lnet-stats.log" 2> "$RUN_DIR/raw/lnet-stats.err" &
+fi
 
 # (2) sar binary — CPU per-core, disk, net per-iface, mem, swap, paging.
 # Note: -A is a display-mode flag that conflicts with -o; recording mode collects
@@ -476,6 +538,9 @@ RC=999
 START_TS="(pre-start)"
 cleanup() {
   log "stopping recorders..."
+  # The lustre recorders run as root and stop on this sentinel (see 1L/2L);
+  # removing it first lets them exit during the flush sleep below.
+  rm -f "$PIDS_DIR/lustre-recorders.alive"
   for pidfile in "$PIDS_DIR"/*.pid; do
     [[ -f "$pidfile" ]] || continue
     pid=$(cat "$pidfile" 2>/dev/null || echo "")
@@ -530,7 +595,12 @@ EOF
   case "$FS" in
     weka)   REQUIRED_STREAMS="weka-stats.csv nvidia-smi.csv netdev-counters.csv \
              sar-cpu.csv sar-disk.csv sar-net.csv sar-mem.csv sar-swap.csv sar-paging.csv" ;;
-    lustre) REQUIRED_STREAMS="" ;;  # unreachable today: the lustre guard refuses at start (D-4)
+    # rdma-counters.csv IS required here: the EFA devices' hw_counters are this
+    # leg's wire-level Primary (THESIS §4 — the client's network counters ARE
+    # the data path), and lnet-stats.log is the per-cell transport proof (D16).
+    lustre) REQUIRED_STREAMS="lustre-stats.log lnet-stats.log rdma-counters.csv \
+             nvidia-smi.csv netdev-counters.csv \
+             sar-cpu.csv sar-disk.csv sar-net.csv sar-mem.csv sar-swap.csv sar-paging.csv" ;;
   esac
   log "verifying recordings (required set for fs=$FS)..."
   INCOMPLETE=0

@@ -1,0 +1,66 @@
+Module                  Size  Used by
+binfmt_misc            28672  1
+mgc                    86016  1
+lustre               1105920  55
+mdc                   294912  5 lustre
+fid                    36864  1 mdc
+lov                   356352  39 mdc,lustre
+osc                   479232  43 mdc
+lmv                   221184  2 lustre
+fld                    49152  2 lov,lmv
+ptlrpc               1470464  8 fld,osc,fid,mgc,lov,mdc,lmv,lustre
+obdclass             3366912  47 fld,osc,fid,ptlrpc,mgc,lov,mdc,lmv,lustre
+ksocklnd              192512  1
+kefalnd               143360  1
+lnet                  802816  9 osc,obdclass,ptlrpc,mgc,ksocklnd,kefalnd,lmv,lustre
+libcfs                217088  13 fld,lnet,osc,fid,obdclass,ptlrpc,mgc,ksocklnd,kefalnd,lov,mdc,lmv,lustre
+raid0                  24576  1
+nvidia_fs             262144  0
+mousedev               24576  0
+atkbd                  40960  0
+vivaldi_fmap           16384  1 atkbd
+psmouse               143360  0
+libps2                 20480  2 atkbd,psmouse
+i2c_piix4              28672  0
+nvidia_uvm           1835008  0
+nvidia_drm            122880  0
+nvidia_modeset       1732608  1 nvidia_drm
+nvidia              14704640  20 nvidia_uvm,nvidia_fs,nvidia_modeset
+video                  69632  1 nvidia_modeset
+drm_kms_helper        212992  5 nvidia_drm
+cfbfillrect            16384  1 drm_kms_helper
+syscopyarea            16384  1 drm_kms_helper
+cfbimgblt              16384  1 drm_kms_helper
+sysfillrect            16384  1 drm_kms_helper
+sysimgblt              16384  1 drm_kms_helper
+fb_sys_fops            16384  1 drm_kms_helper
+cfbcopyarea            16384  1 drm_kms_helper
+drm                   602112  4 drm_kms_helper,nvidia,nvidia_drm
+drm_panel_orientation_quirks    32768  1 drm
+backlight              24576  3 video,drm,nvidia_modeset
+fb                    110592  1 drm_kms_helper
+fbdev                  16384  1 fb
+i2c_core              110592  5 drm_kms_helper,nvidia,psmouse,i2c_piix4,drm
+wmi                    36864  1 video
+nls_ascii              16384  1
+nls_cp437              20480  1
+vfat                   24576  1
+fat                    86016  1 vfat
+sunrpc                700416  2 lnet
+efa                   131072  2
+ib_uverbs             180224  1 efa
+ghash_clmulni_intel    16384  0
+ib_core               458752  3 efa,kefalnd,ib_uverbs
+ena                   200704  0
+i8042                  45056  0
+serio                  28672  5 atkbd,psmouse,i8042
+button                 24576  0
+sch_fq_codel           20480  33
+fuse                  184320  1
+dm_mod                188416  0
+loop                   36864  0
+configfs               57344  1
+dmi_sysfs              20480  0
+crc32_pclmul           16384  0
+crc32c_intel           24576  0
+efivarfs               24576  1
