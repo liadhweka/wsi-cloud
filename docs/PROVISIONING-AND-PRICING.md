@@ -41,11 +41,13 @@ satisfy; the contract verifies identity-of-spec mechanically).
 
 ## Leg B — FSx for Lustre
 
-**This section is Leg B's content** — filled by the Leg-B session from its own contract, not by Leg A.
-What belongs here when filled: FSx tier / capacity / provisioned metadata IOPS / EFA state (the **D7**
-"Lustre at maximum" evidence, per axis), the recorded stripe layout, transport evidence (EFA
-counter-proven per boot), the documented per-client ceiling (700 Gbps, `performance.html`, dated), AZ,
-and the leg's price rows below.
+| | |
+|---|---|
+| File system | **PERSISTENT_2, 1000 MB/s/TiB** (the top SSD throughput-per-TiB tier) × **28,800 GiB (28.125 TiB)** capacity × **48,000 metadata IOPS, USER_PROVISIONED** × **EFA enabled** — "Lustre at maximum" per axis (**D7**: tier is the top tier; capacity is past where provisioned disk throughput exceeds the client's line rate; metadata IOPS user-provisioned above the capacity default; EFA-enabled FS + EFA-mounted client). Live values verified against `aws fsx describe-file-systems`; contract fields `fsx_*` |
+| Stripe layout | The AWS default 4-component PFL, unmodified (`[0,100M)c1 · [100M,10G)c8 · [10G,100G)c16 · [100G,EOF)c32`, stripe_size 1M; 6 OSTs cap effective stripe) — the vendor's tuned default is the most defensible "as provisioned at maximum" configuration (**register L2**); the D12 consistency relation derives from the recorded layout verbatim |
+| Client config | **EFA transport, counter-proven per boot and per session** — `lnetctl net show` lists both efa NIs up AND a direct-I/O probe moves the efa net's `send_count` ~1 RPC/MiB with tcp near-flat (**D16**/**L1**; a mount string proves nothing — the MGS NID is `@tcp` by design). LNet/tunables: AWS's official configure-efa bundle, vendored + sha-pinned (**L3**), plus AWS's documented >64-vCPU client set (**L4**). **No cores reserved from applications** (`FS_CLIENT_RESERVED_CORES=none`, **D15**) — the Lustre client works through kernel threads |
+| Per-client ceiling | **700 Gbps vendor-documented** (EFA-enabled FS over EFA, `performance.html`); the **binding physical bound is the g6e.24xlarge 200 Gbps line rate** — the basis string carries both so measured-vs-ceiling stays honest (**L5**); checked 2026-08-20 |
+| AZ | `ap-northeast-2b` |
 
 ## Prices — the as-run inputs
 
@@ -61,9 +63,9 @@ Fetched from vendor pricing on the date shown, never recalled; recorded per cell
 
 | Input | Leg B (FSx for Lustre) | Basis | Date checked |
 |---|---|---|---|
-| Instance $/hr | *(Leg B's row — same instance type by contract)* | on-demand, ap-northeast-2 | *(Leg B)* |
-| Filesystem $/hr | *(Leg B's row)* | the provisioned FSx configuration's service rate | *(Leg B)* |
-| Storage-software $/hr | **0** | the FSx service rate is software-inclusive — the deliberate asymmetry **D7** records in the data itself | n/a |
+| Instance $/hr | **18.52234** | g6e.24xlarge on-demand, ap-northeast-2 | 2026-08-20 |
+| Filesystem $/hr | **29.6088** | 28,800 GiB × $0.673/GB-mo + (48,000 − 12,000 included) × $0.062/IOPS-mo, ÷730 h — official Price List file (**register L6**). **Standing check:** the included-IOPS reading is verified against the first invoice; if all 48,000 bill, the corrected rate is $30.6279/hr, dated as a provisioning-cost event (L6 carries both readings + sources) | 2026-08-20 |
+| Storage-software $/hr | **0** | the FSx service rate is software-inclusive (no software/license SKU exists for Lustre in the AmazonFSx price list) — the deliberate asymmetry **D7** records in the data itself | n/a |
 
 ## Cost derivation — the recipe
 
