@@ -314,6 +314,14 @@ workload_ingest() {
     touch "$READY_DIR/.ingest-failed"
     return 1
   fi
+  # Wipe the target BEFORE the start barrier (setup, not measurement): fpsync
+  # is rsync underneath, so a populated target from ANY earlier cell turns this
+  # workload into a metadata-only no-op scan that writes nothing — the cell then
+  # runs a mix its name does not claim (bit 6.C 2026-08-22: every
+  # ingest-containing concurrent cell after the solo re-scanned the solo's
+  # output; the canary exposed it as a trickle-shaped write ratio).
+  rm -rf "$INGEST_DST"
+  mkdir -p "$INGEST_DST"
   touch "$READY_DIR/.ingest-ready"
   while [ ! -f "$BARRIER" ]; do sleep 0.1; done
   local t0; t0=$(date +%s.%N)

@@ -425,7 +425,10 @@ needed.
 > (4.D), the 6.A extractor (needs **cleanup-before-cell**, or every cell after the first short-circuits and
 > reports a plausible-looking meaningless number), and 6.A Tier 2's chunked conversion (an aborted run leaves
 > chunks that get reused). **Verify cleanup between runs in all three.** These fail quietly, which is the
-> dangerous kind.
+> dangerous kind. A fourth member of the class — the 6.C/7.5 **ingest target** (fpsync is rsync underneath,
+> so a populated target turns the ingest workload into a no-op scan that writes nothing, and the cell runs a
+> mix its name does not claim) — was found by the consistency canary 2026-08-22 and is closed **by
+> construction**: both orchestrators wipe `INGEST_DST` pre-barrier on every ingest cell.
 
 ---
 

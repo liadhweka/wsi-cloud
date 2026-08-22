@@ -9,12 +9,41 @@
   "user": "ec2-user",
   "kernel": "6.1.177-224.371.amzn2023.x86_64",
   "cores_total": 88,
-  "cores_reserved": [1,2,3,4,49,50,51,52],
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
   "cores_available": 80,
   "cache_state": "na-mixed-concurrent-workloads",
   "bs_hint": "heterogeneous-small-block",
   "wire_exempt": "write:feature-write trickle (torch.save small-buffer writes; no bulk writer in this mix — no calibrated analogue)",
   "rep": null,
-  "command": ["scripts/orchestrate-concurrent-stage6c.sh","--workloads","extract,viewer","--ramp","300","--runtime","1500","--run-dir","/home/ec2-user/wsi-cloud/runs/2026-08-22-124154-weka-s6.C-concurrent-extract+viewer"],
-  "note": "Stage 6.C concurrent multi-workload cell on fs=weka: workloads={extract,viewer} extract_model=virchow2 ramp=300s steady=1500s. WHY: concurrent heterogeneous load on one namespace is where storage architectures diverge, and no single-workload cell surfaces it. Retention is measured against THIS leg's own solo baselines re-measured at the same concurrent config, so the cross-leg comparison is of retention percentages, not absolute rates. Per D15, check the core accounting before attributing any interference to the filesystem rather than the host. Regime: na — the cold/warm axis deliberately does not apply to 6.C (ratified 2026-08-21): the measured quantity is per-workload QoS retention, and solo baselines carry the same declaration as the concurrent tiers because they are the retention denominators measured under the identical construction — labelling the two sides differently would put numerator and denominator in different regimes. Surgical re-run of the 2026-08-22-120712 cell after the wire-exemption criterion fix (its write ratio 2.579 is the feature-write trickle's real amplification, recorded not judged); identical construction, declarations added."
+  "command": [
+    "scripts/orchestrate-concurrent-stage6c.sh",
+    "--workloads",
+    "extract,viewer",
+    "--ramp",
+    "300",
+    "--runtime",
+    "1500",
+    "--run-dir",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-22-124154-weka-s6.C-concurrent-extract+viewer"
+  ],
+  "note": "Stage 6.C concurrent multi-workload cell on fs=weka: workloads={extract,viewer} extract_model=virchow2 ramp=300s steady=1500s. WHY: concurrent heterogeneous load on one namespace is where storage architectures diverge, and no single-workload cell surfaces it. Retention is measured against THIS leg's own solo baselines re-measured at the same concurrent config, so the cross-leg comparison is of retention percentages, not absolute rates. Per D15, check the core accounting before attributing any interference to the filesystem rather than the host. Regime: na — the cold/warm axis deliberately does not apply to 6.C (ratified 2026-08-21): the measured quantity is per-workload QoS retention, and solo baselines carry the same declaration as the concurrent tiers because they are the retention denominators measured under the identical construction — labelling the two sides differently would put numerator and denominator in different regimes. Surgical re-run of the 2026-08-22-120712 cell after the wire-exemption criterion fix (its write ratio 2.579 is the feature-write trickle's real amplification, recorded not judged); identical construction, declarations added.",
+  "wallclock_s": 1825,
+  "started_utc": "2026-08-22T12:41:59Z",
+  "ended_utc": "2026-08-22T13:12:24Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 7.7009,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
 }
