@@ -1,0 +1,1 @@
+env CONDA_PREFIX=/data/local-nvme/conda-envs/wsi-cucim-2604 /data/local-nvme/conda-envs/wsi-cucim-2604/bin/python /home/ec2-user/wsi-cloud/scripts/extract-slide-properties.py --concurrency 1 --output-dir /mnt/weka/cataloging/2.0/tcga-brca/n1-cold --manifest /tmp/stage2-manifests/tcga-brca.txt --latency-csv /tmp/stage2-manifests/tcga-brca-n1-cold-latencies.csv 

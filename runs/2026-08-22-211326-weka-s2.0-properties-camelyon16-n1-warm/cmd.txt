@@ -1,0 +1,1 @@
+env CONDA_PREFIX=/data/local-nvme/conda-envs/wsi-cucim-2604 /data/local-nvme/conda-envs/wsi-cucim-2604/bin/python /home/ec2-user/wsi-cloud/scripts/extract-slide-properties.py --concurrency 1 --output-dir /mnt/weka/cataloging/2.0/camelyon16/n1-warm --manifest /tmp/stage2-manifests/camelyon16.txt --latency-csv /tmp/stage2-manifests/camelyon16-n1-warm-latencies.csv 
