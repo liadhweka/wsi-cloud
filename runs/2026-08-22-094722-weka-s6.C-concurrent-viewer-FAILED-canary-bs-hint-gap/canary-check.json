@@ -1,0 +1,33 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-22-094722-weka-s6.C-concurrent-viewer",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.4143,
+      "expected_center": 1.0,
+      "band": [
+        0.9388,
+        1.1531
+      ],
+      "widenings_applied": [
+        "mixed x1.0551"
+      ],
+      "verdict": "FAIL"
+    },
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4598,
+      "expected_center": 1.4,
+      "band": [
+        1.3142,
+        1.613
+      ],
+      "widenings_applied": [
+        "mixed x1.0551"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

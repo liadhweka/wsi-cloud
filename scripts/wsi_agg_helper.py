@@ -478,11 +478,25 @@ def _cli_check(run_dir):
     # Block size, from the run-dir name segment every 1.0 cell carries
     # (-bs4k- / -bs1M- ...): without it the calibrated small-bs widening never
     # applies and every small-block cell false-FAILs against the large-block
-    # band. A name without a bs segment gets None (no widening), correctly.
+    # band. A name without a bs segment gets None (no widening), correctly —
+    # UNLESS the cell DECLARED its composition (metadata bs_hint, from
+    # RECORD_BS_HINT): name parsing is blind for cells whose workload mix is
+    # not in the name (bit 6.C's viewer solo 2026-08-22 — a pure-4K fio stream,
+    # wire ratio exactly at the 4K calibration, judged FAILing at the
+    # large-block band). '4k' applies the calibrated small-bs widening;
+    # 'heterogeneous-small-block' applies it as the ENVELOPE — any convex mix
+    # of large-block-class and 4K-class traffic lands between the two
+    # calibrated extremes, so the small-bs-widened band covers the whole
+    # composition range. Explicit declaration beats name inference, same
+    # pattern as RECORD_CACHE_STATE.
     bs_bytes = None
-    mb = re.search(r"-bs(\d+)([kKmM])", run_dir.name)
-    if mb:
-        bs_bytes = int(mb.group(1)) * (1024 if mb.group(2).lower() == "k" else 1024**2)
+    bs_hint = meta.get("bs_hint")
+    if bs_hint in ("4k", "small", "heterogeneous-small-block"):
+        bs_bytes = 4096
+    else:
+        mb = re.search(r"-bs(\d+)([kKmM])", run_dir.name)
+        if mb:
+            bs_bytes = int(mb.group(1)) * (1024 if mb.group(2).lower() == "k" else 1024**2)
 
     verdicts = []
     app_r, wire_r = rm["app_read"], rm["wire_read"]

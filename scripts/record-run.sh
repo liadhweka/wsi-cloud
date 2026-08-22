@@ -346,6 +346,7 @@ cat > "$RUN_DIR/metadata.json" <<EOF
   "cores_reserved": $RESERVED_JSON,
   "cores_available": $CORES_AVAIL,
   "cache_state": $CACHE_JSON,
+  "bs_hint": $(if [[ -n "${RECORD_BS_HINT:-}" ]]; then jq -n --arg b "$RECORD_BS_HINT" '$b'; else echo null; fi),
   "rep": ${REP:-null},
   "command": $CMD_JSON,
   "note": $NOTE_JSON

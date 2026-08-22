@@ -1,0 +1,17 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-22-085530-weka-s6.C-concurrent-ingest",
+  "verdicts": [
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.435,
+      "expected_center": 1.4,
+      "band": [
+        1.3866,
+        1.5288
+      ],
+      "widenings_applied": [],
+      "verdict": "PASS"
+    }
+  ]
+}

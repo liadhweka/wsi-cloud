@@ -194,6 +194,9 @@ run_orchestrator_cell() {
     regime_note=" Regime: ${policy} — cache carries over across slides and processes by design; production steady-state (a clinical deployment processes many slides per shift)."
   else
     declare_env+=("RECORD_CACHE_STATE=na-mixed-concurrent-clinical")
+    # The two viewer workloads are 4K fio streams: the aggregate read ratio is
+    # a heterogeneous mix, judged at the small-bs-widened envelope (D12).
+    declare_env+=("RECORD_BS_HINT=heterogeneous-small-block")
     regime_note=" Regime: na — the cold/warm axis deliberately does not apply to a mixed multi-workload cell (ratified 2026-08-21): the measured quantity is per-workload QoS retention against same-filesystem solo baselines."
   fi
   # The inference workload's backend defaults to kvikio (Table 5); only an

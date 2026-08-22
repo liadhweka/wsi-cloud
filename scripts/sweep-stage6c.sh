@@ -66,6 +66,17 @@ run_cell() {
 
   # D-30/D13: one uniform na-* declaration across ALL 6.C tiers (solo included) —
   # see the Regime sentence in the note for why.
+  # RECORD_BS_HINT (D12 canary input): any cell running the viewer carries a
+  # 4K fio stream whose calibrated wire/app ratio (~1.42) needs the small-bs
+  # widening — the cell NAME carries no bs token, so the checker must be told.
+  # Pure-viewer cells are homogeneous 4K; combos are a heterogeneous mix whose
+  # aggregate ratio lands inside the small-bs-widened envelope.
+  local bs_hint=""
+  case ",$workloads," in
+    ,viewer,)   bs_hint="4k" ;;
+    *,viewer,*) bs_hint="heterogeneous-small-block" ;;
+  esac
+  RECORD_BS_HINT="$bs_hint" \
   RECORD_CACHE_STATE=na-mixed-concurrent-workloads \
   RECORD_RUN_DIR="$run_dir" \
   "$RECORD" \
