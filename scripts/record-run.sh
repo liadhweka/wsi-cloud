@@ -347,6 +347,7 @@ cat > "$RUN_DIR/metadata.json" <<EOF
   "cores_available": $CORES_AVAIL,
   "cache_state": $CACHE_JSON,
   "bs_hint": $(if [[ -n "${RECORD_BS_HINT:-}" ]]; then jq -n --arg b "$RECORD_BS_HINT" '$b'; else echo null; fi),
+  "poll_hz": ${POLL_HZ},
   "wire_exempt": $(if [[ -n "${RECORD_WIRE_EXEMPT:-}" ]]; then jq -n --arg w "$RECORD_WIRE_EXEMPT" '$w'; else echo null; fi),
   "rep": ${REP:-null},
   "command": $CMD_JSON,
@@ -419,6 +420,23 @@ This run is part of the WEKA-vs-Lustre WSI storage comparison on AWS.
 - \`${REPO_ROOT}/docs/RUNBOOK.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
 EOF
 
+# D-34 (ratified, Stage-2 register): the filesystem-side poll rate is per-cell
+# opt-in via RECORD_POLL_HZ (default 1; short cells set 10, identically on both
+# legs) — sub-second cells yield 1-3 samples at 1 Hz, so any sustained mean is
+# ill-defined exactly where the metadata architectures differ most. The polling
+# loops stamp millisecond timestamps, so parse-results' dt-from-timestamps and
+# the per-timestamp client summing are rate-correct at any HZ, and the recorded
+# _sample_interval_s block is the achieved-rate evidence. sar stays at 1 s (it
+# only takes integer-second intervals; its streams are not the short-cell
+# primaries). The verification that the higher rate does not itself perturb the
+# measurement is a recorded 1-vs-10 Hz same-config cell pair.
+POLL_HZ=${RECORD_POLL_HZ:-1}
+case "$POLL_HZ" in
+  1|2|5|10|20) ;;
+  *) echo "record-run: RECORD_POLL_HZ must be one of 1|2|5|10|20, got '$POLL_HZ'" >&2; exit 2 ;;
+esac
+POLL_SLEEP=$(awk "BEGIN{printf \"%.3f\", 1/$POLL_HZ}")
+
 # ---------- start recorders ----------
 log "starting recorders in $RUN_DIR/raw/"
 PIDS_DIR="$RUN_DIR/raw/.pids"
@@ -432,14 +450,14 @@ if [[ "$FS" == "weka" ]]; then
     HEADER_PRINTED=0
     while true; do
       out=$(weka stats realtime --format csv --raw-units --UTC --output "$WEKA_COLS" 2>/dev/null)
-      if [[ -z "$out" ]]; then sleep 1; continue; fi
+      if [[ -z "$out" ]]; then sleep "$POLL_SLEEP"; continue; fi
       if (( HEADER_PRINTED == 0 )); then
         printf "timestamp,%s\n" "$(echo "$out" | head -1)"
         HEADER_PRINTED=1
       fi
       ts=$(date -u +%FT%T.%3NZ)
       echo "$out" | tail -n +2 | sed "s|^|${ts},|"
-      sleep 1
+      sleep "$POLL_SLEEP"
     done
   } > "$RUN_DIR/raw/weka-stats.csv" 2> "$RUN_DIR/raw/weka-stats.err" &
   echo $! > "$PIDS_DIR/weka-stats.pid"
@@ -457,8 +475,8 @@ else
     while [[ -e "$1" ]] && kill -0 "$2" 2>/dev/null; do
       echo "=== $(date -u +%FT%T.%3NZ)"
       lctl get_param "llite.*.stats" "osc.*OST*.stats" "mdc.*MDT*.stats" 2>/dev/null || echo "(unreadable)"
-      sleep 1
-    done' _ "$PIDS_DIR/lustre-recorders.alive" "$$" \
+      sleep "$3"
+    done' _ "$PIDS_DIR/lustre-recorders.alive" "$$" "$POLL_SLEEP" \
     > "$RUN_DIR/raw/lustre-stats.log" 2> "$RUN_DIR/raw/lustre-stats.err" &
 
   # (2L) LNet per-net counters, verbatim 1 Hz — the per-cell transport proof
@@ -469,8 +487,8 @@ else
     while [[ -e "$1" ]] && kill -0 "$2" 2>/dev/null; do
       echo "=== $(date -u +%FT%T.%3NZ)"
       lnetctl net show -v 4 2>/dev/null || echo "(unreadable)"
-      sleep 1
-    done' _ "$PIDS_DIR/lustre-recorders.alive" "$$" \
+      sleep "$3"
+    done' _ "$PIDS_DIR/lustre-recorders.alive" "$$" "$POLL_SLEEP" \
     > "$RUN_DIR/raw/lnet-stats.log" 2> "$RUN_DIR/raw/lnet-stats.err" &
 fi
 
@@ -511,7 +529,7 @@ echo $! > "$PIDS_DIR/nvidia-smi.pid"
           "$(cat $base/rx_errors 2>/dev/null || echo 0)"
       fi
     done
-    sleep 1
+    sleep "$POLL_SLEEP"
   done
 } > "$RUN_DIR/raw/netdev-counters.csv" 2> "$RUN_DIR/raw/netdev-counters.err" &
 echo $! > "$PIDS_DIR/netdev-counters.pid"
@@ -546,7 +564,7 @@ IB_DEVICES=$(ls /sys/class/infiniband/ 2>/dev/null | tr '\n' ' ')
           "$(cat $hbase/rx_pkts 2>/dev/null || echo 0)"
       fi
     done
-    sleep 1
+    sleep "$POLL_SLEEP"
   done
 } > "$RUN_DIR/raw/rdma-counters.csv" 2> "$RUN_DIR/raw/rdma-counters.err" &
 echo $! > "$PIDS_DIR/rdma-counters.pid"
@@ -561,7 +579,7 @@ echo $! > "$PIDS_DIR/rdma-counters.pid"
   while true; do
     echo "=== $(date -u +%FT%T.%3NZ)"
     cat /proc/driver/nvidia-fs/stats 2>/dev/null || echo "(unreadable)"
-    sleep 1
+    sleep "$POLL_SLEEP"
   done
 } > "$RUN_DIR/raw/nvidia-fs-stats.log" 2> "$RUN_DIR/raw/nvidia-fs-stats.err" &
 echo $! > "$PIDS_DIR/nvidia-fs-stats.pid"

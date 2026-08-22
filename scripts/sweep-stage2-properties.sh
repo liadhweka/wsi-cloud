@@ -194,6 +194,7 @@ for ds_entry in "${DATASETS[@]}"; do
       rm -rf "$warm_dir"
     fi
 
+    RECORD_POLL_HZ=10 \
     RECORD_CACHE_STATE="$arm" "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
       --stage 2.0 \

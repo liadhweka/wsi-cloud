@@ -24,10 +24,6 @@ which holds the scope and the reason each needs the real environment. Cite the `
 
 These change what the numbers mean, so resolving them after cells have run means re-running cells.
 
-1. **Sub-second cells vs 1 Hz recorders — DECIDED (2026-08-16: raise the poll rate for short cells,
-   ~10 Hz, identically on both legs; Stage-2 register). Remaining: the implementation (tracker `D-34`,
-   `record-run.sh`'s recorder set) plus its does-the-rate-perturb verification — must land before the first
-   Stage 2/3 cell.** Detail: `docs/Stage-2-Cataloging.md`.
 3. **Consistency relation — WEKA bands CALIBRATED on the 6xlarge cluster (2026-08-16:
    `calibrate-canary-bands.sh`, 12 cells; anchors reproduce — write 1.456 vs 1.455, read 1.042 vs 1.034;
    4K derived separately: read 1.424, write 1.372 → smallbs_widening 1.366; `check` PASSES end-to-end).
