@@ -199,11 +199,25 @@ def extract_viewer_throughput(run_dir):
     """Returns fio iops/bw/p99 from workload-viewer.csv (fio JSON output)."""
     p = run_dir / "workload-viewer.csv"
     if not p.exists(): return None
-    try:
-        # fio's --output-format=json+ produces one big JSON object (not per-sec records
-        # when --status-interval is used; the json+ format wraps everything).
-        data = json.loads(p.read_text())
-    except json.JSONDecodeError:
+    # fio with --status-interval writes CONCATENATED JSON documents (one per
+    # interval plus the final summary), so json.loads on the whole file fails.
+    # Decode iteratively and keep the LAST complete document carrying "jobs" —
+    # the end-of-run summary (found 2026-08-22: every viewer cell parsed None
+    # and viewer retention silently vanished from the grid).
+    text = p.read_text()
+    dec = json.JSONDecoder()
+    data, i = None, 0
+    while i < len(text):
+        j = text.find("{", i)
+        if j < 0: break
+        try:
+            obj, end = dec.raw_decode(text, j)
+        except json.JSONDecodeError:
+            i = j + 1; continue
+        if isinstance(obj, dict) and obj.get("jobs"):
+            data = obj
+        i = end
+    if data is None:
         return None
     # Aggregate across all fio jobs
     jobs = data.get("jobs", [])

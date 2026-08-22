@@ -1,0 +1,27 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-22-151504-weka-s6.C-concurrent-extract+mil+ingest",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "verdict": "REPORT_ONLY",
+      "detail": "declared wire-relation exemption: reads under a dominant concurrent bulk write stream (4.D-class read amplification; no calibrated analogue) \u2014 ratio recorded, not judged",
+      "ratio": 1.2837,
+      "expected_center": 1.0
+    },
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4403,
+      "expected_center": 1.4,
+      "band": [
+        1.3142,
+        1.613
+      ],
+      "widenings_applied": [
+        "mixed x1.0551"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

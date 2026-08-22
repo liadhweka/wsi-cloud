@@ -1,0 +1,49 @@
+{
+  "run_name": "concurrent-extract+mil+ingest",
+  "stage": "6.C",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-22T15:15:07Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-mixed-concurrent-workloads",
+  "bs_hint": null,
+  "wire_exempt": "read:reads under a dominant concurrent bulk write stream (4.D-class read amplification; no calibrated analogue)",
+  "rep": null,
+  "command": [
+    "scripts/orchestrate-concurrent-stage6c.sh",
+    "--workloads",
+    "extract,mil,ingest",
+    "--ramp",
+    "300",
+    "--runtime",
+    "1500",
+    "--run-dir",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-22-151504-weka-s6.C-concurrent-extract+mil+ingest"
+  ],
+  "note": "Stage 6.C concurrent multi-workload cell on fs=weka: workloads={extract,mil,ingest} ramp=300s steady=1500s — surgical re-run under the fixed ingest (wiped target) and the declared read-under-write exemption. Retention vs same-leg solo baselines; regime na-mixed-concurrent-workloads.",
+  "wallclock_s": 1809,
+  "started_utc": "2026-08-22T15:15:09Z",
+  "ended_utc": "2026-08-22T15:45:18Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 7.7009,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}
