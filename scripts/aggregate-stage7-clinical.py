@@ -160,39 +160,41 @@ def weka_per_sec_sum(run_dir: Path, col: str, parser=_bps_or_zero):
     return list(sums.values())
 
 
-def rdma_per_sec_diff(run_dir: Path, device: str, counter: str):
+def rdma_per_sec_diff(run_dir: Path, counter: str):
     """Cumulative-counter diff between adjacent timestamps -> per-second bytes/s rate.
 
-    rdma-counters.csv (wide-format, per the recorder's actual schema):
-      timestamp,ibdev,xmit_bytes,rcv_bytes,xmit_packets,rcv_packets,xmit_wait,xmit_discards
-    where xmit_bytes/rcv_bytes are cumulative bytes since boot (already in
-    BYTES — recorder normalizes; no IB-spec 4-byte-chunk multiplier needed).
-    `counter` arg should be 'xmit_bytes' or 'rcv_bytes'. Mirrors the working
-    parser in Stage 5/4.C aggregators.
+    rdma-counters.csv (the recorder's real schema):
+      timestamp,ibdev,source,xmit_bytes,rcv_bytes,xmit_packets,rcv_packets
+    Cumulative BYTES (the recorder normalizes; port counters already x4).
+    Devices are DISCOVERED, never named (D-33: a hardcoded mlx5_0 existed on
+    neither leg): the counter is summed across every recorded ibdev per
+    timestamp — on Lustre both EFA NICs are the data path — preferring the
+    hw_counters rows (the RUNBOOK's wire Primary there) and falling back to
+    the port-counter rows where no hw_counters exist.
     """
     p = run_dir / 'raw' / 'rdma-counters.csv'
     if not p.exists():
         return []
-    rows = []
+    by_src = {'hw_counters': {}, 'counters': {}}
     with p.open() as f:
         for row in csv.DictReader(f):
-            if row.get('ibdev') != device:
+            src = row.get('source')
+            if src not in by_src:
                 continue
             try:
-                # timestamp is ISO 8601 with 'Z' suffix; convert to epoch
-                ts_s = row['timestamp'].rstrip('Z')
-                ts = datetime.fromisoformat(ts_s).timestamp()
-                v = float(row.get(counter, '0'))
-                rows.append((ts, v))
-            except (KeyError, ValueError):
+                ts_v = datetime.fromisoformat(row['timestamp'].rstrip('Z')).timestamp()
+                v = float(row[counter])
+            except (KeyError, ValueError, TypeError):
                 continue
-    rows.sort()
+            by_src[src][ts_v] = by_src[src].get(ts_v, 0.0) + v
+    series = by_src['hw_counters'] or by_src['counters']
+    pts = sorted(series.items())
     rates = []
-    for i in range(1, len(rows)):
-        dt_ = rows[i][0] - rows[i-1][0]
-        dv = rows[i][1] - rows[i-1][1]
-        if dt_ > 0 and dv >= 0:
-            rates.append(dv / dt_)
+    for i in range(1, len(pts)):
+        dt = pts[i][0] - pts[i - 1][0]
+        dv = pts[i][1] - pts[i - 1][1]
+        if dt > 0 and dv >= 0:
+            rates.append(dv / dt)
     return rates
 
 
@@ -431,6 +433,15 @@ def parse_raw_consistency(run_dir: Path):
     }
 
 
+def _in_subtier(r, prefix):
+    """D-33: match the RECORDED stage first; the name prefix is the fallback
+    (and the only discriminator inside 7.4, where a/b share --stage 7.4)."""
+    st = str(r.get('stage') or '')
+    if st == prefix or st.startswith(prefix + '.') or st.startswith(prefix):
+        return True
+    return str(r.get('cell_name') or '').startswith(prefix)
+
+
 # ---------------------------------------------------------------------------
 # Per-cell aggregator
 # ---------------------------------------------------------------------------
@@ -442,9 +453,17 @@ def aggregate_cell(run_dir: Path) -> dict:
     ts_m = TS_RE.match(run_dir.name)
     start, end, duration = read_run_window(run_dir)
     app_wall, n_worker_summaries = worker_cell_wallclock(run_dir)
+    meta_stage = None
+    try:
+        meta_stage = json.loads((run_dir / 'metadata.json').read_text()).get('stage')
+    except (OSError, ValueError):
+        pass
     out = {
         'run_dir': run_dir.name,
         'cell_name': cell_name,
+        # The RECORDED stage field (D-33): sub-tier grids match on it first, so
+        # a wrapper-named -s7.1- dir and a driver-named -s7-7.1.a- dir both land.
+        'stage': meta_stage,
         # TS_RE, not name_m: RUN_NAME_RE carries no `ts` group, so asking it for
         # one raised IndexError on EVERY cell — main() swallowed that as a
         # per-cell WARN and wrote a header-only CSV while still exiting 0.
@@ -493,13 +512,9 @@ def aggregate_cell(run_dir: Path) -> dict:
         out['weka_ops_per_sec_full_mean'] = sum(weka_ops) / len(weka_ops)
         out['weka_ops_per_sec_max'] = max(weka_ops)
 
-    # ⏳ D-33: 'mlx5_0' exists on neither leg (no RDMA devices on WEKA-on-AWS;
-    # efa_0/efa_1 on Lustre), so this column reads empty on every cell — point
-    # it at the recorded devices when the stage-7 grid fix lands.
-    # Recorder schema: rcv_bytes/xmit_bytes are already in BYTES (cumulative);
-    # diff between timestamps recovers bytes/sec.
-    rdma_rcv = rdma_per_sec_diff(run_dir, 'mlx5_0', 'rcv_bytes')
-    rdma_xmit = rdma_per_sec_diff(run_dir, 'mlx5_0', 'xmit_bytes')
+    # Devices discovered from the CSV, summed per timestamp (D-33 closed).
+    rdma_rcv = rdma_per_sec_diff(run_dir, 'rcv_bytes')
+    rdma_xmit = rdma_per_sec_diff(run_dir, 'xmit_bytes')
     if rdma_rcv:
         out['rdma_rcv_MiBps_mean'] = (_active_window_mean(rdma_rcv) or 0.0) / (1024 * 1024)
         out['rdma_rcv_MiBps_full_mean'] = (sum(rdma_rcv) / len(rdma_rcv)) / (1024 * 1024)
@@ -592,7 +607,7 @@ def main():
     print("| Cell | n_slides | p50 ms | p95 ms | p99 ms | mean tissue ms | mean extract ms | mean mil ms | mean hm_write ms |")
     print("|---|---|---|---|---|---|---|---|---|")
     for r in rows:
-        if not r['cell_name'].startswith('7.1'):
+        if not _in_subtier(r, '7.1'):
             continue
         print(f"| {r['cell_name']} | {r.get('inf_n_slides')} | "
               f"{r.get('inf_total_ms_p50')} | {r.get('inf_total_ms_p95')} | "
@@ -604,7 +619,7 @@ def main():
     print("| N | p50 ms | p95 ms | p99 ms | mean ms | WekaFS Read MiBps | CPU non-DPDK %busy | GPU util mean |")
     print("|---|---|---|---|---|---|---|---|")
     for r in rows:
-        if not r['cell_name'].startswith('7.2'):
+        if not _in_subtier(r, '7.2'):
             continue
         N = r['cell_name'].split('-')[-1]
         print(f"| {N} | {r.get('inf_total_ms_p50')} | {r.get('inf_total_ms_p95')} | "
@@ -616,7 +631,7 @@ def main():
     print("| Cell | format | n | bytes mean | total bytes | write_ms p50 | write_ms p99 | WekaFS Write MiBps |")
     print("|---|---|---|---|---|---|---|---|")
     for r in rows:
-        if not r['cell_name'].startswith('7.3'):
+        if not _in_subtier(r, '7.3'):
             continue
         print(f"| {r['cell_name']} | {r.get('hm_heatmap_format')} | {r.get('hm_n_heatmaps')} | "
               f"{r.get('hm_heatmap_bytes_mean')} | {r.get('hm_heatmap_total_bytes')} | "

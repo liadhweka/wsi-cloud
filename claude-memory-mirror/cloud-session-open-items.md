@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-22T08:34:17.337Z
+  modified: 2026-08-22T09:00:50.126Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -84,12 +84,11 @@ These change what the numbers mean, so resolving them after cells have run means
     generate-and-delete the 6.B corpora per tier instead of holding the whole suite. Raising FSx capacity
     stays a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full cohort —
     measured work, not dead time, but plan the leg's schedule with it.
-13. **Stage-7 pre-run gates:** (a) **`inference-per-slide-stage7.py` records no cuFile path-accounting
-    split** (found 2026-08-21; tracker **D-6**) — wire before Stage 7 runs, or every kvikIO 7.x cell goes
-    INCOMPLETE by design (they now declare `RECORD_KVIKIO_CELL=1`); (b) **the 7.4.b writer's
-    matched-artifact sizing** (standing constraint, Stage-7 roadmap 7.4.b — do not run 7.4.b as-is; the
-    artifact is sized and tiled from a measured 7.3 output on the same leg, see also item 20). The 7.4.b
-    poll interval is DECIDED and implemented (1 ms; Stage-7 register, 2026-08-21).
+13. **Stage-7 pre-run gates:** (a) — DONE 2026-08-22 (the worker now records the path_accounting split;
+    D-6/D-33 rows updated; the 7.x grids match on the recorded stage field). Remaining: (b) **the 7.4.b
+    writer's matched-artifact sizing** (standing constraint, Stage-7 roadmap 7.4.b — do not run 7.4.b
+    as-is; the artifact is sized and tiled from a measured 7.3 output on the same leg, see also item 20) —
+    do it right after 7.3 lands. The 7.4.b poll interval is DECIDED and implemented (1 ms).
 13d. **(resolved 2026-08-21 — D-30 closed: every stage 3–7 driver declares per cell, 6.C
     `na-mixed-concurrent-workloads` and 7.5 `na-mixed-concurrent-clinical` ratified + wired. Tracker
     closed-ids + each roadmap's cache rows hold the record. Delete this stub once 6.C's first cells run

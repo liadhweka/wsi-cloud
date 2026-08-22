@@ -1,0 +1,6 @@
+/sys/module/nvidia_fs/parameters/dbg_enabled:0
+/sys/module/nvidia_fs/parameters/info_enabled:1
+/sys/module/nvidia_fs/parameters/max_devices:16
+/sys/module/nvidia_fs/parameters/peer_stats_enabled:1
+/sys/module/nvidia_fs/parameters/rw_stats_enabled:1
+/sys/module/nvidia_fs/parameters/use_legacy_p2p_allocation:0

@@ -166,20 +166,26 @@ def parse_cpu_aggregate_excluding_dpdk(run_dir):
     }
 
 
-def extract_rdma_rcv(run_dir, device="mlx5_0"):
+def extract_rdma_rcv(run_dir):
+    # Devices DISCOVERED, never named (D-33: a hardcoded mlx5_0 existed on
+    # neither leg): rcv_bytes summed across every recorded ibdev per timestamp,
+    # hw_counters rows preferred (the Lustre leg's wire Primary), port-counter
+    # rows the fallback.
     p = run_dir / "raw" / "rdma-counters.csv"
     if not p.exists(): return None
-    rows = []
+    by_src = {"hw_counters": {}, "counters": {}}
     with p.open() as f:
         for row in csv.DictReader(f):
-            if row.get("ibdev") != device: continue
+            src = row.get("source")
+            if src not in by_src: continue
             try:
                 rcv = float(row.get("rcv_bytes", "0"))
                 t = datetime.fromisoformat(row["timestamp"].rstrip("Z")).timestamp()
             except (ValueError, TypeError, KeyError): continue
-            rows.append((t, rcv))
+            by_src[src][t] = by_src[src].get(t, 0.0) + rcv
+    series = by_src["hw_counters"] or by_src["counters"]
+    rows = sorted(series.items())
     if len(rows) < 2: return None
-    rows.sort()
     rates = []
     for i in range(1, len(rows)):
         dt_ = rows[i][0] - rows[i-1][0]

@@ -680,12 +680,18 @@ def main():
           f"footprint_level0={footprint_level0}", flush=True)
 
     # Reader
+    acct = None
     if args.backend == 'kvikio':
         reader = KvikIOSlideReader(
             rawtiff_dir=args.rawtiff_dir, n_buffer=args.n_buffer,
             num_threads=args.num_threads, compat_mode='off', level=0,
             footprint_level0=footprint_level0,
         )
+        # D-6/D8: the per-cell cuFile path proof — a config flag is not proof of
+        # which path the reads took. Snapshot nvidia-fs now; the summary records
+        # the gds-vs-bounced split against this process's aligned cuFile bytes.
+        from wsi_cufile_accounting import PathAccounting
+        acct = PathAccounting(requested_compat_mode='off')
     else:
         reader = CuCIMSlideReader(
             svs_dir=args.svs_dir, cucim_num_workers=16,
@@ -821,6 +827,14 @@ def main():
         'mean_mil_ms': (sum_mil_ms / slides_done) if slides_done > 0 else 0.0,
         'mean_heatmap_write_ms': (sum_heatmap_ms / slides_done) if slides_done > 0 else 0.0,
     }
+    if acct is not None:
+        pa = acct.finish(int(reader.bytes_read))
+        pa['scope'] = ("per-process: nvidia-fs deltas are device-global, so under N concurrent "
+                       "processes the gds/bounce split is cell-global while app_bytes_read is "
+                       "THIS process's aligned cuFile bytes; the wrapper's 1 Hz nvidia-fs "
+                       "timeline is the cell-level authority (D-6/D8)")
+        summary['path_accounting'] = pa
+        summary['reader_bytes_read_aligned_total'] = int(reader.bytes_read)
     with open(args.summary_json, 'w') as f:
         json.dump(summary, f, indent=2)
     print("=== summary ===", flush=True)
