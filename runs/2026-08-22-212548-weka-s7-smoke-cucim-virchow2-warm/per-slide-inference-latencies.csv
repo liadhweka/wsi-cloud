@@ -1,0 +1,2 @@
+slide_idx,slide_id,process_id,world_size,t_arrived_s,n_tiles,inference_batch_size,t_tissue_ms,t_extract_ms,t_mil_ms,t_heatmap_write_ms,t_total_ms,backend,model,cache_policy_requested,client_page_cache_discarded,heatmap_format,heatmap_path,heatmap_bytes
+0,TCGA-A1-A0SH-01Z-00-DX1.90E71B08-E1D9-4FC2-85AC-062E56DDF17C,0,1,0.000008,9373,256,31.617,34400.378,80.964,1723.795,36236.755,cucim_batched_cpu,virchow2,warm,,tiff5x,/mnt/weka/heatmaps/7.1/smoke-cucim-virchow2-warm/TCGA-A1-A0SH-01Z-00-DX1.90E71B08-E1D9-4FC2-85AC-062E56DDF17C.tiff,6526894

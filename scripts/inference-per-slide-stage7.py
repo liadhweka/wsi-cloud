@@ -723,6 +723,82 @@ def main():
     hm_w.writeheader()
     hm_f.flush()  # same — header should be visible to external pollers
 
+
+    # Finalize path shared by natural exit AND SIGTERM (the orchestrator kills
+    # workers at its deadline, routinely mid-slide — without this, no summary
+    # and no D8 path proof ever exists in a time-bounded orchestrator cell).
+    _finalized = [False]
+    def _finalize_summary(terminated=False):
+        if _finalized[0]:
+            return
+        _finalized[0] = True
+        for _f in (csv_f, hm_f):
+            try:
+                _f.flush(); _f.close()
+            except Exception:
+                pass
+        cell_wallclock = time.monotonic() - t_zero
+        summary = {
+            'process_id': args.process_id,
+            'terminated_at_deadline': terminated,
+            'world_size': args.world_size,
+            'backend': args.backend,
+            'model': args.model,
+            'embedding_dim': embed_dim,
+            'inference_batch_size': args.inference_batch_size,
+            # REQUESTED policy.
+            'cache_policy': args.cache_policy,
+            # ACHIEVED, client page cache only. `cache_policy` above is what the cell
+            # ASKED for; these are what actually happened. A cold cell with
+            # n_client_page_cache_discards_failed > 0 read those slides WARM, and
+            # without this the CSV would still label all of them cold (thesis §11.5).
+            'n_client_page_cache_discards_attempted': counters['discard_attempted'],
+            'n_client_page_cache_discards_failed': counters['discard_failed'],
+            # The client page cache is only half the question: this discard does not
+            # touch either filesystem's server-side cache, and the per-filesystem cold
+            # mechanism is still open (A.5 / D13). Recorded as unknown EXPLICITLY, so
+            # the absence of a field can never be read as "cold was achieved".
+            'cache_state_achieved': 'unknown',
+            'heatmap_format': args.heatmap_format,
+            'manifest': args.manifest,
+            'n_slides_assigned': len(my_slide_ids),
+            'n_slides_done': slides_done,
+            'n_slides_skipped': slides_skipped,
+            'cell_wallclock_s': cell_wallclock,
+            'per_slide_csv': args.per_slide_csv,
+            'per_slide_heatmap_csv': args.per_slide_heatmap_csv,
+            'heatmap_dir': args.heatmap_dir,
+            # Means across processed slides (the per-CSV file has the full distribution
+            # for p50/p95/p99 aggregation; these means are convenience headlines).
+            'mean_total_ms': (sum_total_ms / slides_done) if slides_done > 0 else 0.0,
+            'mean_tissue_ms': (sum_tissue_ms / slides_done) if slides_done > 0 else 0.0,
+            'mean_extract_ms': (sum_extract_ms / slides_done) if slides_done > 0 else 0.0,
+            'mean_mil_ms': (sum_mil_ms / slides_done) if slides_done > 0 else 0.0,
+            'mean_heatmap_write_ms': (sum_heatmap_ms / slides_done) if slides_done > 0 else 0.0,
+        }
+        if acct is not None:
+            pa = acct.finish(int(reader.bytes_read))
+            pa['scope'] = ("per-process: nvidia-fs deltas are device-global, so under N concurrent "
+                           "processes the gds/bounce split is cell-global while app_bytes_read is "
+                           "THIS process's aligned cuFile bytes; the wrapper's 1 Hz nvidia-fs "
+                           "timeline is the cell-level authority (D-6/D8)")
+            summary['path_accounting'] = pa
+            summary['reader_bytes_read_aligned_total'] = int(reader.bytes_read)
+        with open(args.summary_json, 'w') as f:
+            json.dump(summary, f, indent=2)
+        print("=== summary ===", flush=True)
+        print(json.dumps(summary, indent=2), flush=True)
+        if terminated:
+            print("[infer] finalized on SIGTERM (deadline kill) — summary + path proof written", flush=True)
+
+    def _on_term(signum, frame):
+        try:
+            _finalize_summary(terminated=True)
+        finally:
+            os._exit(0)
+    import signal as _signal
+    _signal.signal(_signal.SIGTERM, _on_term)
+
     # Optional barrier wait — used by the orchestrator to start the deadline clock
     # AFTER all concurrent workers have loaded their models. Without this, short
     # cells lose all their budget to model-load time.
@@ -786,59 +862,7 @@ def main():
         if args.max_runtime_s <= 0:
             break
 
-    csv_f.close()
-    hm_f.close()
-
-    cell_wallclock = time.monotonic() - t_zero
-    summary = {
-        'process_id': args.process_id,
-        'world_size': args.world_size,
-        'backend': args.backend,
-        'model': args.model,
-        'embedding_dim': embed_dim,
-        'inference_batch_size': args.inference_batch_size,
-        # REQUESTED policy.
-        'cache_policy': args.cache_policy,
-        # ACHIEVED, client page cache only. `cache_policy` above is what the cell
-        # ASKED for; these are what actually happened. A cold cell with
-        # n_client_page_cache_discards_failed > 0 read those slides WARM, and
-        # without this the CSV would still label all of them cold (thesis §11.5).
-        'n_client_page_cache_discards_attempted': counters['discard_attempted'],
-        'n_client_page_cache_discards_failed': counters['discard_failed'],
-        # The client page cache is only half the question: this discard does not
-        # touch either filesystem's server-side cache, and the per-filesystem cold
-        # mechanism is still open (A.5 / D13). Recorded as unknown EXPLICITLY, so
-        # the absence of a field can never be read as "cold was achieved".
-        'cache_state_achieved': 'unknown',
-        'heatmap_format': args.heatmap_format,
-        'manifest': args.manifest,
-        'n_slides_assigned': len(my_slide_ids),
-        'n_slides_done': slides_done,
-        'n_slides_skipped': slides_skipped,
-        'cell_wallclock_s': cell_wallclock,
-        'per_slide_csv': args.per_slide_csv,
-        'per_slide_heatmap_csv': args.per_slide_heatmap_csv,
-        'heatmap_dir': args.heatmap_dir,
-        # Means across processed slides (the per-CSV file has the full distribution
-        # for p50/p95/p99 aggregation; these means are convenience headlines).
-        'mean_total_ms': (sum_total_ms / slides_done) if slides_done > 0 else 0.0,
-        'mean_tissue_ms': (sum_tissue_ms / slides_done) if slides_done > 0 else 0.0,
-        'mean_extract_ms': (sum_extract_ms / slides_done) if slides_done > 0 else 0.0,
-        'mean_mil_ms': (sum_mil_ms / slides_done) if slides_done > 0 else 0.0,
-        'mean_heatmap_write_ms': (sum_heatmap_ms / slides_done) if slides_done > 0 else 0.0,
-    }
-    if acct is not None:
-        pa = acct.finish(int(reader.bytes_read))
-        pa['scope'] = ("per-process: nvidia-fs deltas are device-global, so under N concurrent "
-                       "processes the gds/bounce split is cell-global while app_bytes_read is "
-                       "THIS process's aligned cuFile bytes; the wrapper's 1 Hz nvidia-fs "
-                       "timeline is the cell-level authority (D-6/D8)")
-        summary['path_accounting'] = pa
-        summary['reader_bytes_read_aligned_total'] = int(reader.bytes_read)
-    with open(args.summary_json, 'w') as f:
-        json.dump(summary, f, indent=2)
-    print("=== summary ===", flush=True)
-    print(json.dumps(summary, indent=2), flush=True)
+    _finalize_summary(terminated=False)
 
     # Fail loud on a cold cell that did not get cold. The summary and both CSVs
     # are written FIRST -- the latencies are real measurements and the rows say
