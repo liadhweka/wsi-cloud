@@ -1,0 +1,46 @@
+{
+  "run_name": "restage-tcga-brca-for-1.5-prep-n16",
+  "stage": "1.5",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-22T08:32:48Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-staging-prep",
+  "rep": null,
+  "command": [
+    "/usr/bin/fpsync",
+    "-v",
+    "-n",
+    "16",
+    "-d",
+    "/tmp/fpsync-prep",
+    "/mnt/weka/data/tcga-brca/",
+    "/data/local-nvme/fpsync-source/tcga-brca/"
+  ],
+  "note": "Recorded re-stage (the 1.5 driver's own documented prep): fpsync -n 16 /mnt/weka/data/tcga-brca/ -> local NVMe fpsync-source. WHY: 1.5 measures local->filesystem writes, so the corpus must pre-exist on the fast local source; 6.C/7.5's ingest workloads read the same staged source. A staging pass, not a comparison cell (na-staging-prep); mount is idle (nothing in flight).",
+  "wallclock_s": 0,
+  "started_utc": "2026-08-22T08:32:50Z",
+  "ended_utc": "2026-08-22T08:32:50Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 7.7009,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

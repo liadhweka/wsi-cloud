@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-21T22:40:10.965Z
+  modified: 2026-08-22T08:34:17.337Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -34,11 +34,12 @@ These change what the numbers mean, so resolving them after cells have run means
    Remaining: (a) — DONE 2026-08-21 (D-7 closed: the check runs mechanically per cell, poison-marker
    chain-abort, prove-recording asserts it); (b) **mixed-cell widening needs mixed calibration cells before
    1.6, and RECOMMENDED before 6.C** — until then a mixed direction outside the unwidened band is
-   REPORT_ONLY (recorded, never judged, never poisons; inside it is a genuine PASS). **RATIFIED 2026-08-21:
-   the mixed calibration runs BEFORE 6.C** (not just before 1.6) — extend `calibrate-canary-bands.sh` with
-   mixed probe cells at the 4.D-observed mix plus a read-heavier and a write-heavier bracket, take the max
-   widening; implement at the current chain's boundary (the helper is chain-invoked, no mid-chain edits),
-   run the cells, then launch 6.C; (c) Leg B's R2 band
+   REPORT_ONLY (recorded, never judged, never poisons; inside it is a genuine PASS) — this conservative
+   path now applies only where no mixed_widening exists (Leg B pre-calibration). **(b) DONE 2026-08-22:
+   mixed_widening CALIBRATED on Leg A = ×1.0551** (9 rwmix probe cells in the 30-cell bands file;
+   `calibrate` refuses <3 mixed cells). Consequence recorded in the Stage-4 4.D row: protocol mixedness is
+   only ~5.5%, so 4.D's read ratios 1.22/1.74 are workload READ AMPLIFICATION under concurrent write load —
+   a measured per-cell finding class the canary now surfaces instead of blanketing; (c) Leg B's R2 band
    calibration writes that leg's bands file (theirs).** Detail: `docs/STAGES.md` **D12**, `docs/RUNBOOK.md`.
 4. **Determine the Lustre LND actually in use** (kernel TCP vs the EFA provider). This decides which client
    counters are primary versus diagnostic — get it wrong and every Lustre number cites a bypassed source.
@@ -168,11 +169,12 @@ These change what the numbers mean, so resolving them after cells have run means
 2. **Coord-equivalence gate between legs.** Completeness and per-slide tile counts are storage-independent, so
    any cross-leg divergence proves the legs did not process identical inputs. **Fail loud; invalidates
    downstream comparison.** Detail: `docs/Stage-3-Tissue-Detection.md`.
-3. **Mixed-workload canary bands** must be wider than single-direction bands **and** re-derived per filesystem.
-   Live evidence from the 4.D mixed-rw cells (report-only judgements, 2026-08-18): write direction PASSes the
-   EC relation dead-centre (1.482 / 1.459) while the read direction lands at **1.219 (BRCA) / 1.743 (CAM16)**
-   against the single-direction read band [0.99, 1.09] — the widening the mixed calibration must cover, and
-   it grows as the read share shrinks. Calibrate before 1.6.
+3. **Mixed-workload canary bands — CALIBRATED on Leg A (2026-08-22): protocol mixedness widens by only
+   ×1.0551** (rwmix 25/50/75 probes, 3 reps each). The 4.D read excess (1.219/1.743) is therefore NOT mixed
+   overhead but **workload read amplification under concurrent write load** — reinterpretation recorded in
+   the Stage-4 4.D row; expect the canary to surface this class per cell on mixed real workloads (6.C, 1.6,
+   7.5) as FAIL-with-explanation or genuine findings, judged case by case. Leg B re-derives its own mixed
+   widening at R2 (per-filesystem, never ported).
 4. **Delete any stale raw-TIFF before re-converting.** The 4.D driver skips existing non-empty output, so a
    stale artifact at the wrong magnification is silently kept and read as current. Its byte counts and
    tile-grid dimensions must also match between legs.

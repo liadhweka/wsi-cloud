@@ -522,10 +522,12 @@ def _cli_calibrate(run_dirs):
     min/max of the observed normalized ratios across the repeats, +/-5% margin.
     Refuses (exit non-zero) on fewer than 3 cells for either direction — a band
     from fewer repeats is a guess wearing a measurement's clothes.
-    mixed_widening is deliberately NOT written here: it needs mixed calibration
-    cells (open-items memory B.3), and a guessed widening can mask a real
-    inconsistency. Until it exists, mixed cells widen by 1.0 and a FAIL there
-    is a judgement to record, not a band to bend.
+    mixed_widening is written ONLY from mixed calibration cells (run name
+    contains 'rwmix'; >=3 required): per direction, the widening a mixed cell's
+    normalized ratio needs beyond that direction's own band, maximum across all
+    mixed cells and directions, plus margin. Never guessed: absent mixed cells,
+    no mixed_widening is written and the checker judges mixed cells
+    conservatively (in-band = PASS, out-of-band = REPORT_ONLY).
     """
     import os
     MARGIN = 1.05
@@ -535,6 +537,7 @@ def _cli_calibrate(run_dirs):
     layout = os.environ.get("LUSTRE_STRIPE_LAYOUT")
     norms = {"read": [], "write": []}      # large-bs normalized ratios
     small_norms = []                       # small-bs normalized ratios (both dirs)
+    mixed_norms = []                       # (direction, norm) from mixed rwmix cells
     cells = []
     for rd in run_dirs:
         rd = Path(rd)
@@ -546,6 +549,7 @@ def _cli_calibrate(run_dirs):
         rm = client_rate_metrics(results, fs)
         m = lambda k: rm.get(k) or 0.0
         small = "bs4k" in rd.name
+        mixed = "rwmix" in rd.name
         pairs = (("read", m("app_read"), m("wire_read")),
                  ("write", m("app_write"), m("wire_write")))
         for direction, app, wire in pairs:
@@ -557,10 +561,13 @@ def _cli_calibrate(run_dirs):
                       file=sys.stderr)
                 return 1
             n = (wire / app) / expected_relation(fs, direction, ec, layout)
-            (small_norms if small else norms[direction]).append(n)
+            if mixed:
+                mixed_norms.append((direction, n))
+            else:
+                (small_norms if small else norms[direction]).append(n)
             cells.append({"run_dir": rd.name, "direction": direction,
                           "ratio": round(wire / app, 4), "normalized": round(n, 4),
-                          "small_bs": small})
+                          "small_bs": small, "mixed": mixed})
     for direction in ("read", "write"):
         if len(norms[direction]) < 3:
             print(f"calibrate: REFUSING — only {len(norms[direction])} large-bs {direction} cells; "
@@ -580,6 +587,21 @@ def _cli_calibrate(run_dirs):
         print("calibrate: WARNING — no small-bs cells supplied; small-block cells will be "
               "judged at the LARGE-block band, which the Stage-1 register forbids. "
               "Supply bs4k calibration cells.", file=sys.stderr)
+    if mixed_norms:
+        n_mixed_cells = len({c["run_dir"] for c in cells if c.get("mixed")})
+        if n_mixed_cells < 3:
+            print(f"calibrate: REFUSING — only {n_mixed_cells} mixed (rwmix) cells; the ratified "
+                  "design is >=3 reps per mix (a widening from fewer is a guess)", file=sys.stderr)
+            return 1
+        # Per direction: how far past that direction's OWN band the mixed ratio
+        # lands; the widening is the max across all mixed cells and directions.
+        w = max([1.0] + [max(n / bands[d]["hi"], bands[d]["lo"] / n)
+                         for d, n in mixed_norms]) * MARGIN
+        out["bands"]["mixed_widening"] = round(w, 4)
+    else:
+        print("calibrate: NOTE — no mixed (rwmix) cells supplied; mixed_widening not written. "
+              "Mixed cells stay conservatively judged (in-band PASS, out-of-band REPORT_ONLY).",
+              file=sys.stderr)
     out["calibrated_utc"] = __import__("datetime").datetime.now(
         __import__("datetime").timezone.utc).isoformat()
     # The scheme input the centers were normalized against, per leg — recorded so

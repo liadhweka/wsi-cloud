@@ -1,0 +1,19 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-22-073150-weka-s0-calib-randr-bs4k-jobs16-rep1",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.4241,
+      "expected_center": 1.0,
+      "band": [
+        0.726,
+        1.4954
+      ],
+      "widenings_applied": [
+        "small-bs x1.3663"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

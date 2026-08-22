@@ -215,7 +215,7 @@ for cell in "${CELLS[@]}"; do
         # FPSYNC_PID is the session/process-group leader — kill -- -PGID
         # kills the whole tree (fpsync master + rsync workers) without
         # pattern-matching that could collide with the parent bash's argv.
-        setsid /usr/bin/fpsync -v -n $INGEST_N -d $SHDIR $SRC $WRITE_TARGET/ &
+        setsid fpsync -v -n $INGEST_N -d $SHDIR $SRC $WRITE_TARGET/ &
         FPSYNC_PID=\$!
         echo '[wrapper] fpsync backgrounded in own session, pid='\$FPSYNC_PID
 

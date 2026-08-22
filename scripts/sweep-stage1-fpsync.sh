@@ -48,7 +48,7 @@ FAILED_CELLS=0
 if [[ ! -d "$SRC" ]]; then
   log "FATAL: source dir missing: $SRC"
   log "  Run the recorded re-stage first:"
-  log "  scripts/record-run.sh --run-name restage-tcga-brca-for-1.5-prep-n16 --stage 1.5 --note '...' -- /usr/bin/fpsync -v -n 16 -d /tmp/fpsync-prep ${FS_MOUNT}/data/tcga-brca/ \$SRC"
+  log "  scripts/record-run.sh --run-name restage-tcga-brca-for-1.5-prep-n16 --stage 1.5 --note '...' -- fpsync -v -n 16 -d /tmp/fpsync-prep ${FS_MOUNT}/data/tcga-brca/ \$SRC"
   exit 2
 fi
 SRC_BYTES=$(du -sb "$SRC" | awk '{print $1}')
@@ -86,7 +86,7 @@ for n in "${CONCURRENCIES[@]}"; do
     --run-name "$name" \
     --stage "1.5" \
     --note "$note" \
-    -- /usr/bin/fpsync -v \
+    -- fpsync -v \
         -n "$n" \
         -d "$SHDIR" \
         "$SRC" \
