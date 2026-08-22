@@ -1,0 +1,17 @@
+{
+  "features_dir": "/mnt/weka/features/6.A/virchow2/brca_full",
+  "embedding_dim": 1280,
+  "batch_size": 1,
+  "num_workers": 16,
+  "ramp_s": 300.0,
+  "runtime_s": 1500.0,
+  "n_slides_in_corpus": 1064,
+  "total_steady_steps": 57976,
+  "total_steady_slides": 57976,
+  "total_steady_tiles": 640295619,
+  "slides_per_sec_steady": 38.650666666666666,
+  "tiles_per_sec_steady": 426863.746,
+  "samples_per_sec_steady": 38.650666666666666,
+  "max_tiles_per_slide_cap": null,
+  "training_steps_csv": "/home/ec2-user/wsi-cloud/runs/2026-08-22-113605-weka-s6.C-concurrent-mil+viewer/workload-mil.csv"
+}

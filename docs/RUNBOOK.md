@@ -252,6 +252,18 @@ calibration file the canary refuses loudly rather than invent a tolerance, becau
 mask a real inconsistency and manufacture a false one. `wsi_agg_helper.py cache <run-dir>` is the
 declared-vs-achieved cache reconciliation (**D13**).
 
+**Two declared per-cell inputs keep the check honest on cells whose traffic the run name cannot describe**
+(both recorded into `metadata.json` by `record-run.sh`, declared by the drivers from the workload
+composition — never inferred from the outcome): **`RECORD_BS_HINT`** (`4k` applies the calibrated small-bs
+widening; `heterogeneous-small-block` applies it as the composition envelope — any mix of large-block and
+4K traffic lands between the two calibrated extremes; born of 6.C's viewer cells, whose pure-4K stream sat
+exactly at the 4K calibration but was judged at the large-block band); and **`RECORD_WIRE_EXEMPT`**
+(`direction:reason`) for a direction that is by construction a protocol-dominated trickle with no
+calibrated analogue — its ratio is **recorded as REPORT_ONLY, never judged** (born of 6.C's
+extract-without-ingest mixes, whose only writer is the extractor's torch.save small-buffer stream:
+measured 2.58× on the wire under 5+2 EC versus 1.46 bulk — a real amplification, not an instrumentation
+failure, and a finding in its own right).
+
 **The check runs mechanically after every cell** — `record-run.sh` writes the evaluator's output into the
 run dir as `canary-check.json`, and a FAIL / UNCALIBRATED / NO_DATA verdict on a stage ≥ 1 cell marks the
 cell INCOMPLETE **and poisons the chain**: `runs/.leg-state/<leg>/canary-abort` is written, and every

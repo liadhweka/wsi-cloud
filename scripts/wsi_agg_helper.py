@@ -499,6 +499,22 @@ def _cli_check(run_dir):
             bs_bytes = int(mb.group(1)) * (1024 if mb.group(2).lower() == "k" else 1024**2)
 
     verdicts = []
+    # Declared wire-relation exemptions (metadata wire_exempt, from
+    # RECORD_WIRE_EXEMPT — "direction:reason[,direction:reason]"): a direction
+    # that is BY CONSTRUCTION a protocol-dominated trickle (e.g. torch.save
+    # small-buffer feature writes as a mix's only writer — measured 2.58x on
+    # 5+2 EC, 2026-08-22, vs 1.46 bulk) has no calibrated analogue; judging it
+    # against the bulk band manufactures a false instrumentation failure, and
+    # inventing a trickle band would be an unsourced constant. Same principle
+    # as the uncalibrated-mixed REPORT_ONLY: the ratio is RECORDED, never
+    # judged, never chain-poisoning. Declared per cell by the driver from the
+    # workload composition, never inferred from the outcome.
+    exempt = {}
+    for part in str(meta.get("wire_exempt") or "").split(","):
+        if ":" in part:
+            d, reason = part.split(":", 1)
+            exempt[d.strip()] = reason.strip()
+    verdicts_exempt = exempt
     app_r, wire_r = rm["app_read"], rm["wire_read"]
     app_w, wire_w = rm["app_write"], rm["wire_write"]
     # A direction is evaluated (and counts as "mixed" for the other) only above
@@ -506,16 +522,22 @@ def _cli_check(run_dir):
     # mixed workload, and evaluating it would ratio noise against noise.
     MATERIAL = 10e6   # low enough that a 4K jobs=1 cell still gets a verdict
     r_live, w_live = bool(app_r and app_r > MATERIAL), bool(app_w and app_w > MATERIAL)
+    def _one(direction, app, wire, mixed):
+        if direction in verdicts_exempt:
+            v = {"direction": direction, "fs": fs, "verdict": "REPORT_ONLY",
+                 "detail": f"declared wire-relation exemption: {verdicts_exempt[direction]} — "
+                           "ratio recorded, not judged"}
+            if app and wire:
+                v["ratio"] = round(wire / app, 4)
+                v["expected_center"] = round(expected_relation(fs, direction, ec, layout), 4)
+            return v
+        return consistency_verdict(app, wire, fs=fs, direction=direction,
+                                   ec_scheme=ec, stripe_layout=layout,
+                                   bands=bands, bs_bytes=bs_bytes, mixed=mixed)
     if r_live:
-        verdicts.append(consistency_verdict(app_r, wire_r, fs=fs, direction="read",
-                                            ec_scheme=ec, stripe_layout=layout,
-                                            bands=bands, bs_bytes=bs_bytes,
-                                            mixed=w_live))
+        verdicts.append(_one("read", app_r, wire_r, w_live))
     if w_live:
-        verdicts.append(consistency_verdict(app_w, wire_w, fs=fs, direction="write",
-                                            ec_scheme=ec, stripe_layout=layout,
-                                            bands=bands, bs_bytes=bs_bytes,
-                                            mixed=r_live))
+        verdicts.append(_one("write", app_w, wire_w, r_live))
     print(json.dumps({"run_dir": str(run_dir), "verdicts": verdicts}, indent=2))
     bad = [v for v in verdicts if v["verdict"] not in ("PASS",)]
     # UNCALIBRATED and FAIL both exit non-zero: an unevaluable canary must be

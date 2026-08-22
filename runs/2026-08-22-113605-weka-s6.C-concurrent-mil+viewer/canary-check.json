@@ -1,0 +1,35 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-22-113605-weka-s6.C-concurrent-mil+viewer",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.412,
+      "expected_center": 1.0,
+      "band": [
+        0.6861,
+        1.5777
+      ],
+      "widenings_applied": [
+        "mixed x1.0551",
+        "small-bs x1.3682"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4639,
+      "expected_center": 1.4,
+      "band": [
+        0.9605,
+        2.207
+      ],
+      "widenings_applied": [
+        "mixed x1.0551",
+        "small-bs x1.3682"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

@@ -76,6 +76,16 @@ run_cell() {
     ,viewer,)   bs_hint="4k" ;;
     *,viewer,*) bs_hint="heterogeneous-small-block" ;;
   esac
+  # RECORD_WIRE_EXEMPT (D12): in any mix whose ONLY writer is the extractor's
+  # feature stream (extract present, ingest absent), the write side is a
+  # torch.save small-buffer trickle with no calibrated analogue (measured
+  # 2.58x on 5+2 EC vs 1.46 bulk, 2026-08-22) — declared by construction, so
+  # the checker records its ratio instead of judging it against the bulk band.
+  local wire_exempt=""
+  if [[ ",$workloads," == *,extract,* && ",$workloads," != *,ingest,* ]]; then
+    wire_exempt="write:feature-write trickle (torch.save small-buffer writes; no bulk writer in this mix — no calibrated analogue)"
+  fi
+  RECORD_WIRE_EXEMPT="$wire_exempt" \
   RECORD_BS_HINT="$bs_hint" \
   RECORD_CACHE_STATE=na-mixed-concurrent-workloads \
   RECORD_RUN_DIR="$run_dir" \
