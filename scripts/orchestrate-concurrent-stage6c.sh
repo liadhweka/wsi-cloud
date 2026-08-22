@@ -57,9 +57,9 @@ EXTRACT_DATASET_TAG="${EXTRACT_DATASET_TAG:-brca50}"
 # numerator. This partition is 6.C-specific: 6.D's phases are sequential, so
 # PIPELINE_GPUS keeps the full 0,1,2,3 (it must match 6.A Tier 2's N to
 # compose) -- do not "align" the two.
-# ⏳ D-8: the SET is now decided; the NUMA/NIC-aware ORDER is still underived
-# (`nvidia-smi topo -m` on the real instance). The guard below catches a wrong
-# list; it cannot catch a wrong ORDER, which is why D-8 still gates.
+# D-8 CLOSED (2026-08-22, `nvidia-smi topo -m`): the instance is single-NUMA —
+# all GPUs and CPUs on node 0 — so ordering is a non-axis; only the SET matters,
+# and the guard below catches a wrong set.
 EXTRACT_GPUS="${EXTRACT_GPUS:-1,2,3}"
 EXTRACT_N_GPUS="${EXTRACT_N_GPUS:-3}"
 MIL_FEATURES_TAG="${MIL_FEATURES_TAG:-brca_full}"
@@ -95,7 +95,7 @@ for _g in "${_req_gpus[@]}"; do
     echo "       $_n_gpus_present GPU(s) (valid indices 0..$((_n_gpus_present - 1)))." >&2
     echo "       CUDA_VISIBLE_DEVICES would silently drop it and the extract workload would run" >&2
     echo "       on fewer GPUs than this cell claims. Re-derive the GPU list for THIS instance" >&2
-    echo "       (deferred item D-8) and export EXTRACT_GPUS." >&2
+    echo "       (the set matters; order is a non-axis — D-8, closed) and export EXTRACT_GPUS." >&2
     exit 1
   fi
 done

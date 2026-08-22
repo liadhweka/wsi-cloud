@@ -72,6 +72,18 @@ for rep in 1 2 3; do cell "calib-seqw-bs4m-jobs16-rep$rep"  "na-write-cell"     
 for rep in 1 2 3; do cell "calib-seqr-bs4m-jobs16-rep$rep"  "na-calibration-server-resident"   --rw=read     --bs=4M --runtime=480; done
 for rep in 1 2 3; do cell "calib-randw-bs4k-jobs16-rep$rep" "na-write-cell"                    --rw=randwrite --bs=4K --runtime=180; done
 for rep in 1 2 3; do cell "calib-randr-bs4k-jobs16-rep$rep" "na-calibration-server-resident"   --rw=randread  --bs=4K --runtime=180; done
+# Mixed probes (ratified 2026-08-21, before 6.C): a mixed cell's wire carries
+# payload plus the other direction's acknowledgements, so its wire/app ratio
+# needs a WIDER band than single-direction cells — and the widening must be
+# measured, never guessed (a guessed widening can mask a real inconsistency).
+# Three read shares bracket the observed workloads (4.D-class write-heavy,
+# balanced, read-heavy), 3 reps each; the helper takes the max
+# direction-specific widening across all of them, plus margin.
+for mix in 25 50 75; do
+  for rep in 1 2 3; do
+    cell "calib-mixed-rwmix${mix}-bs4m-jobs16-rep$rep" "na-calibration-server-resident" --rw=rw --rwmixread="$mix" --bs=4M --runtime=300
+  done
+done
 
 if (( FAILED > 0 )); then
   log "FATAL: $FAILED calibration cell(s) failed — refusing to write bands from a partial set"

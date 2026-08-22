@@ -812,11 +812,14 @@ EOF
 
   # D-7 end-of-cell raw sync: each completed cell is durable the moment it ends,
   # not at the step boundary. Warn-only — run-leg's verified per-step sync stays
-  # the fail-loud authority (same switch as the mid-run loop).
+  # the fail-loud authority (same switch as the mid-run loop). Its log lives in
+  # post/, NOT raw/: logging into raw/ makes the sync self-referencing — it
+  # appends its own result line to a file it just uploaded, leaving that file
+  # permanently one line behind in S3 (bit the 6.B.2 rep cells, 2026-08-22).
   if [[ -n "${S3_BUCKET:-}" && "${RECORD_MIDRUN_SYNC_S:-600}" != "0" && -x "$SCRIPT_DIR/sync-to-s3.sh" ]]; then
     "$SCRIPT_DIR/sync-to-s3.sh" --mode run --run-dir "$RUN_DIR" \
-      >> "$RUN_DIR/raw/midrun-sync.log" 2>&1 \
-      || log "  WARN: end-of-cell S3 sync failed (the per-step sync will retry; see raw/midrun-sync.log)"
+      >> "$RUN_DIR/post/end-sync.log" 2>&1 \
+      || log "  WARN: end-of-cell S3 sync failed (the per-step sync will retry; see post/end-sync.log)"
   fi
 
   log "done: $RUN_DIR"

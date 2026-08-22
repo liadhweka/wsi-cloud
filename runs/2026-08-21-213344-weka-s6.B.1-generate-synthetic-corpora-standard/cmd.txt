@@ -1,0 +1,1 @@
+/data/local-nvme/conda-envs/wsi-cucim-2604/bin/python /home/ec2-user/wsi-cloud/scripts/generate-synthetic-features-stage6b.py --standard-suite --output-base /mnt/weka/features-6.B-synthetic --n-workers 32 --summary-json /home/ec2-user/wsi-cloud/runs/2026-08-21-213344-weka-s6.B.1-generate-synthetic-corpora-standard/generation-summary.json 

@@ -1,0 +1,17 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-21-213344-weka-s6.B.1-generate-synthetic-corpora-standard",
+  "verdicts": [
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4418,
+      "expected_center": 1.4,
+      "band": [
+        1.3863,
+        1.5289
+      ],
+      "widenings_applied": [],
+      "verdict": "PASS"
+    }
+  ]
+}

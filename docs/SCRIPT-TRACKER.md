@@ -40,7 +40,6 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-4** | **Remaining: the head-to-head `--fs` pivot column; the lustre cold set's python-side workers** | `aggregate-sweep.py` + the per-stage aggregators (pivot); `read-feature-files-stage6b.py` (at 6.B.2) and Stage 7's cold cells (at 7.1) | Both recorder halves and the shared helper are BUILT and proven on each leg's live instance (evidence: the `record-run.sh` / `parse-results.py` / `wsi_agg_helper.py` entries). (1) The aggregators still don't pivot on `metadata.json`'s `fs` field to emit head-to-head columns — the deliverable IS the cross-filesystem delta, so this lands before the first cross-leg synthesis (`prove-recording.sh` SKIPs its assertion until then). (2) The Lustre cold-cell evidence set is **DECIDED (ratified 2026-08-21): `vm.drop_caches=3` + `ldlm.namespaces.*.lru_size=clear`, both acknowledged in `cache-evidence.txt`** — the reconciler enforces it (`wsi_agg_helper.py`), the three shell drivers with `drop_caches_evidenced` carry the leg-guarded second step, and `probe-lustre-coldset.sh` is the measured demonstration. Remaining: the clearing-based cold cells whose mechanism lives in python workers get the ldlm step at their gates — 6.B.2's discard child before 6.B, Stage 7's cold cells before 7.1 |
 | **D-5** | **Remaining: Lustre band calibration (R2); mixed-cell widening — needed before 1.6, and RECOMMENDED before 6.C** | `wsi_agg_helper.py` (`check <run-dir>`); `calibrate-canary-bands.sh` (the mixed probe cells) | Both relations are derived and built — WEKA (D+P)/D with calibrated bands (anchors reproduce; Stage-1 register + helper docstring), Lustre from the recorded stripe layout (raid0 → 1.0/1.0, R1 anchors). Bands load from `runs/.leg-state/$LEG/canary-bands.json`; absent → UNCALIBRATED exits non-zero rather than inventing a tolerance — Lustre's file is written by R2's calibration cells (REP≥3 per direction + bs4k). **Mixed-cell semantics until the widening is calibrated (2026-08-21):** a mixed direction whose ratio sits inside the UNWIDENED single-direction band is a genuine PASS (any valid mixed band is a superset); outside it the verdict is **REPORT_ONLY** — recorded, never judged, never chain-poisoning — because it cannot be told apart from the uncalibrated widening, and a guessed widening can mask a real inconsistency. Consequence: **6.C's ingest-active mixed cells get report-only read verdicts until the mixed calibration runs** — running it before 6.C (not just before 1.6) gives the endurance chain full canary coverage. Canary-abort itself is wired (D-7, closed) |
 | **D-6** | **Remaining: the nvidia-fs block parser in `parse-results.py`; the pre-cuFile-cell canary requirement (with D-7); Leg B's recorded Phase-0 determination cell (R2); the Stage-7 worker's path-accounting wiring** (`inference-per-slide-stage7.py` records no split — found 2026-08-21; its kvikIO cells now declare `RECORD_KVIKIO_CELL=1`, so they fail loud as INCOMPLETE until this lands — **wire before Stage 7 runs**) | `parse-results.py`; `record-run.sh` (canary); R2 session (Phase-0 cell); `inference-per-slide-stage7.py` | The shared accounting module (`wsi_cufile_accounting.py`), the 4.C/5/6 worker wiring, the D-30 INCOMPLETE rule, and Leg A's Phase-0 determination (no true GDS on WEKA-over-ENA; outcome + consequences in `Stage-4-Patching.md`) are done and smoke-verified. The standing three-layer caveat: kvikio's own compat can serve reads via POSIX without entering cuFile at all, so the per-cell recorded split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged` — is the only proof of path; an accounting-off state reports as unknown, never zero. On the known-good compat legs the pre-cell canary signature is bounce-accounting non-zero |
-| **D-8** | **GPU/NUMA map + DDP ranges** | `run-multiproc-kvikio.sh`, `sweep-stage5-training.sh`, `sweep-stage6a-extract.sh`, `sweep-stage7-clinical.sh` | The GPU↔NUMA↔NIC map must be re-derived on the real instance; GPU-count sweeps follow its GPU count |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
 | **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
 | **D-31** | **The environment contract omits the 20 workload-shape variables** | `env-contract.py:48-72` | `docs/NAMING-AND-VARIABLES.md` Table 5 declares them identical-across-legs, but the contract records none. **Do not simply append them to `MUST_MATCH`:** `verify()` pushes a null-vs-null pair into `unrecorded` and returns FAILED, so the normal case (both legs on defaults) would fail. Needs a tri-state or a defaults-aware comparison |
@@ -51,7 +50,13 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-34** | **Short-cell recorder poll rate — DECIDED (ratified 2026-08-16, Stage-2 register): raise the filesystem-side poll rate for short cells (~10 Hz), identically on both legs; build it** | `record-run.sh` (recorder set) | Sub-second high-concurrency Stage 2/3 cells yield 1–3 samples at 1 Hz, so any sustained mean is ill-defined and both legs lose filesystem-side evidence exactly where the metadata architectures differ most. Implement before the first Stage 2/3 cell; verify the higher rate does not itself perturb the measurement (the recorded `_sample_interval_s` block is the evidence) |
 
 **Closed ids** — rows deleted (git holds their text); each id still resolves to where its constraint lives
-now, so citations in scripts and entries never dangle (the D-26 lesson): **D-7** → all four chain protections
+now, so citations in scripts and entries never dangle (the D-26 lesson): **D-8** → derived on the real
+instance (2026-08-22, `nvidia-smi topo -m`; every run dir's `pre/nvidia-smi-topo.txt` records it): the
+g6e.24xlarge is **single-NUMA** — all four GPUs and all 96 vCPUs on node 0, every GPU pair NODE-connected,
+identical CPU affinity that already excludes the reserved FE cores — so **GPU ordering is a non-axis on
+this instance class** and the identity order stands on both legs by the held-constant instance spec; the
+DDP ranges ({1,2,4}) were set with D10. The 4.C rep bimodality's NUMA-placement candidate is thereby ruled
+out (its unpinned-CPU half remains recorded, undiagnosed) · **D-7** → all four chain protections
 live in `record-run.sh` and proven by stage-0 cells (`s0-watchdog-proof`, the recording proof's assertions
 16/17, the `midrun-sync-proof` cell): per-cell watchdog (`RECORD_TIMEOUT_S`), during-run + end-of-cell raw
 S3 sync (`RECORD_MIDRUN_SYNC_S`, warn-only — run-leg's verified per-step sync stays the fail-loud
@@ -696,7 +701,7 @@ explicitly. Identical grid verbatim on both legs; FSx's native import is 1.8, a 
 ### `fe-core-fio.sh` · `fe-core-kvikio.sh` — shared cell helpers
 **What.** Single-cell helpers for a `fio` cell and a kvikIO cell, used for baselines and quick checks.
 **Why.** Phase 0 needs the ceiling captured **per block size** without standing up a whole sweep.
-**⏳ DEFER:** `fe-core-kvikio.sh` needs cuFile path accounting (D-6) and the GPU pinning order (D-8).
+**⏳ DEFER:** `fe-core-kvikio.sh` needs cuFile path accounting (D-6). (D-8 closed: single-NUMA, order is a non-axis.)
 **⚠ Neither is the Phase-0 ceiling capture** — each runs ONE fixed configuration, while every downstream
 "% of ceiling" divides by the **block-size-matched** Stage 1.0a–d cell. Use the Stage 1.0 sweeps for that.
 
@@ -841,7 +846,7 @@ answer is visible; a fabricated one is not.
 **Caveats.** Reads must be block-aligned. **Every cell runs in both cuFile modes on both filesystems** so the
 filesystem effect and the transport effect are separable (**D8**). **`LD_PRELOAD` scoped per cell** (pattern
 #3). The aggregator implements all four parser idioms (pattern #7), including diff/dt on cumulative counters.
-**⏳ DEFER:** NUMA-aware GPU assignment (D-8).
+(D-8 closed: single-NUMA instance — GPU assignment order is a non-axis.)
 
 ### `cufile-full-rdma.template.json` · `GDS-TUNING-CHECKLIST.md`
 **What.** A parameterised cuFile configuration template, and a doc-grounded verify → measure → tune procedure.
@@ -873,7 +878,7 @@ one side's optimum on the other is a fairness bug that reads as a filesystem dif
 The **mode-controlled paired cell** (`STAGES.md`) is requested by exporting `CUFILE_COMPAT_MODE=on` for one
 invocation; a non-default mode joins the **cell name** (`-compat<mode>`), because the aggregators group
 configs by name and the pair must never collapse into its best-mode twin.
-**⏳ DEFER:** NUMA-aware GPU pinning order (D-8). The GPU-count *range* is set:
+(D-8 closed: single-NUMA instance — pinning order is a non-axis.) The GPU-count *range* is set:
 N ∈ {1, 2, 4} on both blocks, matching the 4-GPU instance.
 
 ---

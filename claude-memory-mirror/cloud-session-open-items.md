@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-21T21:42:26.413Z
+  modified: 2026-08-21T22:40:10.965Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -132,6 +132,15 @@ These change what the numbers mean, so resolving them after cells have run means
     RECORD_CACHE_STATE declaration (memory 13d / tracker D-30)**. **Tier 2** rows (cuCIM tile-cache policy
     item 14 before Stage 4; CHUNK_SIZE item 15 before 6.A Tier 2; D-34 poll rate before 2.0; mixed-band
     calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
+23. **[DECISION IN FLIGHT, human's — no action] The human is CONSIDERING halting this benchmark and
+    restarting on multiple clients (4) to save calendar time (raised 2026-08-21).** Nothing is decided:
+    continue the current single-client legs normally until the human says otherwise. If it lands, it is a
+    study redesign, not a tweak — thesis §9 makes single-client the claimed unit of analysis, so a
+    multi-client run needs its own fairness basis, exclusivity semantics, per-client-vs-aggregate ceiling
+    treatment, and manifest sharding (disjoint slices per client; never rely on skip-on-existing across
+    clients — check-then-write races). Surface this item before starting any large new wallclock
+    investment, and delete it when the human decides either way.
+
 ## B. Watch during benchmarking
 
 -2. **CONCURRENT LEGS ARE LIVE (D6 amended; CLAUDE.md "Concurrent legs").** Leg B runs on its own instance

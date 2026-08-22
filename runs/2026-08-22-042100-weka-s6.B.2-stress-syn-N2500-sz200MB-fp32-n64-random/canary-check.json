@@ -1,0 +1,17 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-22-042100-weka-s6.B.2-stress-syn-N2500-sz200MB-fp32-n64-random",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.041,
+      "expected_center": 1.0,
+      "band": [
+        0.9919,
+        1.0945
+      ],
+      "widenings_applied": [],
+      "verdict": "PASS"
+    }
+  ]
+}

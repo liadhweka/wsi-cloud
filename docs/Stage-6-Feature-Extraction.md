@@ -190,8 +190,8 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
-| **Type** | A one-shot generation pass rather than a benchmark cell — but **wrapped in `record-run.sh` anyway**, because the sustained write is itself a recordable workload and comes free |
+| **Status** | ✅ Leg A (weka, 1/1 cell OK; canary PASS; `na-write-cell` NOT_APPLICABLE by design) · ⏳ Leg B |
+| **Leg A results (generation cell `s6.B.1-generate-synthetic-corpora-standard`)** | **All six corpora complete, 236,500 files / 6.08 TB in 2,161 s — fs-side write active-window mean 2.81 GB/s (peak 4.63), ops sustained ~4.4k/s (peak 14.2k)**, zero incomplete files. Per-corpus: the 3.0 TiB cold corpus (66,000 × 50 MB) wrote at **3.17 GB/s** over 1,091 s; the 100,000 × 5 MB tier created **335 files/s** — the highest file-create rate recorded on this leg. Canary PASS (write ratio at the 5+2 relation) |
 | **Step** | Write a synthetic `.pt` corpus at a specified `(N_files, file_size, dtype)` — `../scripts/generate-synthetic-features-stage6b.py` |
 | **Grid (fixed at substage entry, ratified 2026-08-21, from the measured Tier-2 distribution)** | The `features-6a` fingerprint measured the real per-slide distribution: **mean 57–68 MB, median 55–66, p10 14–17, max 200–240** (1280/1536-dim fp32) — inside the assumed ~40–65 MB bracket, so **50 MB is the measured-median tier** and 5/200 MB bracket the observed range. The suite: **saturation** 10K × 50 MB × {fp32, fp16} (~500 GB each); **production** 66,000 × 50 MB × fp32 = **3.3 TB ≈ 3.0 TiB — the ratified cold-corpus definition**; **size tiers** at **fixed ~500 GB total each** (100K × 5 MB · 50K × 10 MB · 2.5K × 200 MB — N varies inversely with size, because fixed-N would cross the cache floor mid-tier and confound the size axis with the cache regime; the 50 MB point of the curve **is** the saturation fp32 corpus and its n=64/random cell, read rather than re-run). Suite total ≈ 5.8 TB ≈ 5.3 TiB. Stored at `$FS_MOUNT/features-6.B-synthetic/` |
 | **Why synthetic rather than real files** | The I/O pattern — small-file random reads plus metadata operations — is what differentiates storage architectures, and embedding *content* is irrelevant to it. Synthetic gives controlled scale, a controlled size distribution, and a controlled bit-width, none of which the real corpus provides |
@@ -204,7 +204,8 @@ For every tile in every tissue-detected slide, run a frozen foundation-model ViT
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 24/24 cells OK + 6 D18 rep cells; cache declarations reconciled CONSISTENT on all 30; consistency canary PASS on every material-direction cell) · ⏳ Leg B |
+| **Leg A results (`s6.B-stress-summary-weka.csv`)** | **Saturation tier (500 GB corpora, cache-served as disclosed):** 50 MB loads peak at **~300 files/s at n=16** (D18 median 298, 1.8% spread) and *fall* under added concurrency — 204–238 at n=64, 193 at n=256 with per-load p99 blowing out 0.35 s → 3.6 s: past the knee the constraint is host-CPU deserialization, not storage. Access pattern is a non-axis when cache-served (random/shuffled/sequential within ~1%), and fp16 tracks fp32 (equal file size by design). **Production tier — the genuinely cold 3.0 TiB corpus, cold verified by the canary itself (fs-side ≈ app volume, read ratio in band):** **128 files/s = 6.4 GB/s of random 50 MB reads at n=64** (D18 median 125, 2.9% spread) — ~58% of the block-size-matched read ceiling from a small-file random workload — plateauing at 117/116 files/s at n=128/256 while p99 climbs 1.0 s → 3.6 s → **11.0 s**: past n=64 added concurrency buys queueing, not throughput. **Size tiers (~500 GB each, cache-served):** op-rate peak **8,278 files/s at 5 MB** (D18 median 7,890, 6.0%), 3,780 at 10 MB, 238 at 50 MB (the shared saturation cell), 61 at 200 MB. **The file-load p99 feed criterion is now evaluated per cell** (aggregate-stage6b.py, this stage's canary): PASS at and below each tier's knee; **STALLED verdicts precisely on the saturated configs** (all n=256 cells; the cold cells at n≥64; the 200 MB tier) — a measured monotone stall curve, quoted with each cell, not an instrumentation failure |
 | **Goal** | Small-file random-read throughput and operation rate at production concurrency, across file size, concurrency, access pattern, and bit-width |
 | **Step** | Read the corpus per an access pattern at a given concurrency, deserialising through `torch.load` exactly as production does (host-side unpickling included), timing each load — `../scripts/read-feature-files-stage6b.py` |
 | **Sweep grid** | **(a) Saturation:** mid-scale corpus × file size × concurrency × pattern × dtype — the main curve. **(b) Production scale:** large corpus × high concurrency × random × FP32 — **the genuinely cold cells**. **(c) File-size sensitivity:** fixed concurrency across the size tiers |
@@ -345,11 +346,13 @@ ported across (**D12**). What is specific to this stage:
 **6.B.3 → 6.B.1 → 6.B.2**, so that leg's measured per-step time is already recorded when 6.B.2 starts —
 which is what makes the primary route the normal one and the self-referential fallback the exception.
 
-**Standing constraint — the p99 criterion is not evaluated in code yet.** `aggregate-stage6b.py` emits both
-inputs (`lat_p99_ms` plus concurrency per 6.B.2 cell; `step_duration_ms_mean` / `_p95` per 6.B.3 cell) but
-never joins the two tiers, so the sweep as it stands yields the inputs and no verdict — and a canary whose
-criterion nobody computes passes silently. **Wire the join and the pass/fail before the first 6.B.2 cell is
-accepted.** *(Deferred script work: `SCRIPT-TRACKER.md`; tracked in the open-items memory.)*
+**The p99 criterion is evaluated in code** (`aggregate-stage6b.py`): per 6.B.2 cell it emits the feed
+interval (p99 ÷ C), the reference (minimum 6.B.3 step time across models at the nearest worker count, with
+the uncontended-p99 fallback), and a verdict. **Verdict semantics:** a `STALLED` verdict is a **measured
+per-cell characterization** — the read path did not keep the reference consumer fed at that config, which
+is exactly the saturation this substage exists to find — never an instrumentation failure and never a
+reason to re-run the cell; it is quoted with the cell. Computing and printing the verdict is what keeps the
+criterion from passing silently.
 
 ---
 

@@ -76,7 +76,7 @@ for _g in "${_req_gpus[@]}"; do
     echo "       $_n_gpus_present GPU(s) (valid indices 0..$((_n_gpus_present - 1)))." >&2
     echo "       CUDA_VISIBLE_DEVICES would silently drop it and the extraction phase would run" >&2
     echo "       on fewer GPUs than this pipeline's wallclock claims. Re-derive the GPU list for" >&2
-    echo "       THIS instance (deferred item D-8) and export PIPELINE_GPUS." >&2
+    echo "       THIS instance (the set matters; order is a non-axis — D-8, closed) and export PIPELINE_GPUS." >&2
     exit 1
   fi
 done

@@ -1,0 +1,47 @@
+{
+  "run_name": "generate-synthetic-corpora-standard",
+  "stage": "6.B.1",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-21T21:33:47Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 8,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 0,
+  "cache_state": "na-write-cell",
+  "rep": null,
+  "command": [
+    "/data/local-nvme/conda-envs/wsi-cucim-2604/bin/python",
+    "/home/ec2-user/wsi-cloud/scripts/generate-synthetic-features-stage6b.py",
+    "--standard-suite",
+    "--output-base",
+    "/mnt/weka/features-6.B-synthetic",
+    "--n-workers",
+    "32",
+    "--summary-json",
+    "/home/ec2-user/wsi-cloud/runs/2026-08-21-213344-weka-s6.B.1-generate-synthetic-corpora-standard/generation-summary.json"
+  ],
+  "note": "Stage 6.B.1 prep: generate the standard synthetic corpus suite for 6.B.2/B.3. WHY: corpus generation is itself a real recordable write workload against /mnt/weka — a sustained-write data point worth capturing per CLAUDE.md recording philosophy. Corpus sizing is the ratified Stage-6 register decision (production-scale corpus past the 2304 GiB cold floor; one identical definition on both legs); the per-(N_files, file_size, dtype) grid is fixed at substage entry against the measured 6.A Tier-2 file-size distribution.",
+  "wallclock_s": 2161,
+  "started_utc": "2026-08-21T21:33:49Z",
+  "ended_utc": "2026-08-21T22:09:50Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 7.7009,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

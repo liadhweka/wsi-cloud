@@ -1,0 +1,22 @@
+{
+  "corpus_dir": "/mnt/weka/features-6.B-synthetic/syn-N10000-sz50MB-fp32",
+  "n_files_in_corpus": 10000,
+  "pattern": "sequential",
+  "n_processes": 64,
+  "client_page_cache_discarded": true,
+  "ramp_s": 300.0,
+  "runtime_s": 600.0,
+  "wall_seconds_total": 901.045010272006,
+  "n_files_loaded_total": 187803,
+  "n_files_loaded_steady": 122379,
+  "bytes_steady": 6416401093167,
+  "files_per_sec_steady_aggregate": 203.965,
+  "MiBps_steady_aggregate": 10198.59487719059,
+  "errors": 0,
+  "lat_samples_n": 12211,
+  "lat_mean_ms": 314.0718213605678,
+  "lat_p50_ms": 312.93341499986127,
+  "lat_p95_ms": 346.46171098574996,
+  "lat_p99_ms": 356.80375597439706,
+  "lat_max_ms": 553.1396750011481
+}
