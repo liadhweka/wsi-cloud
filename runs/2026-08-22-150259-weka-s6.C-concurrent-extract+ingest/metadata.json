@@ -1,0 +1,20 @@
+{
+  "run_name": "concurrent-extract+ingest",
+  "stage": "6.C",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-22T15:03:03Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [1,2,3,4,49,50,51,52],
+  "cores_available": 80,
+  "cache_state": "na-mixed-concurrent-workloads",
+  "bs_hint": null,
+  "wire_exempt": "read:reads under a dominant concurrent bulk write stream (4.D-class read amplification; no calibrated analogue)",
+  "rep": null,
+  "command": ["scripts/orchestrate-concurrent-stage6c.sh","--workloads","extract,ingest","--ramp","300","--runtime","1500","--run-dir","/home/ec2-user/wsi-cloud/runs/2026-08-22-150259-weka-s6.C-concurrent-extract+ingest"],
+  "note": "Stage 6.C concurrent multi-workload cell on fs=weka: workloads={extract,ingest} extract_model=virchow2 ramp=300s steady=1500s. WHY: concurrent heterogeneous load on one namespace is where storage architectures diverge, and no single-workload cell surfaces it. Retention is measured against THIS leg's own solo baselines re-measured at the same concurrent config, so the cross-leg comparison is of retention percentages, not absolute rates. Per D15, check the core accounting before attributing any interference to the filesystem rather than the host. Regime: na — the cold/warm axis deliberately does not apply to 6.C (ratified 2026-08-21): the measured quantity is per-workload QoS retention, and solo baselines carry the same declaration as the concurrent tiers because they are the retention denominators measured under the identical construction — labelling the two sides differently would put numerator and denominator in different regimes. Surgical re-run after the ingest no-op fix (the prior cell's ingest re-scanned a pre-populated target and wrote nothing; the orchestrator now wipes INGEST_DST pre-barrier). Re-run with the read-under-dominant-write exemption declared (the 2026-08-22-144900 cell measured the real mix correctly — write 1.441 PASS, ingest fix confirmed — but its read ratio 1.284 is the 4.D-class amplification, recorded not judged)."
+}

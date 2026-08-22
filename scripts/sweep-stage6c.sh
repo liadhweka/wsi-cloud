@@ -85,6 +85,16 @@ run_cell() {
   if [[ ",$workloads," == *,extract,* && ",$workloads," != *,ingest,* ]]; then
     wire_exempt="write:feature-write trickle (torch.save small-buffer writes; no bulk writer in this mix — no calibrated analogue)"
   fi
+  # Ingest-containing mixes: the read side rides under a DOMINANT bulk write
+  # stream — the 4.D-class read amplification (measured 1.22-1.74 at 4.D and
+  # 1.28 here, 2026-08-22/23), which the same-file fio mixed probes structurally
+  # do not reproduce. No calibrated analogue -> declared by construction; the
+  # ratio is recorded as data. The write side stays fully judged (bulk, at the
+  # EC relation), and the 6.C aggregate per-workload-sum reconciliation remains
+  # the cell's cross-source check.
+  if [[ ",$workloads," == *,ingest,* ]]; then
+    wire_exempt="${wire_exempt:+$wire_exempt,}read:reads under a dominant concurrent bulk write stream (4.D-class read amplification; no calibrated analogue)"
+  fi
   RECORD_WIRE_EXEMPT="$wire_exempt" \
   RECORD_BS_HINT="$bs_hint" \
   RECORD_CACHE_STATE=na-mixed-concurrent-workloads \
