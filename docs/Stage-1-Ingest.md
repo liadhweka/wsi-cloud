@@ -215,7 +215,8 @@ below.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 4/4 cells OK + the recorded re-stage prep; canary PASS at the EC relation on every cell) · ⏳ Leg B |
+| **Leg A results (`s1.5-fpsync-summary-weka.csv`; 1.1 TiB real corpus, 1,133 files, local NVMe → filesystem)** | n=1: **702 MiB/s** (26.2 min) → n=4: 2,387 → n=16: 2,397 → n=64: **2,402 MiB/s** (7.7 min) — the curve saturates at n=4 and stays flat to n=64, at **~44% of the 1M-block synthetic write ceiling**: with real slide files the per-file rsync/fpsync machinery (checksums, metadata, per-file streams over 1 GB-scale files) bounds the path well before the filesystem does, which is the real-files-vs-synthetic gap this substage exists to measure. Wire/app at the 5+2 EC relation on every cell |
 | **Tool** | `fpsync` (version recorded at run time) |
 | **Source → Target** | `/data/local-nvme/fpsync-source/tcga-brca/` → `$FS_MOUNT/data/fpsync-target/n<N>/` |
 | **Methodology** | TCGA-BRCA full corpus staged to local NVMe first via its own recorded prep run. Sweep: **`fpsync -n N` ∈ {1, 4, 16, 64}**, full corpus per cell, each cell writing to its own per-N subdir (cleaned pre-cell). Per-cell isolation via `record-run.sh`. |

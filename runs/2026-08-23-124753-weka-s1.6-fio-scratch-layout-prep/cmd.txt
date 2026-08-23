@@ -1,0 +1,1 @@
+fio --name=fio-scratch-layout --directory=/mnt/weka/benchmarks/fio-scratch-mixed --filename_format=fio-scratch-mixed.\$jobnum.\$filenum --rw=write --bs=1M --size=4G --numjobs=64 --iodepth=1 --ioengine=libaio --direct=1 --create_only=0 --output-format=json+ --status-interval=1 

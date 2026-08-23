@@ -1,0 +1,52 @@
+{
+  "run_name": "canary-meta",
+  "stage": "stability",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-23T11:38:24Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-stability-fixture",
+  "bs_hint": null,
+  "poll_hz": 1,
+  "wire_exempt": null,
+  "rep": null,
+  "command": [
+    "bash",
+    "-c",
+    "    set -u",
+    "    d=\"/mnt/weka/benchmarks/stability-canary/meta.$$\"; mkdir -p \"$d\"; n=2000",
+    "    t0=$(date +%s.%N); for i in $(seq 1 $n); do : > \"$d/f$i\"; done",
+    "    t1=$(date +%s.%N); for i in $(seq 1 $n); do stat -c %s \"$d/f$i\" >/dev/null; done",
+    "    t2=$(date +%s.%N); for i in $(seq 1 $n); do rm -f \"$d/f$i\"; done",
+    "    t3=$(date +%s.%N); rmdir \"$d\"",
+    "    awk -v n=$n -v a=$t0 -v b=$t1 -v c=$t2 -v e=$t3 \\",
+    "      \"BEGIN{printf \\\"canary_meta create_ops_s=%.1f stat_ops_s=%.1f unlink_ops_s=%.1f\\n\\\", n/(b-a), n/(c-b), n/(e-c)}\"",
+    "  "
+  ],
+  "note": "D18 stability canary (meta): create/stat/unlink 2000 empty files in a fresh dir, one timed phase each, ops/s printed to stdout. Fixed config by design — this cell's spread across the leg is the leg's noise band for metadata-class cells.",
+  "wallclock_s": 8,
+  "started_utc": "2026-08-23T11:38:26Z",
+  "ended_utc": "2026-08-23T11:38:34Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 7.7009,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}

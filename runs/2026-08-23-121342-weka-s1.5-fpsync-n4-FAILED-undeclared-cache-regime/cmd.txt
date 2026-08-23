@@ -1,0 +1,1 @@
+fpsync -v -n 4 -d /tmp/fpsync-stage1.5/n4 /data/local-nvme/fpsync-source/tcga-brca/ /mnt/weka/data/fpsync-target/n4/ 

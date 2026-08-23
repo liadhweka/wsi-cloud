@@ -205,6 +205,14 @@ for cell in "${CELLS[@]}"; do
     # then `kill -- -$FPSYNC_PID` (negative PID = process group) to kill the
     # whole fpsync subtree without any pattern matching that could match the
     # parent.
+    # Reads-under-ingest is this substage BY DESIGN, and on this leg a read
+    # stream under a concurrent bulk write carries uncalibrated wire read
+    # amplification (measured 1.22-1.74 at 4.D, 1.28 at 6.C, 1.67 on the 1.6
+    # coldref) that the same-file fio mixed probes do not reproduce. Declared
+    # by construction on every 1.6 cell: the read ratio is RECORDED, never
+    # judged (REPORT_ONLY); the write side stays fully judged at the EC
+    # relation, and the aggregator reconciles app-vs-fs-side per direction.
+    RECORD_WIRE_EXEMPT="read:reads under a concurrent bulk ingest stream (4.D-class read amplification; no calibrated analogue)" \
     RECORD_CACHE_STATE="$arm" "$REPO/scripts/record-run.sh" \
       --run-name "$name" \
       --stage 1.6 \

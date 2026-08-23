@@ -82,6 +82,7 @@ for n in "${CONCURRENCIES[@]}"; do
   CELL_START=$(date -u +%FT%TZ)
   log "  starting cell at $CELL_START"
 
+  RECORD_CACHE_STATE=na-write-cell \
   "$REPO/scripts/record-run.sh" \
     --run-name "$name" \
     --stage "1.5" \

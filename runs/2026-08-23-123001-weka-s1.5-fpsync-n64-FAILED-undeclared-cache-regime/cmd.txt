@@ -1,0 +1,1 @@
+fpsync -v -n 64 -d /tmp/fpsync-stage1.5/n64 /data/local-nvme/fpsync-source/tcga-brca/ /mnt/weka/data/fpsync-target/n64/ 

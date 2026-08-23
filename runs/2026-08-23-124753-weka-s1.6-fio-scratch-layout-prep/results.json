@@ -1,0 +1,2564 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-23-124753-weka-s1.6-fio-scratch-layout-prep",
+  "parsed_at_utc": "2026-08-23T12:48:52.408316Z",
+  "sources": {
+    "weka_stats": {
+      "present": true,
+      "row_count": 3572,
+      "metrics": {
+        "Writes/s": {
+          "count": 3572,
+          "mean": 66.66668406934491,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 1532.124255,
+          "min": 0.0,
+          "max": 2409.647468,
+          "stdev": 306.4049812924448,
+          "sustained_mean": 72.8014049207276,
+          "sustained_mean_last80": 72.69532802193842,
+          "active_window_mean": 72.8014049207276
+        },
+        "Write": {
+          "count": 3572,
+          "mean": 69905084.93829507,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 1606548723.1,
+          "min": 0.0,
+          "max": 2526698504.01,
+          "stdev": 321288909.76885706,
+          "sustained_mean": 76337805.99192601,
+          "sustained_mean_last80": 76226576.30120014,
+          "active_window_mean": 76337805.99192601
+        },
+        "Write Latency(\u00b5s)": {
+          "count": 3572,
+          "mean": 427.6199655629899,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 10470.03945,
+          "min": 0.0,
+          "max": 11037.84918,
+          "stdev": 1951.8025764037516,
+          "sustained_mean": 466.9698920791807,
+          "sustained_mean_last80": 461.5431523173548,
+          "active_window_mean": 466.9698920791807
+        },
+        "Reads/s": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "Read": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "Read Latency(\u00b5s)": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "Ops/s": {
+          "count": 3572,
+          "mean": 66.79878246371976,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 1532.124255,
+          "min": 0.0,
+          "max": 2409.647468,
+          "stdev": 306.63178895960846,
+          "sustained_mean": 72.94107344044635,
+          "sustained_mean_last80": 72.70757675108467,
+          "active_window_mean": 72.94107344044635
+        },
+        "CPU%": {
+          "count": 3572,
+          "mean": 9.252968911343029,
+          "median": 4.1129071755,
+          "p50": 4.112925758,
+          "p95": 13.59914456,
+          "p99": 100.0,
+          "min": 0.0,
+          "max": 100.0,
+          "stdev": 19.983470515594682,
+          "sustained_mean": 9.787876490482475,
+          "sustained_mean_last80": 9.948947614487404,
+          "active_window_mean": 9.787876490482475
+        },
+        "L6 Recv": {
+          "count": 3572,
+          "mean": 107934480.72547314,
+          "median": 3873488.17,
+          "p50": 3874503.97,
+          "p95": 563640469.78,
+          "p99": 596167988.88,
+          "min": 74396.22,
+          "max": 645630343.06,
+          "stdev": 208422601.2950183,
+          "sustained_mean": 115134575.74722786,
+          "sustained_mean_last80": 115913108.81175648,
+          "active_window_mean": 115134575.74722786
+        },
+        "L6 Sent": {
+          "count": 3572,
+          "mean": 107988456.36209127,
+          "median": 4430938.3100000005,
+          "p50": 4431132.11,
+          "p95": 33344965.64,
+          "p99": 2337155612.32,
+          "min": 25710.7,
+          "max": 3675226112.42,
+          "stdev": 466436625.2468684,
+          "sustained_mean": 117683678.80949862,
+          "sustained_mean_last80": 117600778.0503149,
+          "active_window_mean": 117683678.80949862
+        },
+        "OBS Upload": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "OBS Download": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "RDMA Recv": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "RDMA Sent": {
+          "count": 3572,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        }
+      }
+    },
+    "weka_stats_client": {
+      "present": true,
+      "client_process_count": 4,
+      "timestamp_count": 47,
+      "note": "Mode==client rows only, summed per timestamp across the client's processes (latency/CPU%% averaged) \u2014 the quotable filesystem-side series for this cell",
+      "metrics": {
+        "Writes/s_client_sum": {
+          "count": 47,
+          "mean": 5066.667989270213,
+          "median": 5645.167893,
+          "p50": 5645.167893,
+          "p95": 5806.470771,
+          "p99": 5823.011682,
+          "min": 0.0,
+          "max": 5823.011682,
+          "stdev": 1530.9696798925745,
+          "sustained_mean": 5412.122624902273,
+          "sustained_mean_last80": 5467.4538812289475,
+          "active_window_mean": 5412.122624902273
+        },
+        "Write_client_sum": {
+          "count": 47,
+          "mean": 5312786455.310426,
+          "median": 5919387570.74,
+          "p50": 5919387570.74,
+          "p95": 6088525897.780001,
+          "p99": 6105870300.41,
+          "min": 0.0,
+          "max": 6105870300.41,
+          "stdev": 1605338063.7325637,
+          "sustained_mean": 5675021895.445228,
+          "sustained_mean_last80": 5733040922.863947,
+          "active_window_mean": 5675021895.445228
+        },
+        "Reads/s_client_sum": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "Read_client_sum": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "Ops/s_client_sum": {
+          "count": 47,
+          "mean": 5076.707467242702,
+          "median": 5645.167893,
+          "p50": 5645.167893,
+          "p95": 5806.470771,
+          "p99": 5823.011682,
+          "min": 0.0,
+          "max": 5823.011682,
+          "stdev": 1509.941650333315,
+          "sustained_mean": 5422.801160954546,
+          "sustained_mean_last80": 5468.375114594737,
+          "active_window_mean": 5422.801160954546
+        },
+        "L6 Recv_client_sum": {
+          "count": 47,
+          "mean": 112822601.13276595,
+          "median": 126789657.44,
+          "p50": 126789657.44,
+          "p95": 132027095.07000001,
+          "p99": 132790209.50999999,
+          "min": 377476.24,
+          "max": 132790209.50999999,
+          "stdev": 35056271.292517714,
+          "sustained_mean": 120485257.94045454,
+          "sustained_mean_last80": 121338172.11947368,
+          "active_window_mean": 120485257.94045454
+        },
+        "L6 Sent_client_sum": {
+          "count": 47,
+          "mean": 7735256496.548936,
+          "median": 8625468622.22,
+          "p50": 8625468622.22,
+          "p95": 8868725185.75,
+          "p99": 8888404435.24,
+          "min": 295158.73,
+          "max": 8888404435.24,
+          "stdev": 2335325531.820069,
+          "sustained_mean": 8262638337.586136,
+          "sustained_mean_last80": 8346158628.151579,
+          "active_window_mean": 8262638337.586136
+        },
+        "OBS Upload_client_sum": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "OBS Download_client_sum": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "RDMA Recv_client_sum": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "RDMA Sent_client_sum": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "Write Latency(\u00b5s)_client_mean": {
+          "count": 47,
+          "mean": 8124.779345696808,
+          "median": 9284.256024,
+          "p50": 9284.256024,
+          "p95": 9483.587177,
+          "p99": 9526.8092455,
+          "min": 0.0,
+          "max": 9526.8092455,
+          "stdev": 2678.6270961166506,
+          "sustained_mean": 8678.7415738125,
+          "sustained_mean_last80": 8678.22585080921,
+          "active_window_mean": 8678.7415738125
+        },
+        "Read Latency(\u00b5s)_client_mean": {
+          "count": 47,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        "CPU%_client_mean": {
+          "count": 47,
+          "mean": 87.11230886853618,
+          "median": 99.99214504,
+          "p50": 99.99214504,
+          "p95": 100.0,
+          "p99": 100.0,
+          "min": 0.11992926905,
+          "max": 100.0,
+          "stdev": 28.939249036966167,
+          "sustained_mean": 93.04208511066477,
+          "sustained_mean_last80": 93.87353956720395,
+          "active_window_mean": 93.04208511066477
+        }
+      }
+    },
+    "lustre_stats_client": {
+      "present": false
+    },
+    "lustre_llite": {
+      "present": false
+    },
+    "lustre_osc": {
+      "present": false
+    },
+    "lustre_mdc": {
+      "present": false
+    },
+    "lnet": {
+      "present": false
+    },
+    "nvidia_smi": {
+      "present": true,
+      "row_count": 204,
+      "metrics": {
+        " utilization.gpu [%]": {
+          "count": 204,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        " utilization.memory [%]": {
+          "count": 204,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        " memory.used [MiB]": {
+          "count": 204,
+          "mean": 0.0,
+          "median": 0.0,
+          "p50": 0.0,
+          "p95": 0.0,
+          "p99": 0.0,
+          "min": 0.0,
+          "max": 0.0,
+          "stdev": 0.0,
+          "sustained_mean": 0.0,
+          "sustained_mean_last80": 0.0,
+          "active_window_mean": 0.0
+        },
+        " memory.free [MiB]": {
+          "count": 204,
+          "mean": 45460.0,
+          "median": 45460.0,
+          "p50": 45460.0,
+          "p95": 45460.0,
+          "p99": 45460.0,
+          "min": 45460.0,
+          "max": 45460.0,
+          "stdev": 0.0,
+          "sustained_mean": 45460.0,
+          "sustained_mean_last80": 45460.0,
+          "active_window_mean": 45460.0
+        },
+        " power.draw [W]": {
+          "count": 204,
+          "mean": 33.49583333333333,
+          "median": 33.49,
+          "p50": 33.49,
+          "p95": 34.31,
+          "p99": 34.54,
+          "min": 32.41,
+          "max": 34.65,
+          "stdev": 0.5872804414527799,
+          "sustained_mean": 33.49583333333333,
+          "sustained_mean_last80": 33.48268292682927,
+          "active_window_mean": 33.49583333333333
+        },
+        " temperature.gpu": {
+          "count": 204,
+          "mean": 30.99019607843137,
+          "median": 31.0,
+          "p50": 31.0,
+          "p95": 31.0,
+          "p99": 31.0,
+          "min": 30.0,
+          "max": 31.0,
+          "stdev": 0.09877057450722067,
+          "sustained_mean": 30.99019607843137,
+          "sustained_mean_last80": 31.0,
+          "active_window_mean": 30.99019607843137
+        },
+        " clocks.current.graphics [MHz]": {
+          "count": 204,
+          "mean": 210.0,
+          "median": 210.0,
+          "p50": 210.0,
+          "p95": 210.0,
+          "p99": 210.0,
+          "min": 210.0,
+          "max": 210.0,
+          "stdev": 0.0,
+          "sustained_mean": 210.0,
+          "sustained_mean_last80": 210.0,
+          "active_window_mean": 210.0
+        },
+        " clocks.current.memory [MHz]": {
+          "count": 204,
+          "mean": 405.0,
+          "median": 405.0,
+          "p50": 405.0,
+          "p95": 405.0,
+          "p99": 405.0,
+          "min": 405.0,
+          "max": 405.0,
+          "stdev": 0.0,
+          "sustained_mean": 405.0,
+          "sustained_mean_last80": 405.0,
+          "active_window_mean": 405.0
+        },
+        " pcie.link.gen.current": {
+          "count": 204,
+          "mean": 1.0,
+          "median": 1.0,
+          "p50": 1.0,
+          "p95": 1.0,
+          "p99": 1.0,
+          "min": 1.0,
+          "max": 1.0,
+          "stdev": 0.0,
+          "sustained_mean": 1.0,
+          "sustained_mean_last80": 1.0,
+          "active_window_mean": 1.0
+        },
+        " pcie.link.width.current": {
+          "count": 204,
+          "mean": 8.0,
+          "median": 8.0,
+          "p50": 8.0,
+          "p95": 8.0,
+          "p99": 8.0,
+          "min": 8.0,
+          "max": 8.0,
+          "stdev": 0.0,
+          "sustained_mean": 8.0,
+          "sustained_mean_last80": 8.0,
+          "active_window_mean": 8.0
+        }
+      }
+    },
+    "netdev_counters": {
+      "present": true,
+      "row_count": 50,
+      "note": "kernel netdev counters; Primary/Diagnostic split is per-leg (docs/RUNBOOK.md)",
+      "interfaces": {
+        "enp71s0": {
+          "tx_bytes_per_sec": {
+            "count": 49,
+            "mean": 302609.2723677426,
+            "median": 105721.40742751947,
+            "p50": 105721.40742751947,
+            "p95": 2760419.1355547085,
+            "p99": 2845365.7420185185,
+            "min": 27213.6560045888,
+            "max": 2845365.7420185185,
+            "stdev": 662316.6103020257,
+            "sustained_mean": 364088.8607831467,
+            "sustained_mean_last80": 335133.5672625778,
+            "active_window_mean": 364088.8607831467
+          },
+          "rx_bytes_per_sec": {
+            "count": 49,
+            "mean": 162948.1575303316,
+            "median": 156862.31549811675,
+            "p50": 156862.31549811675,
+            "p95": 197609.38861881825,
+            "p99": 343675.12175653357,
+            "min": 116244.86723319568,
+            "max": 343675.12175653357,
+            "stdev": 34187.20307424049,
+            "sustained_mean": 162948.1575303316,
+            "sustained_mean_last80": 159192.8961802855,
+            "active_window_mean": 162948.1575303316
+          },
+          "tx_packets_per_sec": {
+            "count": 49,
+            "mean": 254.25730350136513,
+            "median": 124.87806620873235,
+            "p50": 124.87806620873235,
+            "p95": 1897.4610682689763,
+            "p99": 1955.0342094536345,
+            "min": 77.29942532248334,
+            "max": 1955.0342094536345,
+            "stdev": 441.5622539782643,
+            "sustained_mean": 257.5237913917001,
+            "sustained_mean_last80": 275.48620164003717,
+            "active_window_mean": 257.5237913917001
+          },
+          "rx_packets_per_sec": {
+            "count": 49,
+            "mean": 138.94893270498775,
+            "median": 130.73169515361366,
+            "p50": 130.73169515361366,
+            "p95": 200.19532629703556,
+            "p99": 240.46920776279705,
+            "min": 94.9119304694956,
+            "max": 240.46920776279705,
+            "stdev": 31.726041822059546,
+            "sustained_mean": 138.94893270498775,
+            "sustained_mean_last80": 139.33101475769075,
+            "active_window_mean": 138.94893270498775
+          },
+          "_sample_interval_s": {
+            "count": 49,
+            "mean": 1.0234081599177147,
+            "min": 1.0189998149871826,
+            "max": 1.0260000228881836
+          }
+        }
+      }
+    },
+    "rdma_counters": {
+      "present": false
+    },
+    "nvidia_fs_stats": {
+      "present": true,
+      "block_count": 51,
+      "note": "verbatim 1 Hz capture; parsed with D-6"
+    },
+    "sar": {
+      "cpu": {
+        "present": true,
+        "row_count": 4850,
+        "metrics": {
+          "interval": {
+            "count": 4850,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "%usr": {
+            "count": 4850,
+            "mean": 8.163430927835051,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 98.0,
+            "p99": 100.0,
+            "min": 0.0,
+            "max": 100.0,
+            "stdev": 25.853449254204595,
+            "sustained_mean": 8.236079084287201,
+            "sustained_mean_last80": 8.26455412371134,
+            "active_window_mean": 8.236079084287201
+          },
+          "%nice": {
+            "count": 4850,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "%sys": {
+            "count": 4850,
+            "mean": 1.6783505154639176,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 11.54,
+            "p99": 20.0,
+            "min": 0.0,
+            "max": 33.96,
+            "stdev": 4.024086953620122,
+            "sustained_mean": 1.6852039759784636,
+            "sustained_mean_last80": 1.713577319587629,
+            "active_window_mean": 1.6852039759784636
+          },
+          "%iowait": {
+            "count": 4850,
+            "mean": 0.029944329896907214,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 1.0,
+            "min": 0.0,
+            "max": 8.0,
+            "stdev": 0.21353764645299791,
+            "sustained_mean": 0.030862911795961744,
+            "sustained_mean_last80": 0.02754123711340206,
+            "active_window_mean": 0.030862911795961744
+          },
+          "%steal": {
+            "count": 4850,
+            "mean": 0.00020412371134020618,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.98,
+            "stdev": 0.014072682889086854,
+            "sustained_mean": 0.98,
+            "sustained_mean_last80": 0.00025515463917525776,
+            "active_window_mean": 0.98
+          },
+          "%irq": {
+            "count": 4850,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "%soft": {
+            "count": 4850,
+            "mean": 0.07058556701030927,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 1.01,
+            "min": 0.0,
+            "max": 20.33,
+            "stdev": 0.8329379282305155,
+            "sustained_mean": 0.0732896714623148,
+            "sustained_mean_last80": 0.0770360824742268,
+            "active_window_mean": 0.0732896714623148
+          },
+          "%guest": {
+            "count": 4850,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "%gnice": {
+            "count": 4850,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "%idle": {
+            "count": 4850,
+            "mean": 90.0574206185567,
+            "median": 99.0,
+            "p50": 99.0,
+            "p95": 100.0,
+            "p99": 100.0,
+            "min": 0.0,
+            "max": 100.0,
+            "stdev": 25.933051436775134,
+            "sustained_mean": 90.0574206185567,
+            "sustained_mean_last80": 89.91698711340206,
+            "active_window_mean": 90.0574206185567
+          }
+        }
+      },
+      "disk": {
+        "present": true,
+        "row_count": 1050,
+        "metrics": {
+          "interval": {
+            "count": 1050,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "tps": {
+            "count": 1050,
+            "mean": 4.4886,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 33.0,
+            "p99": 63.0,
+            "min": 0.0,
+            "max": 395.0,
+            "stdev": 21.479109039053153,
+            "sustained_mean": 4.6966936299292215,
+            "sustained_mean_last80": 3.921464285714286,
+            "active_window_mean": 4.6966936299292215
+          },
+          "rkB/s": {
+            "count": 1050,
+            "mean": 2.057142857142857,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 40.0,
+            "min": 0.0,
+            "max": 288.0,
+            "stdev": 20.870031593452325,
+            "sustained_mean": 2.4994192799070847,
+            "sustained_mean_last80": 2.466666666666667,
+            "active_window_mean": 2.4994192799070847
+          },
+          "wkB/s": {
+            "count": 1050,
+            "mean": 426.65668571428574,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 3568.0,
+            "p99": 7592.0,
+            "min": 0.0,
+            "max": 9144.0,
+            "stdev": 1425.098924701303,
+            "sustained_mean": 434.51941804073715,
+            "sustained_mean_last80": 437.1637142857143,
+            "active_window_mean": 434.51941804073715
+          },
+          "dkB/s": {
+            "count": 1050,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "areq-sz": {
+            "count": 1050,
+            "mean": 16.621438095238094,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 117.51,
+            "p99": 341.33,
+            "min": 0.0,
+            "max": 512.0,
+            "stdev": 57.63622595018863,
+            "sustained_mean": 16.927749757516974,
+            "sustained_mean_last80": 17.272809523809524,
+            "active_window_mean": 16.927749757516974
+          },
+          "aqu-sz": {
+            "count": 1050,
+            "mean": 0.007571428571428572,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.06,
+            "p99": 0.13,
+            "min": 0.0,
+            "max": 0.39,
+            "stdev": 0.02877722763190369,
+            "sustained_mean": 0.007710960232783706,
+            "sustained_mean_last80": 0.0071666666666666675,
+            "active_window_mean": 0.007710960232783706
+          },
+          "await": {
+            "count": 1050,
+            "mean": 0.21127619047619048,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 1.84,
+            "p99": 2.09,
+            "min": 0.0,
+            "max": 3.25,
+            "stdev": 0.5899104728449289,
+            "sustained_mean": 0.21516973811833173,
+            "sustained_mean_last80": 0.21594047619047618,
+            "active_window_mean": 0.21516973811833173
+          },
+          "%util": {
+            "count": 1050,
+            "mean": 0.2884857142857143,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 2.0,
+            "p99": 4.0,
+            "min": 0.0,
+            "max": 19.0,
+            "stdev": 1.1720278485084825,
+            "sustained_mean": 0.2938021338506305,
+            "sustained_mean_last80": 0.27013095238095236,
+            "active_window_mean": 0.2938021338506305
+          }
+        }
+      },
+      "net": {
+        "present": true,
+        "row_count": 100,
+        "metrics": {
+          "interval": {
+            "count": 100,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "rxpck/s": {
+            "count": 100,
+            "mean": 91.664,
+            "median": 73.5,
+            "p50": 99.0,
+            "p95": 190.0,
+            "p99": 232.0,
+            "min": 0.0,
+            "max": 232.0,
+            "stdev": 53.42240622499783,
+            "sustained_mean": 91.664,
+            "sustained_mean_last80": 91.28,
+            "active_window_mean": 91.664
+          },
+          "txpck/s": {
+            "count": 100,
+            "mean": 149.485,
+            "median": 72.0,
+            "p50": 96.0,
+            "p95": 511.0,
+            "p99": 1987.0,
+            "min": 0.0,
+            "max": 1987.0,
+            "stdev": 332.75162193747485,
+            "sustained_mean": 150.510101010101,
+            "sustained_mean_last80": 160.99375,
+            "active_window_mean": 150.510101010101
+          },
+          "rxkB/s": {
+            "count": 100,
+            "mean": 118.81700000000001,
+            "median": 98.57499999999999,
+            "p50": 111.88,
+            "p95": 186.59,
+            "p99": 346.9,
+            "min": 0.0,
+            "max": 346.9,
+            "stdev": 49.71229611322016,
+            "sustained_mean": 118.81700000000001,
+            "sustained_mean_last80": 115.68912499999999,
+            "active_window_mean": 118.81700000000001
+          },
+          "txkB/s": {
+            "count": 100,
+            "mean": 187.32139999999998,
+            "median": 85.23,
+            "p50": 85.23,
+            "p95": 674.48,
+            "p99": 2835.08,
+            "min": 0.0,
+            "max": 2835.08,
+            "stdev": 476.7414378906669,
+            "sustained_mean": 217.16428571428574,
+            "sustained_mean_last80": 204.64175,
+            "active_window_mean": 217.16428571428574
+          },
+          "rxcmp/s": {
+            "count": 100,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "txcmp/s": {
+            "count": 100,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "rxmcst/s": {
+            "count": 100,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "%ifutil": {
+            "count": 100,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          }
+        }
+      },
+      "mem": {
+        "present": true,
+        "row_count": 50,
+        "metrics": {
+          "interval": {
+            "count": 50,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "kbmemfree": {
+            "count": 50,
+            "mean": 13643663.2,
+            "median": 13616606.0,
+            "p50": 13617044.0,
+            "p95": 13760788.0,
+            "p99": 13850708.0,
+            "min": 13550376.0,
+            "max": 13850708.0,
+            "stdev": 65191.74008528181,
+            "sustained_mean": 13643663.2,
+            "sustained_mean_last80": 13617863.3,
+            "active_window_mean": 13643663.2
+          },
+          "kbavail": {
+            "count": 50,
+            "mean": 756094929.6,
+            "median": 756088050.0,
+            "p50": 756088528.0,
+            "p95": 756158808.0,
+            "p99": 756215236.0,
+            "min": 756033412.0,
+            "max": 756215236.0,
+            "stdev": 36396.40146374644,
+            "sustained_mean": 756094929.6,
+            "sustained_mean_last80": 756086950.6,
+            "active_window_mean": 756094929.6
+          },
+          "kbmemused": {
+            "count": 50,
+            "mean": 17971122.48,
+            "median": 17976538.0,
+            "p50": 17977008.0,
+            "p95": 18011928.0,
+            "p99": 18031352.0,
+            "min": 17869704.0,
+            "max": 18031352.0,
+            "stdev": 33445.069881175834,
+            "sustained_mean": 17971122.48,
+            "sustained_mean_last80": 17978303.1,
+            "active_window_mean": 17971122.48
+          },
+          "%memused": {
+            "count": 50,
+            "mean": 2.2982,
+            "median": 2.3,
+            "p50": 2.3,
+            "p95": 2.3,
+            "p99": 2.31,
+            "min": 2.29,
+            "max": 2.31,
+            "stdev": 0.004375255094603804,
+            "sustained_mean": 2.2982,
+            "sustained_mean_last80": 2.299,
+            "active_window_mean": 2.2982
+          },
+          "kbbuffers": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "kbcached": {
+            "count": 50,
+            "mean": 734726546.24,
+            "median": 734726742.0,
+            "p50": 734728300.0,
+            "p95": 734804624.0,
+            "p99": 734810376.0,
+            "min": 734629480.0,
+            "max": 734810376.0,
+            "stdev": 52618.763169541,
+            "sustained_mean": 734726546.24,
+            "sustained_mean_last80": 734744793.7,
+            "active_window_mean": 734726546.24
+          },
+          "kbcommit": {
+            "count": 50,
+            "mean": 23242352.24,
+            "median": 23460816.0,
+            "p50": 23460816.0,
+            "p95": 23506888.0,
+            "p99": 23523816.0,
+            "min": 20994384.0,
+            "max": 23523816.0,
+            "stdev": 565083.059534905,
+            "sustained_mean": 23242352.24,
+            "sustained_mean_last80": 23311055.7,
+            "active_window_mean": 23242352.24
+          },
+          "%commit": {
+            "count": 50,
+            "mean": 2.9724,
+            "median": 3.0,
+            "p50": 3.0,
+            "p95": 3.01,
+            "p99": 3.01,
+            "min": 2.69,
+            "max": 3.01,
+            "stdev": 0.0713016014360613,
+            "sustained_mean": 2.9724,
+            "sustained_mean_last80": 2.981,
+            "active_window_mean": 2.9724
+          },
+          "kbactive": {
+            "count": 50,
+            "mean": 43363749.12,
+            "median": 43363672.0,
+            "p50": 43363672.0,
+            "p95": 43366316.0,
+            "p99": 43366436.0,
+            "min": 43362952.0,
+            "max": 43366436.0,
+            "stdev": 843.4235539920446,
+            "sustained_mean": 43363749.12,
+            "sustained_mean_last80": 43363937.6,
+            "active_window_mean": 43363749.12
+          },
+          "kbinact": {
+            "count": 50,
+            "mean": 691150485.52,
+            "median": 691146698.0,
+            "p50": 691147680.0,
+            "p95": 691228016.0,
+            "p99": 691242000.0,
+            "min": 691021164.0,
+            "max": 691242000.0,
+            "stdev": 47444.13615097061,
+            "sustained_mean": 691150485.52,
+            "sustained_mean_last80": 691163041.6,
+            "active_window_mean": 691150485.52
+          },
+          "kbdirty": {
+            "count": 50,
+            "mean": 3459.28,
+            "median": 3534.0,
+            "p50": 3596.0,
+            "p95": 6144.0,
+            "p99": 6888.0,
+            "min": 180.0,
+            "max": 6888.0,
+            "stdev": 1714.7621604580547,
+            "sustained_mean": 3459.28,
+            "sustained_mean_last80": 3419.1,
+            "active_window_mean": 3459.28
+          }
+        }
+      },
+      "swap": {
+        "present": true,
+        "row_count": 50,
+        "metrics": {
+          "interval": {
+            "count": 50,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "pswpin/s": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "pswpout/s": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          }
+        }
+      },
+      "paging": {
+        "present": true,
+        "row_count": 50,
+        "metrics": {
+          "interval": {
+            "count": 50,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "pgpgin/s": {
+            "count": 50,
+            "mean": 21.6,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 256.0,
+            "p99": 308.0,
+            "min": 0.0,
+            "max": 308.0,
+            "stdev": 72.004535004571,
+            "sustained_mean": 26.24390243902439,
+            "sustained_mean_last80": 25.9,
+            "active_window_mean": 26.24390243902439
+          },
+          "pgpgout/s": {
+            "count": 50,
+            "mean": 4659.3096000000005,
+            "median": 4268.0,
+            "p50": 4292.0,
+            "p95": 9144.0,
+            "p99": 10313.0,
+            "min": 924.0,
+            "max": 10313.0,
+            "stdev": 2365.228321885398,
+            "sustained_mean": 4659.3096000000005,
+            "sustained_mean_last80": 4771.937,
+            "active_window_mean": 4659.3096000000005
+          },
+          "fault/s": {
+            "count": 50,
+            "mean": 20337.116,
+            "median": 15719.5,
+            "p50": 15728.0,
+            "p95": 54514.0,
+            "p99": 60987.0,
+            "min": 4058.0,
+            "max": 60987.0,
+            "stdev": 12624.002518822981,
+            "sustained_mean": 20337.116,
+            "sustained_mean_last80": 19636.845,
+            "active_window_mean": 20337.116
+          },
+          "majflt/s": {
+            "count": 50,
+            "mean": 0.2,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 2.0,
+            "p99": 3.0,
+            "min": 0.0,
+            "max": 3.0,
+            "stdev": 0.6388765649999399,
+            "sustained_mean": 0.23255813953488372,
+            "sustained_mean_last80": 0.175,
+            "active_window_mean": 0.23255813953488372
+          },
+          "pgfree/s": {
+            "count": 50,
+            "mean": 23369.573399999997,
+            "median": 19421.5,
+            "p50": 19422.0,
+            "p95": 44175.0,
+            "p99": 57286.0,
+            "min": 8246.0,
+            "max": 57286.0,
+            "stdev": 9797.020472123897,
+            "sustained_mean": 23369.573399999997,
+            "sustained_mean_last80": 23268.79175,
+            "active_window_mean": 23369.573399999997
+          },
+          "pgscank/s": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "pgscand/s": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "pgsteal/s": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          },
+          "%vmeff": {
+            "count": 50,
+            "mean": 0.0,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 0.0,
+            "min": 0.0,
+            "max": 0.0,
+            "stdev": 0.0,
+            "sustained_mean": 0.0,
+            "sustained_mean_last80": 0.0,
+            "active_window_mean": 0.0
+          }
+        }
+      },
+      "queue": {
+        "present": true,
+        "row_count": 50,
+        "metrics": {
+          "interval": {
+            "count": 50,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "runq-sz": {
+            "count": 50,
+            "mean": 10.04,
+            "median": 10.0,
+            "p50": 10.0,
+            "p95": 13.0,
+            "p99": 15.0,
+            "min": 5.0,
+            "max": 15.0,
+            "stdev": 2.1942410709744316,
+            "sustained_mean": 10.04,
+            "sustained_mean_last80": 10.05,
+            "active_window_mean": 10.04
+          },
+          "plist-sz": {
+            "count": 50,
+            "mean": 1293.68,
+            "median": 1299.0,
+            "p50": 1299.0,
+            "p95": 1302.0,
+            "p99": 1308.0,
+            "min": 1229.0,
+            "max": 1308.0,
+            "stdev": 16.027323608164163,
+            "sustained_mean": 1293.68,
+            "sustained_mean_last80": 1295.7,
+            "active_window_mean": 1293.68
+          },
+          "ldavg-1": {
+            "count": 50,
+            "mean": 6.7664,
+            "median": 6.96,
+            "p50": 6.96,
+            "p95": 9.14,
+            "p99": 9.14,
+            "min": 4.23,
+            "max": 9.14,
+            "stdev": 1.6859718447306558,
+            "sustained_mean": 6.7664,
+            "sustained_mean_last80": 7.336,
+            "active_window_mean": 6.7664
+          },
+          "ldavg-5": {
+            "count": 50,
+            "mean": 11.665799999999999,
+            "median": 11.66,
+            "p50": 11.66,
+            "p95": 11.86,
+            "p99": 11.86,
+            "min": 11.54,
+            "max": 11.86,
+            "stdev": 0.10844146356633218,
+            "sustained_mean": 11.665799999999999,
+            "sustained_mean_last80": 11.689499999999999,
+            "active_window_mean": 11.665799999999999
+          },
+          "ldavg-15": {
+            "count": 50,
+            "mean": 21.2188,
+            "median": 21.22,
+            "p50": 21.22,
+            "p95": 21.39,
+            "p99": 21.48,
+            "min": 21.01,
+            "max": 21.48,
+            "stdev": 0.12171629777008987,
+            "sustained_mean": 21.2188,
+            "sustained_mean_last80": 21.174500000000002,
+            "active_window_mean": 21.2188
+          },
+          "blocked": {
+            "count": 50,
+            "mean": 0.04,
+            "median": 0.0,
+            "p50": 0.0,
+            "p95": 0.0,
+            "p99": 1.0,
+            "min": 0.0,
+            "max": 1.0,
+            "stdev": 0.19794866372215741,
+            "sustained_mean": 0.2222222222222222,
+            "sustained_mean_last80": 0.025,
+            "active_window_mean": 0.2222222222222222
+          }
+        }
+      },
+      "ctxsw": {
+        "present": true,
+        "row_count": 50,
+        "metrics": {
+          "interval": {
+            "count": 50,
+            "mean": 1.0,
+            "median": 1.0,
+            "p50": 1.0,
+            "p95": 1.0,
+            "p99": 1.0,
+            "min": 1.0,
+            "max": 1.0,
+            "stdev": 0.0,
+            "sustained_mean": 1.0,
+            "sustained_mean_last80": 1.0,
+            "active_window_mean": 1.0
+          },
+          "proc/s": {
+            "count": 50,
+            "mean": 47.833,
+            "median": 35.0,
+            "p50": 35.0,
+            "p95": 169.0,
+            "p99": 200.0,
+            "min": 26.0,
+            "max": 200.0,
+            "stdev": 38.0611291482638,
+            "sustained_mean": 47.833,
+            "sustained_mean_last80": 41.96625,
+            "active_window_mean": 47.833
+          },
+          "cswch/s": {
+            "count": 50,
+            "mean": 54876.1036,
+            "median": 58122.0,
+            "p50": 58153.0,
+            "p95": 60402.0,
+            "p99": 62916.0,
+            "min": 12076.0,
+            "max": 62916.0,
+            "stdev": 9978.940646258297,
+            "sustained_mean": 54876.1036,
+            "sustained_mean_last80": 56515.804500000006,
+            "active_window_mean": 54876.1036
+          }
+        }
+      }
+    }
+  },
+  "fio": {
+    "fio_version": "fio-3.32",
+    "global_options": null,
+    "jobs_summary": [
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.819149,
+          "bw_mean_kib": 88926.223404,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11503650.409424
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.939024,
+          "bw_mean_kib": 101340.914634,
+          "lat_ns_p99": 14614528,
+          "lat_ns_mean": 10090253.139648
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.202128,
+          "bw_mean_kib": 88295.414894,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11563497.008301
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.166667,
+          "bw_mean_kib": 87234.572917,
+          "lat_ns_p99": 16318464,
+          "lat_ns_mean": 11728164.857178
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.168421,
+          "bw_mean_kib": 87236.073684,
+          "lat_ns_p99": 16187392,
+          "lat_ns_mean": 11688845.590088
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 99.426829,
+          "bw_mean_kib": 101840.646341,
+          "lat_ns_p99": 14614528,
+          "lat_ns_mean": 10056555.395752
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 99.597561,
+          "bw_mean_kib": 102015.487805,
+          "lat_ns_p99": 14483456,
+          "lat_ns_mean": 10040613.598877
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 95.916667,
+          "bw_mean_kib": 98246.595238,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 10300328.087891
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.768421,
+          "bw_mean_kib": 86826.810526,
+          "lat_ns_p99": 16711680,
+          "lat_ns_mean": 11659450.422119
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.652632,
+          "bw_mean_kib": 87731.778947,
+          "lat_ns_p99": 16711680,
+          "lat_ns_mean": 11631312.500732
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.345238,
+          "bw_mean_kib": 99708.071429,
+          "lat_ns_p99": 15532032,
+          "lat_ns_mean": 10269135.806885
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 96.559524,
+          "bw_mean_kib": 98903.107143,
+          "lat_ns_p99": 15794176,
+          "lat_ns_mean": 10303150.27002
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.2,
+          "bw_mean_kib": 88291.947368,
+          "lat_ns_p99": 15925248,
+          "lat_ns_mean": 11603267.538574
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.135417,
+          "bw_mean_kib": 86188.333333,
+          "lat_ns_p99": 16318464,
+          "lat_ns_mean": 11733982.630371
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.590361,
+          "bw_mean_kib": 100983.73494,
+          "lat_ns_p99": 15925248,
+          "lat_ns_mean": 10145155.896484
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.905263,
+          "bw_mean_kib": 87990.894737,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11619819.200439
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.13253,
+          "bw_mean_kib": 100516.253012,
+          "lat_ns_p99": 15532032,
+          "lat_ns_mean": 10178134.698486
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.052632,
+          "bw_mean_kib": 88141.778947,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11612651.947754
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.795181,
+          "bw_mean_kib": 100168.614458,
+          "lat_ns_p99": 15794176,
+          "lat_ns_mean": 10208726.343018
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.421053,
+          "bw_mean_kib": 87495.505263,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 11666323.869385
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.231579,
+          "bw_mean_kib": 87301.442105,
+          "lat_ns_p99": 16580608,
+          "lat_ns_mean": 11663022.413818
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 96.416667,
+          "bw_mean_kib": 98756.547619,
+          "lat_ns_p99": 15138816,
+          "lat_ns_mean": 10305454.507812
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.978947,
+          "bw_mean_kib": 87043.568421,
+          "lat_ns_p99": 16318464,
+          "lat_ns_mean": 11631918.920166
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 99.621951,
+          "bw_mean_kib": 102040.463415,
+          "lat_ns_p99": 15269888,
+          "lat_ns_mean": 10040972.503662
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.715789,
+          "bw_mean_kib": 87798.736842,
+          "lat_ns_p99": 15925248,
+          "lat_ns_mean": 11635010.032715
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.6,
+          "bw_mean_kib": 86654.389474,
+          "lat_ns_p99": 16908288,
+          "lat_ns_mean": 11648534.162354
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 99.52439,
+          "bw_mean_kib": 101940.560976,
+          "lat_ns_p99": 14876672,
+          "lat_ns_mean": 10045015.944336
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.873684,
+          "bw_mean_kib": 86933.968421,
+          "lat_ns_p99": 16318464,
+          "lat_ns_mean": 11703433.815186
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.073684,
+          "bw_mean_kib": 88162.673684,
+          "lat_ns_p99": 16711680,
+          "lat_ns_mean": 11601005.188965
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.914634,
+          "bw_mean_kib": 100292.219512,
+          "lat_ns_p99": 14876672,
+          "lat_ns_mean": 10111970.481689
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.117021,
+          "bw_mean_kib": 88207.37234,
+          "lat_ns_p99": 16711680,
+          "lat_ns_mean": 11544265.900391
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 95.702381,
+          "bw_mean_kib": 98025.464286,
+          "lat_ns_p99": 16318464,
+          "lat_ns_mean": 10316723.947754
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.329787,
+          "bw_mean_kib": 88425.308511,
+          "lat_ns_p99": 15925248,
+          "lat_ns_mean": 11554714.791504
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.589474,
+          "bw_mean_kib": 87667.852632,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 11646164.798096
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.385417,
+          "bw_mean_kib": 86444.677083,
+          "lat_ns_p99": 16580608,
+          "lat_ns_mean": 11733255.973389
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.694737,
+          "bw_mean_kib": 87775.726316,
+          "lat_ns_p99": 16580608,
+          "lat_ns_mean": 11630374.136475
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.865854,
+          "bw_mean_kib": 101265.621951,
+          "lat_ns_p99": 14745600,
+          "lat_ns_mean": 10093911.396973
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.691489,
+          "bw_mean_kib": 87772.382979,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11579534.94043
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.304878,
+          "bw_mean_kib": 100692.378049,
+          "lat_ns_p99": 14876672,
+          "lat_ns_mean": 10100847.537598
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.308511,
+          "bw_mean_kib": 88404.531915,
+          "lat_ns_p99": 16711680,
+          "lat_ns_mean": 11546927.262207
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.414894,
+          "bw_mean_kib": 88515.06383,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 11549020.932861
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.817073,
+          "bw_mean_kib": 101215.646341,
+          "lat_ns_p99": 15007744,
+          "lat_ns_mean": 10098123.116455
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.353659,
+          "bw_mean_kib": 100743.060976,
+          "lat_ns_p99": 15007744,
+          "lat_ns_mean": 10091278.580322
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.452632,
+          "bw_mean_kib": 86503.852632,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 11719952.256836
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.473684,
+          "bw_mean_kib": 86524.231579,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 11715183.105469
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.329787,
+          "bw_mean_kib": 88425.117021,
+          "lat_ns_p99": 16580608,
+          "lat_ns_mean": 11544585.613525
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.392857,
+          "bw_mean_kib": 99755.988095,
+          "lat_ns_p99": 15400960,
+          "lat_ns_mean": 10254498.415771
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.757895,
+          "bw_mean_kib": 87840.084211,
+          "lat_ns_p99": 16056320,
+          "lat_ns_mean": 11626546.704346
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 99.47561,
+          "bw_mean_kib": 101891.146341,
+          "lat_ns_p99": 15007744,
+          "lat_ns_mean": 10047187.064209
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 99.134146,
+          "bw_mean_kib": 101540.036585,
+          "lat_ns_p99": 14745600,
+          "lat_ns_mean": 10061590.121094
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 100.975309,
+          "bw_mean_kib": 103426.691358,
+          "lat_ns_p99": 14614528,
+          "lat_ns_mean": 9907187.951904
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.705263,
+          "bw_mean_kib": 86764.221053,
+          "lat_ns_p99": 16187392,
+          "lat_ns_mean": 11694188.388184
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.0625,
+          "bw_mean_kib": 87127.885417,
+          "lat_ns_p99": 16318464,
+          "lat_ns_mean": 11732768.500732
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.147368,
+          "bw_mean_kib": 87214.957895,
+          "lat_ns_p99": 15794176,
+          "lat_ns_mean": 11699057.406494
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.202381,
+          "bw_mean_kib": 99561.559524,
+          "lat_ns_p99": 15269888,
+          "lat_ns_mean": 10285639.424561
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 84.541667,
+          "bw_mean_kib": 86596.572917,
+          "lat_ns_p99": 16187392,
+          "lat_ns_mean": 11744639.523926
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.674699,
+          "bw_mean_kib": 100048.072289,
+          "lat_ns_p99": 15532032,
+          "lat_ns_mean": 10220669.922119
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 85.231579,
+          "bw_mean_kib": 87300.705263,
+          "lat_ns_p99": 16711680,
+          "lat_ns_mean": 11638052.364502
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.5,
+          "bw_mean_kib": 88600.351064,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11522800.12085
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.578313,
+          "bw_mean_kib": 99946.301205,
+          "lat_ns_p99": 15532032,
+          "lat_ns_mean": 10239240.468262
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.734043,
+          "bw_mean_kib": 88841.691489,
+          "lat_ns_p99": 16449536,
+          "lat_ns_mean": 11495531.686035
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 97.392857,
+          "bw_mean_kib": 99756.678571,
+          "lat_ns_p99": 15925248,
+          "lat_ns_mean": 10263869.39209
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 98.743902,
+          "bw_mean_kib": 101141.731707,
+          "lat_ns_p99": 14614528,
+          "lat_ns_mean": 10092636.430908
+        }
+      },
+      {
+        "jobname": "fio-scratch-layout",
+        "read": {
+          "iops_mean": 0.0,
+          "bw_mean_kib": 0.0,
+          "lat_ns_p99": null,
+          "lat_ns_mean": 0.0
+        },
+        "write": {
+          "iops_mean": 86.2,
+          "bw_mean_kib": 88292.705263,
+          "lat_ns_p99": 16908288,
+          "lat_ns_mean": 11587324.913574
+        }
+      }
+    ]
+  }
+}
