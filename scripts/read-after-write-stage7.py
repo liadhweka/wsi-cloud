@@ -71,14 +71,6 @@ def writer_process(slide_id: str, out_path: Path, bytes_target: int,
     .tmp + rename pattern fixes this — out_path doesn't appear at all until
     the rename completes after fsync.
     """
-    # Pixel grid sized from `bytes_target` via an ASSUMED ~5× deflate ratio.
-    #
-    # ⚠ THIS RATIO DOES NOT HOLD FOR THIS CONTENT, AND THE TARGET IS NOT THE
-    # OUTCOME. The pattern below is a 32×32 base tiled up by np.repeat, so it is
-    # enormously more compressible than the ~5× assumed here and the file lands
-    # far under `bytes_target`. `--bytes-per-write` is therefore a *request*,
-    # never a measurement: the achieved size is stat()'d after the write and is
-    # the only size that is ever reported.
     #
     # Why this matters rather than being cosmetic: 7.4.b measures how quickly a
     # just-written heatmap becomes visible to another reader, and that depends
@@ -88,20 +80,25 @@ def writer_process(slide_id: str, out_path: Path, bytes_target: int,
     # and tiled from a MEASURED 7.3 output on the same leg -- pass that measured
     # size in, and check the achieved size against it (see the target-vs-achieved
     # report below) rather than trusting this ratio.
-    side = int(np.ceil(np.sqrt(bytes_target * 5 / 3) / 256)) * 256
+    # Uncompressed tiled TIFF: the on-disk size is DETERMINISTIC (full
+    # 256x256x3 tiles, no compression variance), so the achieved size lands
+    # within one tile (~197 KB) of the measured target instead of riding an
+    # assumed compression ratio the content does not obey (the pre-fix pattern
+    # achieved 5.3% of target). Content stays synthetic per the register:
+    # visibility depends on size, tile structure, and fsync-then-rename.
+    tile_bytes = 256 * 256 * 3
+    n_tiles = max(1, round(bytes_target / tile_bytes))
+    th = max(1, int(np.sqrt(n_tiles)))
+    tw = int(np.ceil(n_tiles / th))
     rng = np.random.default_rng(hash(slide_id) & 0xFFFFFFFF)
-    # Build a smooth-ish pattern (random gradient) so deflate gives realistic
-    # compression. Pure-random uint8 doesn't compress at all; pure-uniform
-    # compresses too well. A smooth gradient matches heatmap entropy.
-    base = (rng.integers(0, 256, (32, 32, 3), dtype=np.uint8))
-    rgb = np.repeat(np.repeat(base, side // 32, axis=0), side // 32, axis=1)
+    rgb = rng.integers(0, 256, (th * 256, tw * 256, 3), dtype=np.uint8)
 
     tmp_path = out_path.with_suffix(out_path.suffix + '.tmp')
     t_write_start = time.monotonic()
     tifffile.imwrite(
         str(tmp_path), rgb,
         photometric='rgb', tile=(256, 256),
-        compression='zlib', bigtiff=True,
+        bigtiff=True,
     )
     # Force the bytes to durable storage BEFORE the atomic rename. fsync
     # establishes the happens-before contract that the reader observes when

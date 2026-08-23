@@ -1,0 +1,16 @@
+{
+  "n_slides_requested": 20,
+  "n_consistency_samples": 20,
+  "bytes_per_write_target": 6440000,
+  "bytes_written_mean_achieved": 341866.8,
+  "bytes_written_target_ratio": 0.053084906832298134,
+  "poll_interval_s": 0.001,
+  "visibility_latency_resolution_floor_ms": 1.0,
+  "consistency_latency_ms_mean": 0.45243510394357145,
+  "consistency_latency_ms_p50": 0.48854807391762733,
+  "consistency_latency_ms_p95": 0.8982360595837235,
+  "consistency_latency_ms_p99": 0.9329570457339287,
+  "consistency_latency_ms_max": 0.9329570457339287,
+  "first_read_latency_ms_mean": 0.49806267488747835,
+  "first_read_latency_ms_p99": 0.5727000534534454
+}

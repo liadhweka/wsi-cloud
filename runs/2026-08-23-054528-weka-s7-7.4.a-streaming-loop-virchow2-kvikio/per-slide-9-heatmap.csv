@@ -1,0 +1,2 @@
+slide_idx,slide_id,format,bytes_written,t_write_start_s,t_write_end_s,write_ms
+0,TCGA-A7-A4SB-01Z-00-DX1.E8925605-5189-441E-A719-92CFC1118B0B,tiff5x,1809706,8.460384,10.338315,1877.930
