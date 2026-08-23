@@ -41,8 +41,8 @@ Sessions close rows opportunistically: whoever touches a row's scope does the ro
 | **D-5** | **Remaining: Lustre band calibration (R2, Leg B's — now including its own mixed probes)** | Leg-B calibration session (`calibrate-canary-bands.sh`) | Both relations are derived and built — WEKA (D+P)/D with calibrated bands (anchors reproduce; Stage-1 register + helper docstring), Lustre from the recorded stripe layout (raid0 → 1.0/1.0, R1 anchors). Bands load from `runs/.leg-state/$LEG/canary-bands.json`; absent → UNCALIBRATED exits non-zero rather than inventing a tolerance — Lustre's file is written by R2's calibration cells (REP≥3 per direction + bs4k). **Mixed-cell semantics until the widening is calibrated (2026-08-21):** a mixed direction whose ratio sits inside the UNWIDENED single-direction band is a genuine PASS (any valid mixed band is a superset); outside it the verdict is **REPORT_ONLY** — recorded, never judged, never chain-poisoning — because it cannot be told apart from the uncalibrated widening, and a guessed widening can mask a real inconsistency. Consequence: **6.C's ingest-active mixed cells get report-only read verdicts until the mixed calibration runs** — running it before 6.C (not just before 1.6) gives the endurance chain full canary coverage. Canary-abort itself is wired (D-7, closed) |
 | **D-6** | **Remaining: the nvidia-fs block parser in `parse-results.py`; Leg B's recorded Phase-0 determination cell (R2)** | `parse-results.py`; R2 session (Phase-0 cell) | The shared accounting module (`wsi_cufile_accounting.py`) and ALL worker wiring are done and smoke-verified — 4.C/5/6 workers, and (2026-08-22) `inference-per-slide-stage7.py`: `PathAccounting` snapshot at reader construction, `finish(reader.bytes_read)` into the summary's `path_accounting` block with a per-process scope note (nvidia-fs deltas are device-global under N concurrent processes; the wrapper's 1 Hz timeline is the cell-level authority). The pre-cuFile-cell canary half is closed with D-7 (record-run's pre-cell gate refuses a kvikIO cell whose nvidia-fs stats are unreadable). The standing three-layer caveat: kvikio's own compat can serve reads via POSIX without entering cuFile, so the recorded split — `gds_bytes` / `bounced_or_posix_bytes` / `gds_engaged` — is the only proof of path; accounting-off reports unknown, never zero |
 | **D-19** | **Substage 1.8 has no implementation and no marker** | `Stage-1-Ingest.md` | The FSx-native S3 import is the only substage with neither a driver row, a "no implementation" note, nor a deferred id. It is a Lustre-leg capability cell excluded from the head-to-head, so omitting it breaks no cross-leg comparison and would go unnoticed. Build it in Leg B or record a decision not to |
-| **D-26** | **The dangling `Q<n>` decision-citation scheme** | 29 citations across 12 scripts | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
-| **D-31** | **The environment contract omits the 20 workload-shape variables** | `env-contract.py:48-72` | `docs/NAMING-AND-VARIABLES.md` Table 5 declares them identical-across-legs, but the contract records none. **Do not simply append them to `MUST_MATCH`:** `verify()` pushes a null-vs-null pair into `unrecorded` and returns FAILED, so the normal case (both legs on defaults) would fail. Needs a tri-state or a defaults-aware comparison |
+| **D-26** | **The dangling `Q<n>` decision-citation scheme** | The Stage-5/7 scripts (grep `Q[0-9]` for the live set) | Scripts cite locked decisions as `Q1`–`Q13`; **zero `Q<n>` identifiers survive anywhere in `docs/`**. Every one of those citations is unresolvable. Either reintroduce stable ids into the per-stage registers or rewrite the citations to name the decision — a convention call either way |
+| **D-31** | **The environment contract omits the Table-5 workload-shape variables** | `env-contract.py:48-72` | `docs/NAMING-AND-VARIABLES.md` Table 5 declares them identical-across-legs, but the contract records none. **Do not simply append them to `MUST_MATCH`:** `verify()` pushes a null-vs-null pair into `unrecorded` and returns FAILED, so the normal case (both legs on defaults) would fail. Needs a tri-state or a defaults-aware comparison |
 | **D-32** | **`dataset_manifest_sha` hashes the manifest, not the dataset bytes** | `env-contract.py:174-175` | The held-constant field "the datasets and their byte contents" is therefore asserted, never verified. Full rehashing costs hours of leg wallclock, so the cheaper options (file count + total bytes + newest mtime; or a sampled hash) are a methodology call |
 | **D-35** | **Remaining: fold relocate-after-verified-sync into `run-leg.sh`'s per-step sync for ordinary cells** | `run-leg.sh` (per-step sync) | The 2026-08-16 ENOSPC abort: `runs/*/raw` accumulates locally although S3 already held every byte via the per-step verified sync. Two halves are closed: `record-run.sh` honours `RECORD_RAW_ON_SCRATCH=1` (raw/ born on the local-NVMe overflow, symlinked — for cells whose telemetry exceeds root headroom; sync follows symlinks, S3 authoritative), and the rebuilt Leg-B client carries a **200 GB root** (verified live, `df /`, 2026-08-21; confirm Leg A's at its next rebuild). The fold remains so ordinary long legs reclaim root space mechanically instead of by session intervention |
 | **D-37** | **`sync-to-s3.sh --mode full` duration grows linearly with run-dir count** (one `aws s3 sync` invocation per run dir → S3 LIST round-trips even with nothing to upload; ~5 min at ~190 dirs, plausibly 15+ min at leg scale) | `sync-to-s3.sh` | Not a correctness issue — the per-dir verify is honest work — but it sits inside `backup.sh` on the commit path and inside `teardown-prep.sh`. Batch the per-dir syncs (one sync over `runs/` with include patterns) or skip dirs whose raw was already relocated + verified, keeping the archive semantics and the post-sync count verification intact |
@@ -88,7 +88,19 @@ D-8's) · **D-30** → every stage 3–7 driver now declares `RECORD_CACHE_STATE
 roadmap's cache-discipline rows, and the reconciler in the `wsi_agg_helper.py` entry ·
 **D-39** → the FSx server-side CloudWatch window dump: `fsx-cloudwatch-dump.py` (its entry) + the
 `record-run.sh` lustre post-cell hook + the `run-leg.sh` per-step backfill; proven end-to-end on the
-stage-0 proof cell (720 series, all OSTs/MDTs per-target).
+stage-0 proof cell (720 series, all OSTs/MDTs per-target) ·
+**D-12** → the environment contract is `env-contract.py` (write/verify + the `contract-verified` marker;
+leg-end flow in `TEARDOWN-AND-REBUILD.md`) · **D-13** → the S3→filesystem hydration driver is
+`sweep-stage1-hydrate.sh` (1.7 measured head-to-head; `hydration-complete` marker consumed by the
+bootstrap's re-hydrate-never-re-measure guard) · **D-14** → the leg runner is `run-leg.sh` (its entry) ·
+**D-15** → 4.D's recording shape, ratified 2026-08-17: one `record-run.sh` cell per dataset
+(`convert-stage4c-rawtiff.sh` header) · **D-18** → rep grouping + the stability noise band live in
+`wsi_agg_helper.py` (`group_reps`, `stability_band`; register **D18**) · **D-20** → the throwaway Stage-0
+recording proof is `prove-recording.sh` (the `s0-proof-summary-<leg>.csv` evidence) · **D-21** → the
+`contract-verified` marker + `run-leg.sh`'s refusal of a leg whose marker mismatches the current contract
+(phase 2 ratified 2026-08-16; `env-contract.py`) · **D-22** → conda-env verification is
+`verify-conda-env.sh` (bootstrap-gated) · **D-28** → 4.D raw-TIFF retained at rest, ratified 2026-08-15
+(`convert-stage4c-rawtiff.sh` header; capacity accounted in the open-items memory's headroom item).
 
 > **Nothing was deleted.** An earlier plan assumed GPUDirect Storage would be dropped, which would have
 > removed the kvikIO / raw-TIFF / cuFile scripts. **GDS is retained and asymmetric by design** (**D8**), so
@@ -216,6 +228,19 @@ observed normalized-ratio spread ±5% per direction (≥3 large-bs cells per dir
 filesystem-side parsers onto it (with the Lustre schemas, Leg B); the
 Lustre-side cache-evidence source gets named during the Leg-B build.
 
+### `wsi_cufile_accounting.py` — the shared I/O-path accounting module (D-6)
+**What.** One importable implementation of the three-layer path proof: snapshots `/proc/driver/nvidia-fs/stats`
+and cuFile's own accounting around a reader's life, and emits the `gds_bytes` / `bounced_or_posix_bytes` /
+`gds_engaged` split (`PathAccounting`: snapshot at reader construction, `finish(bytes_read)` into the worker's
+summary).
+**Why.** The split is **the only proof of path** — a configuration flag is not proof of behaviour — and five
+workers need it (`read-tiles-kvikio.py`, `train-resnet50-stage5.py`, `extract-features-foundation-stage6.py`,
+`inference-per-slide-stage7.py`, `probe-gds-phase0.py`); one module means the accounting cannot drift per
+worker.
+**Caveats.** nvidia-fs deltas are device-global: under N concurrent processes the per-process numbers carry a
+scope note and the wrapper's 1 Hz timeline is the cell-level authority (the D-6 entry). Accounting-off reports
+`unknown`, never zero.
+
 ### `calibrate-canary-bands.sh` — the D-5 band calibration driver ⭐ NEW
 **What.** Runs the calibration cells on the provisioned cluster — 3× probe-shaped large-block pairs
 (seqw/seqr bs=4M jobs=16 iodepth=8, the shape of the 2026-08-15 anchor probes) plus 3× small-block pairs
@@ -332,7 +357,8 @@ mechanics, not this generic runner. **Rewrites recorded output paths into the re
 bit the 4.C reps 2026-08-18 (originals' summaries restored from their cmd.logs, which print the summary
 verbatim; two random cells' per-tile CSVs hold rep3 content, noted in their `notes.md`). The four 4.B
 rep dirs predate this fix and carry no `reader-summary.json` of their own — recover from each rep's
-cmd.log when the D-4 helper's rep grouping lands.
+cmd.log if rep rows are ever folded into the grid CSVs (their medians/spreads are already quoted in the
+4.B roadmap row).
 
 ### `verify-substage-closeout.sh` — the mechanical substage-closeout gate ⭐ NEW
 **What.** For one substage (or `--all-completed`): every cell OK in INDEX · aggregate CSV present **and
@@ -344,8 +370,9 @@ launch** (RUNBOOK § Substage closeout; CLAUDE.md carries the rule).
 2026-08-17) — the project's own lesson applied to itself: a trigger must be mechanical.
 **Caveats.** The substage table inside the script is the registry — **extend it in the same edit that adds a
 new substage** (unknown → refusal, not skip). The roadmap check keys on the `**Leg <X> results` row-prefix
-convention. Rep cells are audited (INDEX/canary/S3) but excluded from grid CSVs until the D-4 helper's rep
-grouping lands — `aggregate-sweep.py`'s name regex skips `-repN` dirs, so the grids stay single-shot.
+convention. Rep cells are audited (INDEX/canary/S3) but excluded from grid CSVs by design —
+`aggregate-sweep.py`'s name regex skips `-repN` dirs, so the grids stay single-shot; rep medians/spreads
+(the helper's `group_reps`) are quoted in the roadmap rows.
 
 ### `aggregate-stage1-hydrate.py` — the 1.7 aggregate the closeout gate found missing ⭐ NEW
 **What.** Rolls the hydration cells into `s1.7-hydrate-summary-<leg>.csv`: per cell mcr, wallclock, fs-side write
@@ -747,9 +774,9 @@ failed drop aborts the sweep); warm cells: an unrecorded n=64 warmup pass immedi
 construction, not an inheritance. The aggregator parses the arm from the run name and keys the grid
 `(dataset, arm, concurrency)`. Attempts every cell; exits non-zero if any failed.
 **Why.** Single-pass matches how a real cataloging job runs and keeps the unit of work identical across legs.
-**Caveats.** **High-concurrency cells finish in under a second**, so 1 Hz recorders capture 1–3 samples and
-any sustained mean is ill-defined — a sampling limit, not a recording failure. The app-level rate is
-unaffected. ⏳ **Resolve the sampling approach before the first cell and apply it identically to both legs.**
+**Caveats.** **High-concurrency cells finish in under a second** — the driver sets `RECORD_POLL_HZ=10` per
+cell (**D-34**, closed: non-perturbation proven by the recorded 1-vs-10 Hz pair). Even so the shortest cells
+yield few filesystem-side samples, so the app-level rate stays the quotable figure there.
 **⏳ DEFER:** ops-counter comparability across legs is unresolved — until counter semantics are verified
 equivalent, **the app-level rate is the only cross-leg-comparable source** here and the filesystem-reported
 ops/s is within-leg only.
@@ -923,8 +950,9 @@ so sharing it across models is structural, not a micro-optimisation.
 the real corpus provides.
 **Caveats — the most consequential sizing decision in the project.** The corpus must exceed **the client page
 cache plus the larger of the two filesystems' server-side caches**, or a cell that is cold on one leg is
-partly warm on the other and the difference looks like a filesystem property. ⏳ **Size it before Leg A
-generates anything, using both filesystems' cache sizes, and use one identical definition on both legs.**
+partly warm on the other and the difference looks like a filesystem property. **Sized 2026-08-21 from the
+measured Tier-2 distribution — the grid lives in the Stage-6 roadmap (6.B.1 Grid row); one identical
+definition on both legs (D13). The 3.0 TiB production corpus's coldness was verified by 6.B.2's own canary.**
 
 ### `read-feature-files-stage6b.py` + `sweep-stage6b-stress.sh`
 **What.** Reads feature files under a specified access pattern, optionally deserialising (production

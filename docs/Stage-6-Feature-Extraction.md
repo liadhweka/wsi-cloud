@@ -123,7 +123,7 @@ comparability. NUMA-aware assignment with the map re-derived per instance (**D15
 
 ## Substage roadmap
 
-⏳ planned · 🟡 running · ✅ complete. All substages are ⏳ on both legs.
+⏳ planned · 🟡 running · ✅ complete.
 
 ### 6.A — Foundation-model feature extraction
 

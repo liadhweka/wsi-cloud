@@ -70,16 +70,18 @@ esac
 # `--check` reports any that ARE set, so an override is visible rather than assumed.
 #
 # Stage 6.C — orchestrate-concurrent-stage6c.sh (its sweep driver overrides NOTHING)
-# ⚠ EXTRACT_GPUS: the driver default (0,1,2,3) OVERLAPS the MIL workload's pinned GPU 0,
-#   and 6.C runs its workloads CONCURRENTLY — so a cell naming both `extract` and `mil`
-#   contends on GPU 0 and reports a concurrency figure for a placement nobody chose.
-#   Set it explicitly off GPU 0 for such a cell until the driver default is fixed (D-8),
-#   and set EXTRACT_N_GPUS to match the count, or the driver's own guard will refuse.
+# EXTRACT_GPUS: the driver default is 1,2,3 — the ratified D-25 partition (MIL pins GPU 0;
+#   extract stays off it, so `extract`+`mil` cells never contend on a placement nobody chose).
+#   GPU ORDER within the set is a non-axis (D-8, closed: single-NUMA instance). If you
+#   override the set, EXTRACT_N_GPUS must match the count or the driver's guard refuses.
 #export EXTRACT_MODEL="virchow2"                  # uni2-h also tags the cell PENDING-APPROVAL
 #export EXTRACT_DATASET_TAG="brca50"              # names the feature OUTPUT dir, not the slides
-#export EXTRACT_GPUS="0,1,2,3"                    # ⏳ D-8: SET is right for 4 GPUs, ORDER not yet derived
-#export EXTRACT_N_GPUS="4"                        # DDP world size; must match the count in EXTRACT_GPUS
+#export EXTRACT_GPUS="1,2,3"                      # driver default (D-25 partition)
+#export EXTRACT_N_GPUS="3"                        # DDP world size; must match the count in EXTRACT_GPUS
 #export MIL_FEATURES_TAG="brca_full"              # <10 .pt files there → silently falls back to brca50
+#export MIL_NUM_WORKERS="16"                      # REQUIRED for any cell naming the mil workload — no
+                                                  #   driver default; 16 = the measured 6.B.3 knee,
+                                                  #   identical on both legs
 #export INGEST_N="4"                              # fpsync concurrency (scanner-pace background load)
 #export INGEST_SRC="${SCRATCH_DIR}/fpsync-source/tcga-brca"   # local NVMe: read side not under test
 #export INGEST_DST="${FS_MOUNT}/runs-stage6c-ingest-target"
@@ -87,9 +89,8 @@ esac
 #export VIEWER_SCRATCH="${FS_MOUNT}/benchmarks/fio-scratch-6c-viewer"
 #
 # Stage 6.D — pipeline-end-to-end-stage6d.sh (the end-to-end pipeline's extraction phase)
-# ORDER: ⏳ D-8 — the SET is valid on a 4-GPU instance, but the NUMA/NIC-aware ORDERING
-#   is still to be re-derived on the real instance. The driver's guard catches a wrong
-#   SET (an index that does not exist); it cannot catch a wrong order.
+# ORDER: a non-axis (D-8, closed: single-NUMA instance). The driver's guard catches a
+#   wrong SET (an index that does not exist).
 # WIDTH: must equal Stage 6.A Tier 2's N. 6.D's output IS per-phase wallclock, and it is
 #   composed against 6.A's extraction cell — an extraction phase of any other width
 #   yields an end-to-end number that cannot be composed with 6.A's at all.
@@ -124,7 +125,7 @@ export WEKA_BACKEND_COUNT=""
 export WEKA_BACKEND_AMI=""                       # recorded, never pinned: backends are MAY_DIFFER and absent on Leg B, but the leg's provenance must say what they ran
 export WEKA_CAPACITY_TB=""
 export WEKA_EC_SCHEME=""                         # REQUIRED to derive the WEKA canary relation (D12)
-export WEKA_BACKEND_RAM_TOTAL=""                 # drives Stage 6.B corpus sizing (tracker item 5b)
+export WEKA_BACKEND_RAM_TOTAL=""                 # drives Stage 6.B corpus sizing (Stage-6 roadmap, 6.B.1 Grid row)
 export WEKA_CLIENT_CORES=""
 export WEKA_CLIENT_NICS=""
 # The client's reserved-core ID LIST for this leg, from the client's own report
@@ -282,6 +283,7 @@ if [ "${1:-}" = "--check" ]; then
   # surfacing. Informational — --check cannot know the other leg's values.
   echo "── Workload shape — Stage 6.C / 6.D / 7 (unset = the driver's own default) ─"
   for _v in EXTRACT_MODEL EXTRACT_DATASET_TAG EXTRACT_GPUS EXTRACT_N_GPUS MIL_FEATURES_TAG \
+            MIL_NUM_WORKERS \
             PIPELINE_GPUS PIPELINE_N_GPUS \
             INFER_MODEL INFER_BACKEND INFER_CACHE_POLICY INFER_HEATMAP_FORMAT INFER_MANIFEST \
             INFER_COORDS_DIR INFER_RAWTIFF_DIR INFER_SVS_DIR \

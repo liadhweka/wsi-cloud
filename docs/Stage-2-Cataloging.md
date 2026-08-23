@@ -174,7 +174,7 @@ first Stage 2/3 cell.
 
 ## Substage roadmap
 
-⏳ planned · 🟡 running · ✅ complete. All substages are ⏳ on both legs.
+⏳ planned · 🟡 running · ✅ complete.
 
 ### 2.0 — OpenSlide property extraction sweep
 

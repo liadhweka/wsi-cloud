@@ -47,8 +47,9 @@ place the provisioning asymmetry below stops being a caveat and becomes arithmet
    (`docs/STAGES.md` **D8**, dated source). We **keep** the kvikIO/cuFile path and run **both requested
    cuFile modes on both filesystems** — the modes are genuinely different code paths regardless — and every
    kvikIO cell records its own GPU-direct-vs-bounced byte split, so the expectation is verified per cell
-   rather than assumed. At single-client scale on this instance class, **neither stack offers a true
-   GPU-direct path** — itself a finding.
+   rather than assumed. At single-client scale on this instance class, **neither stack is expected to offer a
+   true GPU-direct path** — measured on the WEKA leg; a documented platform constraint on the Lustre leg,
+   pending its own per-cell verification.
 
 **Results precede story.** No document here contains a predicted outcome or a pre-assigned "headline" stage.
 Whatever the benchmark produces is what gets reported, including cells where WEKA loses.
@@ -72,7 +73,7 @@ Whatever the benchmark produces is what gets reported, including cells where WEK
 | Create + mount a filesystem for a leg | Both automatic: Terraform + the bootstrap (Leg B via the baked `scripts/wsi-lustre-phase2.sh`; reasoning + fallback: **`docs/cloud-setup/LUSTRE-PROVISIONING.md`**) |
 | Know what every path / name / variable should be | **`docs/NAMING-AND-VARIABLES.md`** (+ `env.example.sh`) |
 | Tear down or rebuild the instance | **`docs/cloud-setup/TEARDOWN-AND-REBUILD.md`** — Claude runs the whole prep (`scripts/teardown-prep.sh`, gated by `scripts/teardown-preflight.sh`) and hands over a GO; the human only destroys |
-| Pick up where the last session stopped | The handoff the previous session wrote from **`prompts/handoff-skeleton.md`** — inline in its final message (same-instance turnover, the normal mode) or as a durable `tmp/` file (rebuilds), because Claude's context does not survive the session |
+| Pick up where the last session stopped | The handoff the previous session wrote from **`prompts/handoff-skeleton.md`** — inline in its final message (same-instance turnover, the normal mode) or as a durable `TEMP/` file (rebuilds), because Claude's context does not survive the session |
 
 **A fresh Claude session continuing this work** starts with the `cloud-session-open-items` memory (the work
 list) → `PROJECT-THESIS.md` → `CLAUDE.md` → `docs/STAGES.md` → the relevant roadmap → `docs/RUNBOOK.md` before
@@ -99,7 +100,7 @@ docs/
   cloud-setup/         SPINUP-CHECKLIST.md (provisioning reasoning) + TEARDOWN-AND-REBUILD.md (the checklist)
                        + LUSTRE-PROVISIONING.md (Leg-B reasoning, decision register, manual fallback)
 prompts/               handoff-skeleton.md (THE HANDOFF TEMPLATE — sessions hand off inline from it;
-                       rebuilds hand off via a durable tmp/ file)
+                       rebuilds hand off via a durable TEMP/ file)
 scripts/               the script library + manifests/ + env-specs/
 runs/                  one directory per run, plus INDEX.md, the per-leg resume markers, and sweep logs
 ```
@@ -123,7 +124,7 @@ runs/                  one directory per run, plus INDEX.md, the per-leg resume 
    markers.
 3. **Synthesis** — the actual deliverable, built in `docs/RESULTS.md` once both legs' cells exist.
 
-Leg A has run through Stage 6.A on this design; the deferred-work table in `docs/SCRIPT-TRACKER.md` remains
+Leg A has run to completion on this design; the deferred-work table in `docs/SCRIPT-TRACKER.md` remains
 the authoritative list of what is still owed versus done.
 
 > **Everything environment-specific — paths, addresses, versions, core counts, tuning — is re-derived on

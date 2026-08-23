@@ -33,8 +33,8 @@ satisfy; the contract verifies identity-of-spec mechanically).
 
 | | |
 |---|---|
-| Backends | **8 × i8ge.6xlarge**, both NVMe per host (16 × 6.82 TiB = **120 TB raw**), **5+2 EC + 1 hot-spare** failure domain → **67.46 TB usable**; aggregate backend RAM **1536 GiB**; aggregate sustained network **300 Gbps** (37.5 Gbps/host, AWS API). *Why this sizing:* the client demonstrably sustains 11.6 GB/s reads, so the backends are floored **above** client capability (**D7**: neither side may be the constraint; arithmetic in `RESULTS.md` § Provisioning fairness) |
-| WEKA version | Contract-pinned (`weka_version` field) — 5.1.27 on the live cluster |
+| Backends | **8 × i8ge.6xlarge**, both NVMe per host (16 × 6.82 TiB = **120 TB raw**), **5+2 EC + 1 hot-spare** failure domain → **67.46 TB usable**; aggregate backend RAM **1536 GiB**; aggregate sustained network **300 Gbps** (37.5 Gbps/host, AWS API). *Why this sizing:* the client demonstrably sustains ~11.0 GiB/s reads (the 1.0b plateau; the spin-up calibration probes measured the same rate RAM-resident), so the backends are floored **above** client capability (**D7**: neither side may be the constraint; arithmetic in `RESULTS.md` § Provisioning fairness) |
+| WEKA version | Recorded per cell in the pre/post capture set (`pre/weka-version.txt`, `pre/weka-status.txt`) — 5.1.27 across the whole leg |
 | Client config | **DPDK transport**, evidenced per boot from the client's own report, never from mount options (**D16**). **4 FRONTEND cores ↔ 4 NICs** — the vendor-documented pairing rule applied to the deployed network layout (citations in `RESULTS.md` § Provisioning fairness); hand-set at deploy (confirmed 2026-08-21), so the documented pairing rule is the basis. Reserved cores `1-4,49-52` (FRONTENDs + HT siblings), excluded from application-core accounting and **priced rather than hidden** (**D15**) |
 | Per-client ceiling | **200 Gbps** — basis: instance line rate (WEKA documents no per-client cap, so the physical NIC is the honest ceiling); checked 2026-08-15 |
 | AZ | `ap-northeast-2a` |

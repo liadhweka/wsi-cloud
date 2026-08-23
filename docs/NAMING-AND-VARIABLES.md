@@ -75,7 +75,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 | `WEKA_BACKEND_AMI` | `describe-instances` at spin-up | **Recorded, never pinned:** backends are `MAY_DIFFER` and absent on Leg B, but the leg's provenance must say what they ran (STAGES.md **D20**). |
 | `WEKA_CAPACITY_TB` | WEKA provisioning | Same. |
 | `WEKA_EC_SCHEME` | WEKA provisioning | **Required** to derive the WEKA cross-source consistency relation (**D12**) — the canary cannot run without it. |
-| `WEKA_BACKEND_RAM_TOTAL` | Sum of backend instance RAM | WEKA's half of the cache the Stage 6.B corpus must exceed. The corpus is sized against **both** filesystems' caches so one identical definition serves both legs (**D13**) — see the open-items memory, the 6.B corpus-sizing item. |
+| `WEKA_BACKEND_RAM_TOTAL` | Sum of backend instance RAM | WEKA's half of the cache the Stage 6.B corpus must exceed. The corpus is sized against **both** filesystems' caches so one identical definition serves both legs (**D13**) — the grid is fixed in the Stage-6 roadmap (6.B.1 Grid row). |
 | `WEKA_CLIENT_CORES` · `WEKA_CLIENT_NICS` | `weka` client config | Client provisioning, and the reserved-core count for **D15** core accounting. |
 | `FS_CLIENT_RESERVED_CORES` | The client's own report, per leg | The reserved-core **ID list** (e.g. `24-31`) — `record-run.sh` expands it into every run's `cores_reserved`, and every CPU aggregator reads that per run, **refusing a run recorded without it** (**D15**). Set `none` on a leg whose client reserves no cores: unset means *unknown*, and an unknown exclusion set is refused, never assumed. |
 | `RECORD_CACHE_STATE` | **Sweep drivers, per cell — never `env.sh`** | The cell's declared cache regime, recorded into `metadata.json` as `cache_state` (null + warned when unset). Declared is not achieved: the achieved state is what worker output and the pre-cell canary establish (**D13**). |
@@ -97,7 +97,7 @@ Leg A. **Capture them as you provision** — several are hard to reconstruct lat
 
 | Variable | How it's derived | Note |
 |---|---|---|
-| `MEMORY_SLUG` | `REPO_DIR` with `/` → `-` | For the chosen names: `-home-ec2-user-wsi-cloud`. **Discover it, don't type it** — the memory restore and backup steps derive it (`FILESYSTEM-MAP.md`), so a path change needs no edits. **`env.sh`'s copy is display-only:** `restore-memories.sh` and `backup.sh` each derive their own from the repo's *real* location and never read it, so `--check` prints it as `info` rather than validating it — an `ok` on a value nothing reads would claim it is in force when it is not. Don't wire anything to it. |
+| `MEMORY_SLUG` | `REPO_DIR` with `/` → `-` | For the chosen names: `-home-ec2-user-wsi-cloud`. **Discover it, don't type it** — the memory restore and backup steps derive it (`FILESYSTEM-MAP.md`), so a path change needs no edits. **Nothing reads an `env.sh` copy:** `restore-memories.sh` and `backup.sh` each derive their own from the repo's *real* location — an `ok` on a value nothing reads would claim it is in force when it is not. Don't set it in `env.sh` and don't wire anything to it. |
 | `LEG` | set per leg in `env.sh`; `run-leg.sh --leg` exports it | `weka` \| `lustre`. Feeds `FS_MOUNT`, the run-dir name segment, the `metadata.json` field, and the S3 prefix. **`record-run.sh` derives `--fs` from it** when the flag is not passed, so the sweep drivers stay argument-free — see the `--fs` note below. |
 | `FS_MOUNT` | `WEKA_MOUNT` or `LUSTRE_MOUNT`, from `LEG` | **The single most important variable in the project.** Every script resolves the mount through it. A hardcoded mount makes one leg measure the other with no failure signal. |
 
@@ -208,7 +208,7 @@ those workloads in `--workloads`.
 
 ## Values that must be identical across legs
 
-`INSTANCE_TYPE`, `AWS_REGION`, `AWS_AZ`, `AMI_ID`, `KERNEL_VERSION`, `DRIVER_VERSION`, `CUDA_VERSION`,
+`INSTANCE_TYPE`, `AWS_REGION`, `AMI_ID`, `KERNEL_VERSION`, `DRIVER_VERSION`, `CUDA_VERSION`,
 `NVIDIA_FS_VERSION`, `LIBCUFILE_VERSION`, `SCRIPT_COMMIT`, dataset bytes, the magnification contract, the
 model set, the recording harness's metric definitions (`../PROJECT-THESIS.md` §3) — **and every workload-shape
 value in Table 5**, which is workload code by another name.

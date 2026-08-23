@@ -165,9 +165,9 @@ page there: POSIX ingest only, no SMB** — read it before quoting any Stage-1 n
   (D18 knee/peak repeats not run — recorded caveat there).
 - **Real-file bulk copy (1.5):** **2,402 MiB/s** at n=64, saturating from n=4 — **~44% of the 1M synthetic
   write ceiling**: per-file rsync/fpsync machinery bounds the path before the filesystem does.
-- **Mixed ingest+read (1.6):** ingest holds its solo ~2,400 MiB/s under concurrent readers until the heaviest
-  read cell (−28% at 64k jobs=64 while readers pull 6.2 GiB/s); viewer-class 4k reads hold **~2 ms p99 under
-  full-rate ingest**; read-side wire relation REPORT_ONLY by declared construction (the 4.D-class read
+- **Mixed ingest+read (1.6):** ingest holds its solo ~2,400 MiB/s through moderate concurrent read load,
+  degrading only at the top of the read sweep (−21% at 4k jobs=64; −28% at 64k jobs=64 while readers pull
+  6.2 GiB/s); viewer-class 4k reads hold **~2 ms p99 under full-rate ingest**; read-side wire relation REPORT_ONLY by declared construction (the 4.D-class read
   amplification under bulk write, up to 1.676 recorded).
 - **S3 hydration (1.7):** full 1.79 TiB in **3,913 s at `max_concurrent_requests=16`** — S3-fetch-bound; the
   filesystem holds easy headroom at every concurrency, so this characterises the ingest *pipeline*.
@@ -183,7 +183,7 @@ stays within-leg until cross-leg counter semantics are verified equivalent (that
 ## Stage 3 — Tissue detection (`Stage-3-Tissue-Detection.md`)
 
 **Asked:** the 20× coord-generation pass that gates everything downstream — a real mixed compute/metadata
-read workload. **Headline:** BRCA 1064-slide cohort at n=64 in **105 s (10.77 slides/s)**, filesystem-side
+read workload. **Headline:** the full TCGA-BRCA cohort at n=64 in **105 s (10.77 slides/s)**, filesystem-side
 ops sustained to **18.1k ops/s**; compute-leaning as designed (CPU 82–87% at n=64). **Completeness is the
 integrity anchor:** 1131/1133 BRCA (two documented zero-tissue slides) + 399/399 CAM16, identical across all
 n, captured as the `coords-3.0` fingerprint — the Leg-B coord-equivalence gate.

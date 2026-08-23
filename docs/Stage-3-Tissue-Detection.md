@@ -155,7 +155,7 @@ The general rules and the per-filesystem consistency relation are in `RUNBOOK.md
 
 ## Substage roadmap
 
-⏳ planned · 🟡 running · ✅ complete. All substages are ⏳ on both legs.
+⏳ planned · 🟡 running · ✅ complete.
 
 ### 3.0 — CLAM tissue detection sweep (the 20× coord generator)
 

@@ -123,7 +123,7 @@ These five are decided at creation time and are expensive to change, so capture 
     *plus* the larger of the two filesystems' server caches, so that **one identical corpus definition serves
     both legs** rather than a per-leg size that would break the held-constant contract. Nothing to decide now;
     just capture the number, because it is the only input that could push the corpus past the planned
-    capacity. (The open-items memory, the 6.B corpus-sizing item; rationale in
+    capacity. (The grid is fixed in the Stage-6 roadmap, 6.B.1 Grid row; rationale in
     [`STAGES.md`](../STAGES.md) **D13**.)
 
 14. **Client networking mode: DPDK (performance-optimized), not UDP.** DPDK is WEKA's fast path and gives
