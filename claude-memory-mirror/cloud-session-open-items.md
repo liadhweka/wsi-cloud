@@ -22,6 +22,22 @@ which holds the scope and the reason each needs the real environment. Cite the `
 
 ## A. Resolve before the first measured cell
 
+0. **[RESUME POINT, written 2026-08-23 ~13:3x UTC at session handoff] A background chain is IN FLIGHT on
+   this box: `run-leg --only 1.6` → `--only 1.5` → `--only C8` (tee log `runs/sweep-logs/2026-08-23-13*-weka-1.6-1.5-C8.log`),
+   launched ~13:20 UTC, ~2.5 h total.** On completion (check `runs/.leg-state/weka/{1.6,1.5,C8}.done`,
+   INDEX verdicts, no `canary-abort`): (1) aggregate 1.6 (`aggregate-stage1-mixed.py '<glob>'`) and 1.5
+   (`aggregate-stage1-fpsync.py '<glob>'` — per-leg CSVs), write both results rows (a provisional 1.5 row
+   from the renamed first attempt is ALREADY in `Stage-1-Ingest.md` — REPLACE its numbers with the re-run's;
+   1.6's read direction is REPORT_ONLY by declared construction, write side judged), run
+   `verify-substage-closeout.sh` for 1.5 and 1.6, expect exit 0. (2) Then the LEG CLOSE-OUT block:
+   D10 re-check formal note (trigger does not fire — plateau is client-FE-bound ~94 Gbps, far under line
+   rate); `env-contract.py write --leg weka` then `verify` (leg-end contract must equal the committed
+   reference on every MUST_MATCH field); RESULTS.md per-stage skeleton (headline figures + pointers only,
+   numbers live in the roadmaps); memory tidy; full `./backup.sh` + commit + push via push-safe. Everything
+   through Stage 7 is CLOSEOUT CLEAN and pushed (d329d69 + later); only 1.5/1.6/C8 closeouts + leg
+   close-out remain. Delete this item when the leg is closed.**
+
+
 These change what the numbers mean, so resolving them after cells have run means re-running cells.
 
 3. **Consistency relation — WEKA bands CALIBRATED on the 6xlarge cluster (2026-08-16:

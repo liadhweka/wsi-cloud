@@ -1,0 +1,1 @@
+internal-hermelin-wsi-cluster-liad-lb-1453935670.ap-northeast-2.elb.amazonaws.com/default /mnt/weka wekafs rw,relatime,writecache,inode_bits=auto,readahead_kb=32768,dentry_max_age_positive=1000,dentry_max_age_negative=0,container_name=client 0 0

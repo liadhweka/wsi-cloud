@@ -1,0 +1,20 @@
+Filesystem                                                                                Type      Size  Used Avail Use% Mounted on
+devtmpfs                                                                                  devtmpfs  4.0M     0  4.0M   0% /dev
+tmpfs                                                                                     tmpfs     373G   15M  373G   1% /dev/shm
+tmpfs                                                                                     tmpfs     150G  1.6M  150G   1% /run
+/dev/nvme0n1p1                                                                            xfs        48G   45G  3.0G  94% /
+tmpfs                                                                                     tmpfs     373G   87M  373G   1% /tmp
+/dev/nvme0n1p128                                                                          vfat       10M  1.3M  8.7M  13% /boot/efi
+/dev/loop0                                                                                xfs       2.0G   87M  1.9G   5% /opt/weka/logs
+tmpfs                                                                                     tmpfs     373G  8.0K  373G   1% /opt/weka/data/agent/tmpfss/cross-container-rpc-the-tmpfs
+tmpfs                                                                                     tmpfs     373G     0  373G   0% /opt/weka/data/agent/tmpfss/client-wtracer-tracing-area
+tmpfs                                                                                     tmpfs     373G  4.0K  373G   1% /opt/weka/data/agent/tmpfss/telemetry-conf
+tmpfs                                                                                     tmpfs     128M  4.0K  128M   1% /opt/weka/data/agent/tmpfss/mount-tokens
+tmpfs                                                                                     tmpfs     128M     0  128M   0% /opt/weka/data/agent/tmpfss/audit
+tmpfs                                                                                     tmpfs     373G  1.1G  372G   1% /opt/weka/data/agent/tmpfss/client-persistent-tmpfs
+tmpfs                                                                                     tmpfs     373G     0  373G   0% /opt/weka/data/agent/tmpfss/wtracer-stats
+tmpfs                                                                                     tmpfs     373G   24K  373G   1% /opt/weka/data/agent/tmpfss/cleanup
+tmpfs                                                                                     tmpfs     373G  4.0K  373G   1% /opt/weka/data/agent/tmpfss/cleanup_before_stop_and_delete
+internal-hermelin-wsi-cluster-liad-lb-1453935670.ap-northeast-2.elb.amazonaws.com/default wekafs     62T   27T   35T  44% /mnt/weka
+tmpfs                                                                                     tmpfs      75G     0   75G   0% /run/user/1000
+/dev/md127                                                                                xfs       3.5T  1.3T  2.3T  37% /data/local-nvme

@@ -1,0 +1,28 @@
+{
+  "run_dir": "/home/ec2-user/wsi-cloud/runs/2026-08-23-130824-weka-s1.6-mixed-bs4k-jobs1-coldref",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "verdict": "REPORT_ONLY",
+      "detail": "declared wire-relation exemption: reads under a concurrent bulk ingest stream (4.D-class read amplification; no calibrated analogue) \u2014 ratio recorded, not judged",
+      "ratio": 1.6761,
+      "expected_center": 1.0
+    },
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4556,
+      "expected_center": 1.4,
+      "band": [
+        0.9605,
+        2.207
+      ],
+      "widenings_applied": [
+        "mixed x1.0551",
+        "small-bs x1.3682"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

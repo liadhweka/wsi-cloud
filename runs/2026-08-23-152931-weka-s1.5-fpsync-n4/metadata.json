@@ -1,0 +1,49 @@
+{
+  "run_name": "fpsync-n4",
+  "stage": "1.5",
+  "fs": "weka",
+  "fs_mount": "/mnt/weka",
+  "fs_transport": "dpdk",
+  "timestamp_utc": "2026-08-23T15:29:39Z",
+  "hostname": "ip-10-0-1-21.ap-northeast-2.compute.internal",
+  "user": "ec2-user",
+  "kernel": "6.1.177-224.371.amzn2023.x86_64",
+  "cores_total": 88,
+  "cores_reserved": [
+    1,
+    2,
+    3,
+    4,
+    49,
+    50,
+    51,
+    52
+  ],
+  "cores_available": 80,
+  "cache_state": "na-write-cell",
+  "bs_hint": null,
+  "poll_hz": 1,
+  "wire_exempt": null,
+  "rep": null,
+  "command": [
+    "fpsync",
+    "-v",
+    "-n",
+    "4",
+    "-d",
+    "/tmp/fpsync-stage1.5/n4",
+    "/data/local-nvme/fpsync-source/tcga-brca/",
+    "/mnt/weka/data/fpsync-target/n4/"
+  ],
+  "note": "Stage 1.5 fpsync sweep cell 2/4 on fs=weka: local NVMe -> /mnt/weka, fpsync -n 4. Source: /data/local-nvme/fpsync-source/tcga-brca/ (1133 files, 1158795413424 bytes). Target: /mnt/weka/data/fpsync-target/n4 (cleaned pre-cell). fpsync default partition (-f 2000 -s 4G), default rsync opts (-lptgoD -v --numeric-ids), shdir /tmp/fpsync-stage1.5/n4. Per-cell isolation via record-run.sh: any single cell failure leaves rest of sweep intact.",
+  "wallclock_s": 464,
+  "started_utc": "2026-08-23T15:29:41Z",
+  "ended_utc": "2026-08-23T15:37:25Z",
+  "cost_inputs": {
+    "instance_usd_per_hr": 18.52234,
+    "filesystem_usd_per_hr": 26.8128,
+    "software_usd_per_hr": 7.7009,
+    "price_checked_utc": "2026-08-15",
+    "basis": "infra-only = instance+filesystem; all-in = instance+filesystem+software. Both computed per cell (D7). The Lustre software rate is 0 because the FSx service rate is software-inclusive; the WEKA software rate is the public AWS Marketplace rate, dated like every price."
+  }
+}
