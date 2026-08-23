@@ -1,0 +1,1 @@
+/home/ec2-user/wsi-cloud/scripts/orchestrate-clinical-deployment-stage7.sh --workloads inference\,ingest\,heatmap-viewer\,viewer --n-concurrent 4 --inference-batch-size 256 --ramp 300 --runtime 14400 --run-dir /home/ec2-user/wsi-cloud/runs/2026-08-23-063822-weka-s7-7.5.b-endurance-all-four-4hr 

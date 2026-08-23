@@ -85,6 +85,24 @@ command -v jq >/dev/null 2>&1 || {
 
 CMD=("$@")
 
+# D-34 (ratified, Stage-2 register): the filesystem-side poll rate is per-cell
+# opt-in via RECORD_POLL_HZ (default 1; short cells set 10, identically on both
+# legs) — sub-second cells yield 1-3 samples at 1 Hz, so any sustained mean is
+# ill-defined exactly where the metadata architectures differ most. The polling
+# loops stamp millisecond timestamps, so parse-results' dt-from-timestamps and
+# the per-timestamp client summing are rate-correct at any HZ, and the recorded
+# _sample_interval_s block is the achieved-rate evidence. sar stays at 1 s (it
+# only takes integer-second intervals; its streams are not the short-cell
+# primaries). The verification that the higher rate does not itself perturb the
+# measurement is a recorded 1-vs-10 Hz same-config cell pair.
+POLL_HZ=${RECORD_POLL_HZ:-1}
+case "$POLL_HZ" in
+  1|2|5|10|20) ;;
+  *) echo "record-run: RECORD_POLL_HZ must be one of 1|2|5|10|20, got '$POLL_HZ'" >&2; exit 2 ;;
+esac
+POLL_SLEEP=$(awk "BEGIN{printf \"%.3f\", 1/$POLL_HZ}")
+
+
 # ---------- paths ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # scripts/ lives beside runs/, so the runs root is ../runs — NOT "..", which would
@@ -354,6 +372,14 @@ cat > "$RUN_DIR/metadata.json" <<EOF
   "note": $NOTE_JSON
 }
 EOF
+# A 0-byte or invalid metadata.json invalidates the cell's whole record and,
+# left silent, poisons every downstream consumer (bit 41 cells on 2026-08-22:
+# an unset variable inside this heredoc failed the expansion, cat wrote nothing,
+# and the cell recorded "OK"). Refuse loudly instead.
+if ! jq -e . "$RUN_DIR/metadata.json" >/dev/null 2>&1; then
+  echo "record-run: FATAL — metadata.json failed to write or is invalid JSON; aborting the cell" >&2
+  exit 2
+fi
 
 # Plain-English README at the top of the run dir. Auto-generated; no extra
 # args from the caller. Future humans (or future Claude sessions) can read
@@ -420,22 +446,6 @@ This run is part of the WEKA-vs-Lustre WSI storage comparison on AWS.
 - \`${REPO_ROOT}/docs/RUNBOOK.md\` — operational runbook (how to run, how to re-parse, how to recover from failures).
 EOF
 
-# D-34 (ratified, Stage-2 register): the filesystem-side poll rate is per-cell
-# opt-in via RECORD_POLL_HZ (default 1; short cells set 10, identically on both
-# legs) — sub-second cells yield 1-3 samples at 1 Hz, so any sustained mean is
-# ill-defined exactly where the metadata architectures differ most. The polling
-# loops stamp millisecond timestamps, so parse-results' dt-from-timestamps and
-# the per-timestamp client summing are rate-correct at any HZ, and the recorded
-# _sample_interval_s block is the achieved-rate evidence. sar stays at 1 s (it
-# only takes integer-second intervals; its streams are not the short-cell
-# primaries). The verification that the higher rate does not itself perturb the
-# measurement is a recorded 1-vs-10 Hz same-config cell pair.
-POLL_HZ=${RECORD_POLL_HZ:-1}
-case "$POLL_HZ" in
-  1|2|5|10|20) ;;
-  *) echo "record-run: RECORD_POLL_HZ must be one of 1|2|5|10|20, got '$POLL_HZ'" >&2; exit 2 ;;
-esac
-POLL_SLEEP=$(awk "BEGIN{printf \"%.3f\", 1/$POLL_HZ}")
 
 # ---------- start recorders ----------
 log "starting recorders in $RUN_DIR/raw/"

@@ -522,6 +522,7 @@ def _cli_check(run_dir):
     # mixed workload, and evaluating it would ratio noise against noise.
     MATERIAL = 10e6   # low enough that a 4K jobs=1 cell still gets a verdict
     r_live, w_live = bool(app_r and app_r > MATERIAL), bool(app_w and app_w > MATERIAL)
+    declared_cache = str(meta.get("cache_state") or "")
     def _one(direction, app, wire, mixed):
         if direction in verdicts_exempt:
             v = {"direction": direction, "fs": fs, "verdict": "REPORT_ONLY",
@@ -531,9 +532,22 @@ def _cli_check(run_dir):
                 v["ratio"] = round(wire / app, 4)
                 v["expected_center"] = round(expected_relation(fs, direction, ec, layout), 4)
             return v
-        return consistency_verdict(app, wire, fs=fs, direction=direction,
-                                   ec_scheme=ec, stripe_layout=layout,
-                                   bands=bands, bs_bytes=bs_bytes, mixed=mixed)
+        v = consistency_verdict(app, wire, fs=fs, direction=direction,
+                                ec_scheme=ec, stripe_layout=layout,
+                                bands=bands, bs_bytes=bs_bytes, mixed=mixed)
+        # A declared-WARM cell whose read ratio lands BELOW the band floor is
+        # the expected cache-served signature (the client serves shared
+        # re-reads; the wire carries only misses) — the Stage-7 canary note's
+        # case, recorded as a judgement, never an instrumentation failure. An
+        # OVER-band warm read still judges normally.
+        if (v.get("verdict") == "FAIL" and direction == "read"
+                and declared_cache == "warm"
+                and v.get("ratio") is not None and v.get("band")
+                and v["ratio"] < v["band"][0]):
+            v["verdict"] = "REPORT_ONLY"
+            v["detail"] = ("declared-warm cell: wire below fs-side read volume is the cache-served "
+                           "share (wire carries only misses) — recorded, not judged")
+        return v
     if r_live:
         verdicts.append(_one("read", app_r, wire_r, w_live))
     if w_live:

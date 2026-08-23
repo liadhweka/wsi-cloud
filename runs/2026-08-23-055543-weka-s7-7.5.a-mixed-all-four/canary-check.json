@@ -1,17 +1,35 @@
-Traceback (most recent call last):
-  File "/home/ec2-user/wsi-cloud/scripts/wsi_agg_helper.py", line 739, in <module>
-    sys.exit(main())
-             ~~~~^^
-  File "/home/ec2-user/wsi-cloud/scripts/wsi_agg_helper.py", line 728, in main
-    return _cli_check(sys.argv[2])
-  File "/home/ec2-user/wsi-cloud/scripts/wsi_agg_helper.py", line 468, in _cli_check
-    meta = json.loads((run_dir / "metadata.json").read_text())
-  File "/data/local-nvme/miniforge/lib/python3.13/json/__init__.py", line 352, in loads
-    return _default_decoder.decode(s)
-           ~~~~~~~~~~~~~~~~~~~~~~~^^^
-  File "/data/local-nvme/miniforge/lib/python3.13/json/decoder.py", line 345, in decode
-    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
-               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
-  File "/data/local-nvme/miniforge/lib/python3.13/json/decoder.py", line 363, in raw_decode
-    raise JSONDecodeError("Expecting value", s, err.value) from None
-json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+{
+  "run_dir": "runs/2026-08-23-055543-weka-s7-7.5.a-mixed-all-four",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.2653,
+      "expected_center": 1.0,
+      "band": [
+        0.6861,
+        1.5777
+      ],
+      "widenings_applied": [
+        "mixed x1.0551",
+        "small-bs x1.3682"
+      ],
+      "verdict": "PASS"
+    },
+    {
+      "direction": "write",
+      "fs": "weka",
+      "ratio": 1.4578,
+      "expected_center": 1.4,
+      "band": [
+        0.9605,
+        2.207
+      ],
+      "widenings_applied": [
+        "mixed x1.0551",
+        "small-bs x1.3682"
+      ],
+      "verdict": "PASS"
+    }
+  ]
+}

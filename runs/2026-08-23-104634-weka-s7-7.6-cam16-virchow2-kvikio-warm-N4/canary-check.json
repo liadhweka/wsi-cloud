@@ -1,0 +1,17 @@
+{
+  "run_dir": "runs/2026-08-23-104634-weka-s7-7.6-cam16-virchow2-kvikio-warm-N4",
+  "verdicts": [
+    {
+      "direction": "read",
+      "fs": "weka",
+      "ratio": 1.0717,
+      "expected_center": 1.0,
+      "band": [
+        0.9905,
+        1.0929
+      ],
+      "widenings_applied": [],
+      "verdict": "PASS"
+    }
+  ]
+}

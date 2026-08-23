@@ -1,17 +1,4 @@
-Traceback (most recent call last):
-  File "/home/ec2-user/wsi-cloud/scripts/wsi_agg_helper.py", line 739, in <module>
-    sys.exit(main())
-             ~~~~^^
-  File "/home/ec2-user/wsi-cloud/scripts/wsi_agg_helper.py", line 728, in main
-    return _cli_check(sys.argv[2])
-  File "/home/ec2-user/wsi-cloud/scripts/wsi_agg_helper.py", line 468, in _cli_check
-    meta = json.loads((run_dir / "metadata.json").read_text())
-  File "/data/local-nvme/miniforge/lib/python3.13/json/__init__.py", line 352, in loads
-    return _default_decoder.decode(s)
-           ~~~~~~~~~~~~~~~~~~~~~~~^^^
-  File "/data/local-nvme/miniforge/lib/python3.13/json/decoder.py", line 345, in decode
-    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
-               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
-  File "/data/local-nvme/miniforge/lib/python3.13/json/decoder.py", line 363, in raw_decode
-    raise JSONDecodeError("Expecting value", s, err.value) from None
-json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+{
+  "run_dir": "runs/2026-08-22-211134-weka-s2.0-properties-tcga-brca-n64-warm",
+  "verdicts": []
+}

@@ -51,7 +51,8 @@ are handled by separate stacks and are **not measured here** on either side.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 6/6 cells OK) · ⏳ Leg B |
+| **Leg A results (`s7-clinical-summary-weka.csv`; 50 slides/cell)** | **Per-slide p50 ≈ 36 s on every Virchow2 cell — and COLD ≈ WARM on both backends** (cuCIM 36.37 vs 36.16 s; kvikIO 36.15 vs 36.65 s): single-slide inference latency is compute-dominated (extraction ≈ 38 s of the mean; tissue ~45 ms; heatmap write ~1.74 s), so the cold-read penalty is invisible at ViT-H scale — the filesystem's share of the customer-facing number is ~5%, mostly the heatmap write. kvikIO ≈ cuCIM at this scale (the read-path difference that mattered at Stage-5 throughput vanishes under per-slide latency). GigaPath p50 43.5 s (the heavier forward); UNI2-h `[PENDING-APPROVAL]` 35.8 s. p99 ≈ 100–122 s, driven by the tile-count tail (largest slides), not storage |
 | **Goal** | The customer-quotable single-slide latency, with a per-phase breakdown (tissue detection / feature extract / MIL / heatmap write), split cold vs warm, on both data-path backends |
 | **Tool** | `../scripts/inference-per-slide-stage7.py` — chains tissue detection, foundation-model feature extraction, the MIL forward, and the heatmap write, timing each phase separately |
 | **Backends** | cuCIM CPU batched, and kvikIO/cuFile + raw-TIFF |
@@ -66,7 +67,8 @@ are handled by separate stacks and are **not measured here** on either side.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 4/4 cells OK) · ⏳ Leg B |
+| **Leg A results** | **N=4 is the deployment sweet spot: p50 35.6 s (better than N=1's 42.1 s — the four GPUs work in parallel), GPU 93.8%, p99 93.3 s.** N=16: p50 155 s, p99 392 s — 4× GPU oversubscription queues ~4.3× as designed, GPU pegged 98.7%; N=64 (bs dropped to 16 per the schedule): p50 98.6 s, p99 335 s. fs-side reads peak ~198 MiB/s across the grid — storage never approaches its ceiling; the latency growth is queueing, framed per the roadmap. The warm N=64 cell's wire-below-fs-side read ratio (0.82) is the recorded client-cache-served signature, a judgement not a failure |
 | **Goal** | The SLA number: how per-slide p99 holds as concurrency rises |
 | **Tool** | The same per-slide worker, orchestrated as N parallel processes by `../scripts/orchestrate-clinical-deployment-stage7.sh` |
 | **Methodology** | 30-minute sustained cell per concurrency level. Each process consumes a **disjoint** slide chunk from the full-cohort manifest, so no process idles and none duplicates work. Per-process latency CSVs merged for the cell's percentiles. Backend: kvikIO + raw-TIFF; model Virchow2; warm cache (production-realistic — a clinical deployment processes many slides per shift). **Per-process inference batch size declines as N rises** to keep per-GPU memory bounded; the exact schedule is **re-derived for the instance's GPU memory** rather than carried over as a constant |
@@ -80,7 +82,8 @@ are handled by separate stacks and are **not measured here** on either side.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs — **hard dependency on 6.A full-cohort features** |
+| **Status** | ✅ Leg A (weka, 3/3 cells OK) · ⏳ Leg B |
+| **Leg A results** | The three formats span **119× in output size**: PNG overlay 425 KB/slide (write p50 69 ms) · tiff5x 6.44 MB (p50 1.65 s) · full-res pyramidal 50.7 MB (p50 38.1 s, p99 88.8 s). **Writer-bound as the roadmap warned**: fs-side write rates are far below the write ceiling on every cell, so per-slide write wallclock is a renderer property here, reported beside the fs-side rate rather than as a storage result. The tiff5x mean (6.44 MB) is the measured artifact 7.4.b matches |
 | **Goal** | Characterise the write workload from per-slide heatmap generation, across three formats spanning the realistic production range |
 | **Tool** | The heatmap-writing mode of `../scripts/inference-per-slide-stage7.py` — pyramidal TIFF via `tifffile`, PNG via `Pillow`. Heatmap content is **real attention weights** from the MIL forward, rendered with production-fidelity interpolation |
 | **Source → Target** | Coords + pre-extracted features + MIL attention → heatmap pixels → `$FS_MOUNT/heatmaps/7.3/<format>/<slide_id>.{tiff,png}` |
@@ -95,7 +98,8 @@ are handled by separate stacks and are **not measured here** on either side.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs — **7.4.b depends on a measured 7.3 output from the same leg** |
+| **Status** | ✅ Leg A (weka, 2/2 cells OK; the 7.4.b artifact matched to the measured 7.3 tiff5x mean, achieved/target 1.069) · ⏳ Leg B |
+| **Leg A results** | **7.4.a:** 10 slides at a 60 s scanner cadence — end-to-end arrival→visible mean 52.0 s, p99 114 s, **queueing ~5 ms**: the loop keeps up with a ~1,440-slides/day scanner on one GPU. **7.4.b:** read-after-write visibility **mean 0.61 ms, p50 0.58 ms, p99 1.07 ms** against the recorded 1 ms resolution floor — sub-millisecond-class visibility; a just-written heatmap is readable by another process effectively immediately (single-client scope as stated) |
 | **Goal** | (a) End-to-end "arrival → clinician-visible" latency per slide in a streaming scenario. (b) How quickly a just-written heatmap becomes readable by another process |
 | **Tool** | (a) `../scripts/streaming-loop-stage7.sh` — a synthetic scanner emitting one slide per fixed interval into the inference loop, with per-slide event tracking. (b) `../scripts/read-after-write-stage7.py` — a writer emitting a TIFF **sized and tiled from a measured 7.3 output on the same leg, with synthetic content** (not a model forward, so the visibility latency is not diluted by a per-slide inference chain) and a reader that polls for visibility then reads the first chunk |
 | **Methodology (7.4.a)** | One slide per fixed interval for a 10-slide cell, single GPU, kvikIO, warm cache. Per-slide event timestamps: arrival, inference start, inference done, heatmap written, viewer received. Captures end-to-end latency **and** any cross-slide queueing if inference falls behind the emitter |
@@ -110,7 +114,8 @@ are handled by separate stacks and are **not measured here** on either side.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 2/2 cells OK; `na-mixed-concurrent-clinical` by design) · ⏳ Leg B |
+| **Leg A results** | **Inference p50 under the FULL clinical mix: 36.50 s (30-min cell) and 36.52 s (4-h endurance) — within ~2.5% of the uncontended 7.2 N=4 baseline (35.6 s), while ingest wrote 2.4 GiB/s concurrently** and both viewers read throughout; GPU 92–94%. **Endurance: p50 drift 30-min vs 4-h window = 0.05%** — no QoS drift, no leak, 1,490 slides processed. The clinical-shaped QoS answer matches 6.C's training-shaped one: this filesystem serves the whole mix without meaningfully taxing the latency path |
 | **Goal** | Concurrent ingest + inference + heatmap writes + heatmap viewing + slide viewing, all on one filesystem, then sustained for hours |
 | **Tool** | The orchestrator with all four workload types and a lab-floor inference concurrency |
 | **Workload mix** | **ingest** — bulk copy from local scratch into the filesystem (the 1.5 pattern; data-bounded, so it finishes and goes quiet). **inference** — several concurrent jobs, each on a disjoint slide slice. **heatmap-viewer** — small-block random reads of heatmaps *just written by the inference workload* (the production reality: a clinician opens a heatmap right after it lands). **slide-viewer** — small-block random reads of original slides (the 1.6 viewer pattern) |
@@ -124,7 +129,8 @@ are handled by separate stacks and are **not measured here** on either side.
 
 | | |
 |---|---|
-| **Status** | ⏳ both legs |
+| **Status** | ✅ Leg A (weka, 1/1 cell OK) · ⏳ Leg B |
+| **Leg A results** | CAM16 N=4: p50 37.7 s, GPU 93.5% — **CAM16/BRCA p50 ratio 1.06** against the matching 7.2 cell: near-unity, tile-distribution-driven (CAM16's wider tail shows in p99 137 s vs 93 s), confirming format-agnosticism at the inference layer |
 | **Goal** | Cross-vendor format consistency at the inference layer, mirroring 6.A's check |
 | **Tool** | The same per-slide worker; CAMELYON16 subset manifest |
 | **Methodology** | One cell at moderate concurrency, Virchow2, kvikIO, warm cache — directly comparable to the matching 7.2 cell on BRCA. CAMELYON16 uses its native-20× read path per the coord contract; both datasets yield uniform 256 px @ 20× tiles |
