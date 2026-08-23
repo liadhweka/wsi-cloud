@@ -80,11 +80,6 @@ These change what the numbers mean, so resolving them after cells have run means
     generate-and-delete the 6.B corpora per tier instead of holding the whole suite. Raising FSx capacity
     stays a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full cohort —
     measured work, not dead time, but plan the leg's schedule with it.
-13. **Stage-7 pre-run gates:** (a) — DONE 2026-08-22 (the worker now records the path_accounting split;
-    D-6/D-33 rows updated; the 7.x grids match on the recorded stage field). Remaining: (b) **the 7.4.b
-    writer's matched-artifact sizing** (standing constraint, Stage-7 roadmap 7.4.b — do not run 7.4.b
-    as-is; the artifact is sized and tiled from a measured 7.3 output on the same leg, see also item 20) —
-    do it right after 7.3 lands. The 7.4.b poll interval is DECIDED and implemented (1 ms).
 13d. **(resolved 2026-08-21 — D-30 closed: every stage 3–7 driver declares per cell, 6.C
     `na-mixed-concurrent-workloads` and 7.5 `na-mixed-concurrent-clinical` ratified + wired. Tracker
     closed-ids + each roadmap's cache rows hold the record. Delete this stub once 6.C's first cells run
@@ -108,13 +103,6 @@ These change what the numbers mean, so resolving them after cells have run means
     not installed, and `fio` 3.35 lists no `filestat`/`filecreate` engine — so this means introducing a new
     tool and validating it on **both** filesystems before any number from it is quotable.
     Detail: `docs/Stage-2-Cataloging.md`.
-20. **Two consumer-side inputs the 6.B canary and the 7.4.b writer now depend on.** Both criteria are decided
-    and written down, but each needs a measured value from the same leg before the cell it guards can run:
-    - 6.B.2's file-load p99 check is judged against **6.B.3's measured per-step time** on that leg (fallback:
-      6.B.2's own lowest-concurrency cell). The stated sequence puts 6.B.3 first, so confirm that holds.
-    - 7.4.b's synthetic artifact is **sized and tiled from a measured 7.3 output** on that leg, so 7.3 must
-      land first. Content stays synthetic — visibility depends on size, tiling and fsync-then-rename, not
-      pixels. Detail: `docs/Stage-6-Feature-Extraction.md`, `docs/Stage-7-Clinical-Inference-Deployment.md`.
 21. **The blocker gate is now three tiers, and two of them gate cells that used to precede it.**
     `prompts/handoff-skeleton.md` (the handoff SOP: filled inline per session turnover, 2026-08-20):
     **Tier 0** transport, before *any* cell including the throwaway (**CLOSED,

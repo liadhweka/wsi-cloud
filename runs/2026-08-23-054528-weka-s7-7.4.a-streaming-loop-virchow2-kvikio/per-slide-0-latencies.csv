@@ -1,0 +1,1 @@
+slide_idx,slide_id,process_id,world_size,t_arrived_s,n_tiles,inference_batch_size,t_tissue_ms,t_extract_ms,t_mil_ms,t_heatmap_write_ms,t_total_ms,backend,model,cache_policy_requested,client_page_cache_discarded,heatmap_format,heatmap_path,heatmap_bytes

@@ -1,0 +1,1 @@
+/home/ec2-user/wsi-cloud/scripts/orchestrate-clinical-deployment-stage7.sh --workloads inference --n-concurrent 4 --inference-batch-size 256 --ramp 300 --runtime 1500 --run-dir /home/ec2-user/wsi-cloud/runs/2026-08-23-014650-weka-s7-7.2-concurrent-virchow2-kvikio-warm-N4 

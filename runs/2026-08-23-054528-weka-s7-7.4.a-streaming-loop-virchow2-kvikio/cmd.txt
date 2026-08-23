@@ -1,0 +1,1 @@
+/home/ec2-user/wsi-cloud/scripts/streaming-loop-stage7.sh --run-dir /home/ec2-user/wsi-cloud/runs/2026-08-23-054528-weka-s7-7.4.a-streaming-loop-virchow2-kvikio --n-slides 10 --cadence-s 60 --model virchow2 --backend kvikio --manifest /home/ec2-user/wsi-cloud/scripts/manifests/tcga-brca-stage4a-subset.tsv 
