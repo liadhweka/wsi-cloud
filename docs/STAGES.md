@@ -402,7 +402,11 @@ up (`g6e.48xlarge`, 8× L40S / 400 Gbps) **before Leg B**. Recorded in advance s
 under sunk cost. *Consequences:* DDP N-range ∈ {1, 2, 4}; `num_workers` headroom; a GPU/NUMA pinning map
 re-derived on the real instance. *Source:*
 [EC2 accelerated-computing instance specs](https://docs.aws.amazon.com/ec2/latest/instancetypes/ac.html) —
-fetch it; instance specs change.
+fetch it; instance specs change. **Trigger evaluated at Leg-A close: it does not fire.** The synthetic
+ceiling does not pin at line rate — the large-block read plateau is ~11.0 GiB/s ≈ 94 Gbps against the
+200 Gbps line (1.0b, `Stage-1-Ingest.md`), and the calibration attribution cells place that plateau in the
+client FE stack, which is part of what is under test (**D7**/**D15**), not in the instance's NICs or CPU
+saturation. Leg B proceeds on the same instance class.
 
 **D11 — One `runs/` tree, with the filesystem as an explicit dimension.** `--fs {weka|lustre}` becomes a
 run-dir name segment **and** a `metadata.json` field; aggregators pivot on it. *Why not one tree per

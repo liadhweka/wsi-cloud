@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7c762301-b9e5-4cf9-aa77-70e924a540c2
-  modified: 2026-08-22T09:00:50.126Z
+  modified: 2026-08-23T16:43:43.646Z
 ---
 
 Unresolved items collect **here**, not only in the doc that surfaced them — a memory loads every session; a
@@ -22,21 +22,9 @@ which holds the scope and the reason each needs the real environment. Cite the `
 
 ## A. Resolve before the first measured cell
 
-0. **[RESUME POINT, written 2026-08-23 ~13:3x UTC at session handoff] A background chain is IN FLIGHT on
-   this box: `run-leg --only 1.6` → `--only 1.5` → `--only C8` (tee log `runs/sweep-logs/2026-08-23-13*-weka-1.6-1.5-C8.log`),
-   launched ~13:20 UTC, ~2.5 h total.** On completion (check `runs/.leg-state/weka/{1.6,1.5,C8}.done`,
-   INDEX verdicts, no `canary-abort`): (1) aggregate 1.6 (`aggregate-stage1-mixed.py '<glob>'`) and 1.5
-   (`aggregate-stage1-fpsync.py '<glob>'` — per-leg CSVs), write both results rows (a provisional 1.5 row
-   from the renamed first attempt is ALREADY in `Stage-1-Ingest.md` — REPLACE its numbers with the re-run's;
-   1.6's read direction is REPORT_ONLY by declared construction, write side judged), run
-   `verify-substage-closeout.sh` for 1.5 and 1.6, expect exit 0. (2) Then the LEG CLOSE-OUT block:
-   D10 re-check formal note (trigger does not fire — plateau is client-FE-bound ~94 Gbps, far under line
-   rate); `env-contract.py write --leg weka` then `verify` (leg-end contract must equal the committed
-   reference on every MUST_MATCH field); RESULTS.md per-stage skeleton (headline figures + pointers only,
-   numbers live in the roadmaps); memory tidy; full `./backup.sh` + commit + push via push-safe. Everything
-   through Stage 7 is CLOSEOUT CLEAN and pushed (d329d69 + later); only 1.5/1.6/C8 closeouts + leg
-   close-out remain. Delete this item when the leg is closed.**
-
+0. **LEG A (WEKA) IS CLOSED — every substage CLOSEOUT CLEAN, leg-end contract written and verified,
+   RESULTS.md per-stage record written.** This box's remaining lifecycle is the human's call: teardown
+   (`teardown-prep.sh`, preflight gates) or further work they direct. No measured Leg-A cell remains.
 
 These change what the numbers mean, so resolving them after cells have run means re-running cells.
 
@@ -72,9 +60,6 @@ These change what the numbers mean, so resolving them after cells have run means
     `NVFS statistics(ver: 4.0)`, driver 2.29.4; `Active Shadow-Buffer (MiB)` is the bounce signal.
     Remaining D-6 engineering: the nvidia-fs block parser (Stage-5 trainer AND Stage-6 extractor wiring
     DONE 2026-08-18, smoke-verified) — tracker **D-6**.
-8. **(resolved 2026-08-17 — tile counts measured from the real coords; numbers in
-   `docs/Stage-6-Feature-Extraction.md` § Risks and the `coords-3.0` fingerprint. Delete on next hygiene
-   pass once 6.B.1's grid is actually sized from them.)**
 9. **Counter-semantics check for cross-leg `ops/s`.** Until counter semantics are verified equivalent and that
    verification recorded, app-level metrics are the cross-leg-comparable ones and filesystem-reported ops/s
    is within-leg only. Detail: `docs/Stage-2-Cataloging.md`.
@@ -96,14 +81,6 @@ These change what the numbers mean, so resolving them after cells have run means
     generate-and-delete the 6.B corpora per tier instead of holding the whole suite. Raising FSx capacity
     stays a D7-visible change — surface, don't absorb. Note: 4.D's wallclock grows to the full cohort —
     measured work, not dead time, but plan the leg's schedule with it.
-13d. **(resolved 2026-08-21 — D-30 closed: every stage 3–7 driver declares per cell, 6.C
-    `na-mixed-concurrent-workloads` and 7.5 `na-mixed-concurrent-clinical` ratified + wired. Tracker
-    closed-ids + each roadmap's cache rows hold the record. Delete this stub once 6.C's first cells run
-    clean under the new declarations.)**
-15. **(resolved 2026-08-19 under the no-obvious-ratification rule — `CHUNK_SIZE=200` re-derived and kept:
-    ~1.01 TiB transient per chunk vs ~50 TiB free on Leg A and ~7 TiB planned headroom on the re-ratified 28,800-GiB
-    FSx config; identical-on-both-legs rule keeps the default. Stage-6 register carries the arithmetic.
-    Delete this entry once Leg B's actual provisioned capacity re-confirms the headroom at its gate.)**
 17. **`env.sh --check-ready` mode — RATIFIED (2026-08-16): build a separate "ready to measure" mode**
     (leg-conditional hard requirements: the running leg's canary field `WEKA_EC_SCHEME` /
     `LUSTRE_STRIPE_LAYOUT`, distinct from `--check`'s "configured") — **deliberately deferred until after
@@ -119,19 +96,6 @@ These change what the numbers mean, so resolving them after cells have run means
     not installed, and `fio` 3.35 lists no `filestat`/`filecreate` engine — so this means introducing a new
     tool and validating it on **both** filesystems before any number from it is quotable.
     Detail: `docs/Stage-2-Cataloging.md`.
-21. **The blocker gate is now three tiers, and two of them gate cells that used to precede it.**
-    `prompts/handoff-skeleton.md` (the handoff SOP: filled inline per session turnover, 2026-08-20):
-    **Tier 0** transport, before *any* cell including the throwaway (**CLOSED,
-    re-evidenced on the REBUILT 6xlarge cluster 2026-08-16** — 4 FRONTENDs NETWORK=DPDK on this host from
-    the client's own report, 4 NICs igb_uio-bound, bootstrap evidence line; run-leg.sh refusal verified);
-    **Tier 1** recording adapters, consistency relation, worker-correctness bugs, the 1.7 driver, and the
-    Stage-1.0 cache regime — **ALL CLOSED and exercised in anger (2026-08-17): the Stage-1.0 baseline +
-    1.7 hydration ran, 118 cells, every canary PASS, hydration byte-verified, markers written. STATE:
-    STOPPED at the baseline greenlight gate — nothing past 1.7 runs without the human's word.** Next steps
-    on greenlight: 3.0 → 4.D → … per run-leg order; **before 3.0 runs, its driver needs its
-    RECORD_CACHE_STATE declaration (memory 13d / tracker D-30)**. **Tier 2** rows (cuCIM tile-cache policy
-    item 14 before Stage 4; CHUNK_SIZE item 15 before 6.A Tier 2; D-34 poll rate before 2.0; mixed-band
-    calibration before 1.6; 7.4.b poll before 7.4.b) remain open at their gates.
 23. **[DECISION IN FLIGHT, human's — no action] The human is CONSIDERING halting this benchmark and
     restarting on multiple clients (4) to save calendar time (raised 2026-08-21).** Nothing is decided:
     continue the current single-client legs normally until the human says otherwise. If it lands, it is a
