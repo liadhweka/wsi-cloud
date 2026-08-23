@@ -994,14 +994,20 @@ report it as "active throughout" with the active-window rate, not a retention pe
 the training and viewer workloads may be a **host** effect present on both legs; per **D15**, host-CPU
 accounting differs between legs, so check the core accounting before attributing it to the filesystem.
 
-### `pipeline-end-to-end-stage6d.sh` + `aggregate-stage6d.py`
-**What.** Sequential end-to-end orchestration, and the aggregator that composes the bookend from measured
-per-phase numbers.
+### `compose-stage6d.py` + `pipeline-end-to-end-stage6d.sh` + `aggregate-stage6d.py`
+**What.** `compose-stage6d.py` is 6.D itself: the ratified constructive recipe as code (2026-08-23 — tissue
+3.0 n=64 window + chunk-recorded convert amortised across the sharing models, kvikIO only + per-model Tier-2
+extract wallclock + MIL epoch derived from the nw=16 knee's steady rate), emitting
+`s6.D-e2e-composed-summary-<leg>.csv` with cost at the leg contract's recorded rates. The other two are the
+live variant: sequential orchestration and its aggregator — retained as the productisation template, never
+run as a measurement.
 **Why.** The phases are strictly sequential with no shared-resource interaction, so measured per-phase
 wallclocks compose **exactly** — running it live would repeat the long-pole stage for hours and add no
-insight. Retained as the productisation template.
-**Caveats.** **Every component must come from the same leg's run dirs.** The aggregators glob run dirs, so
-mixing legs is easy to do by accident and would produce a number describing neither filesystem.
+insight. The recipe is code, not prose, so both legs compose identically (D6).
+**Caveats.** **Every component must come from the same leg's run dirs.** The composer's globs are leg-scoped
+and refuse a missing or ambiguous source cell (exit 2) rather than substituting; FAILED-renamed and `-repN`
+dirs are never sources. The MIL component is a derivation (the 6.B.3 cells are windowed throughput cells,
+not epoch runs) — stated wherever the composed number is quoted.
 
 ---
 

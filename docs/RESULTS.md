@@ -231,6 +231,11 @@ concurrent mixes. **Headlines:**
 - **6.C concurrent QoS:** **no workload loses more than ~11% under any mix and the filesystem is never the
   contended resource** — extract fully retained (100–102%), viewer worst case 89.1% (all-four while ingest
   is live) recovering to 96.5% in the endurance window, ingest undegraded.
+- **6.D end-to-end (constructive):** raw SVS → trained MIL classifier in **3.4–4.1 h on the cuCIM path vs
+  8.5–9.1 h on the kvikIO path** (Virchow2/GigaPath; as-run cost $157–186 vs $384–414 infra-only) — the
+  one-time conversion dominates the kvikIO path even amortised across three models, so **in a single pass
+  the cuCIM path wins ~2.2–2.5× despite extracting ~8% slower**; the recipe and crossover logic live in the
+  roadmap's 6.D section.
 
 ## Stage 7 — Clinical inference deployment (`Stage-7-Clinical-Inference-Deployment.md`)
 
