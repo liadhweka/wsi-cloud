@@ -161,8 +161,9 @@ page there: POSIX ingest only, no SMB** — read it before quoting any Stage-1 n
 - **Synthetic ceilings (1.0a–d):** app-level write peak **8.48 GiB/s** (64k; non-monotonic vs large blocks,
   recorded with its paired wire measurement) · read plateau **~11.0 GiB/s ≈ 94 Gbps** at 1M/4M — attributed
   to the client FE stack, not backends or network (**D10 trigger evaluated at leg close: does not fire**) ·
-  random 4k: **519k write / 625k read IOPS** (read peak's D18 reps: 0.5% spread). 1.0a cells are single-shot
-  (D18 knee/peak repeats not run — recorded caveat there).
+  random 4k: **519k write / 625k read IOPS** (read peak's D18 reps: 0.5% spread). 1.0a's headline peak
+  carries D18 reps (median 8.48 GiB/s, 5.8% spread); its other per-bs peaks are single-shot (recorded
+  caveat there).
 - **Real-file bulk copy (1.5):** **2,402 MiB/s** at n=64, saturating from n=4 — **~44% of the 1M synthetic
   write ceiling**: per-file rsync/fpsync machinery bounds the path before the filesystem does.
 - **Mixed ingest+read (1.6):** ingest holds its solo ~2,400 MiB/s through moderate concurrent read load,
