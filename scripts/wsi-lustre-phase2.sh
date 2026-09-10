@@ -32,14 +32,34 @@
 #   contradicting split is a finding to surface, not wiring to add.
 #
 # Stages (each ⛔ = WSI-FATAL, filesystem left UNMOUNTED, banner explains):
-#   1 preflight   FSX facts + fs spec asserted + EFA hardware + DNS + port 988
+#   1 preflight   FSX facts + fs spec asserted + EFA hardware (count must match
+#                 terraform's second_efa_type) + DNS + port 988
 #   2 efa-kernel  in-kernel efa.ko >= 2.12.1 and kefalnd present  (⛔ = AMI/kernel drift)
-#   3 client      dnf install lustre-client; ⛔ if the kernel changed (D-17)
-#   4 re-arm      vendored AWS setup.sh → EFA LNet config now + systemd oneshot at boot
+#   3 client      dnf install lustre-client; ⛔ if the kernel changed (D-17);
+#                 provenance logged; ⛔ if lustre modules are already loaded
+#                 before the AWS configurator (its libcfs CPT options would not apply)
+#   4 re-arm      vendored AWS setup.sh --tcp-name <IMDS-derived primary if> →
+#                 EFA LNet config now + systemd oneshot at boot
 #   5 HARD GATE   `lnetctl net show` must list an efa net, up (⛔ NO MOUNT, NO
 #                 FALLBACK — a TCP mount is a human decision in writing, D16)
-#   6 mount       mount → counter-proof of EFA data path (⛔ unmount on failure) →
-#                 chown → fstab → tuning + persistence unit → env.sh → motd
+#   6 mount       mount → boot snapshot (lnetctl/EFA hw_counters/osc params/layout)
+#                 → counter-proof of EFA data path incl. EFA retrans bracket
+#                 (⛔ unmount on failure) → chown → fstab → tuning + persistence
+#                 unit → env.sh → motd
+#   (7 is NOT here: bulk-rate transport acceptance is scripts/wsi-lustre-bulk-accept.sh,
+#    armed by bootstrap as wsi-lustre-bulk-accept.service, After= this unit.)
+#
+# Revision 2026-09-10 (post EFA bulk-write failure, dossier 2026-08-21):
+#   - Install provenance is now STATED, not assumed: AWS's install-fsx-lustre-client.sh
+#     v1.0 (read 2026-09-10) on AL2023 is `dnf install -y lustre-client` plus an EFA
+#     gate (check_efa_version >= 2.12.1) that PASSES on this kernel's efa.ko and
+#     therefore SKIPS the aws-efa-installer. Stage 3 is that documented path in
+#     effect, and logs modinfo/rpm so the journal proves it.
+#   - Stage 4 pins --tcp-name from IMDS local-ipv4 instead of trusting `hostname -I`
+#     ordering (matters if second_efa_type=efa adds a second netdev).
+#   - Stage 6 writes a per-boot snapshot dir under runs/ with everything the
+#     failure analysis found missing (lnetctl -v 4, peer show, stats, global, full
+#     EFA hw_counters, osc max_pages_per_rpc/import, at_*/timeout, stripe layout).
 #
 # Usage: sudo scripts/wsi-lustre-phase2.sh [--dry-run]
 #   --dry-run prints every mutating command it would run and mutates nothing.
@@ -68,6 +88,8 @@ fatal() { # every fatal leaves the fs unmounted and says why that is the safe st
 run() { # run <cmd...> — honor --dry-run for every mutating command
   if [ "$DRY" -eq 1 ]; then echo "DRY-RUN would run: $*"; else "$@"; fi
 }
+IMDS_TOK=$(curl -sfX PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" 2>/dev/null || true)
+imds() { curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOK" "http://169.254.169.254/latest/meta-data/$1"; }
 py_set() { # py_set KEY VALUE — overwrite an existing export line, else insert before --check
   [ "$DRY" -eq 1 ] && { echo "DRY-RUN would py_set $1=\"$2\" in $ENV_SH"; return 0; }
   python3 - "$ENV_SH" "$1" "$2" <<'PY'
@@ -121,6 +143,17 @@ for i in /sys/class/infiniband/*; do
 done
 [ "${#EFA_DEVS[@]}" -ge 1 ] || fatal "no EFA device under /sys/class/infiniband — the instance was launched without an EFA interface (terraform: interface_type=efa); no client config can fix that"
 echo "EFA device(s): ${EFA_DEVS[*]}"
+# Terraform's second_efa_type is delivered via the conf (2026-09-10). A mismatch
+# means EC2 did not wire what was asked — the ratified topology is not what is
+# running, and every number would be measured against the wrong ceiling.
+if [ -n "${EFA_RAILS_EXPECTED:-}" ]; then
+  [ "${#EFA_DEVS[@]}" -eq "$EFA_RAILS_EXPECTED" ] \
+    || fatal "EFA device count ${#EFA_DEVS[@]} != EFA_RAILS_EXPECTED=$EFA_RAILS_EXPECTED (terraform second_efa_type=${SECOND_EFA_TYPE:-?}) — EC2 did not deliver the ratified rail count; no client config can fix that"
+  echo "rail count matches terraform (second_efa_type=${SECOND_EFA_TYPE:-?} -> $EFA_RAILS_EXPECTED)"
+  for d in "${EFA_DEVS[@]}"; do
+    echo "  $d numa_node=$(cat "/sys/class/infiniband/$d/device/numa_node" 2>/dev/null || echo ?) pci=$(basename "$(readlink -f "/sys/class/infiniband/$d/device")" 2>/dev/null)"
+  done
+fi
 getent hosts "$FSX_DNS_NAME" >/dev/null || fatal "DNS not resolving for $FSX_DNS_NAME"
 timeout 5 bash -c "cat < /dev/null > /dev/tcp/$FSX_DNS_NAME/988" \
   || fatal "port 988 unreachable — security-group/subnet problem, not a client problem"
@@ -146,15 +179,47 @@ if [ "$DRY" -eq 0 ]; then
   LFS_VER=$(lfs --version 2>/dev/null | awk '{print $2}')
   [ "$(printf '%s\n' "2.15" "$LFS_VER" | sort -V | head -1)" = "2.15" ] || fatal "lfs $LFS_VER < 2.15 (metadata-IOPS client requirement)"
   echo "kernel unchanged; kefalnd present; lfs $LFS_VER"
+  # Provenance into the journal (2026-09-10). This is what a support engineer will
+  # check first; state it before they do.
+  echo "provenance: kernel=$(uname -r)"
+  echo "provenance: $(rpm -q lustre-client) tag=$(rpm -q --qf '%{RELEASE}' lustre-client 2>/dev/null)"
+  echo "provenance: efa.ko version=$(modinfo efa | awk '/^version:/{print $2}') file=$(modinfo -n efa)"
+  echo "provenance: kefalnd version=$(modinfo kefalnd | awk '/^version:/{print $2}') file=$(modinfo -n kefalnd)"
+  echo "provenance: AWS install-fsx-lustre-client.sh v1.0 on AL2023 == 'dnf install -y lustre-client' + efa gate (check_efa_version >= 2.12.1) that passes on this efa.ko and skips the aws-efa-installer. This stage IS that documented path in effect."
+fi
+
+# Guard (2026-09-10): the AWS configurator writes libcfs cpu_npartitions/cpu_pattern
+# to modprobe.conf and THEN modprobes lnet. If libcfs/lnet are already resident
+# before it runs, those options silently do not apply and the CPT layout is wrong
+# with no error anywhere. On reboots the configurator runs first (unit After=),
+# so resident modules are expected then — the guard applies only when it has not.
+if [ "$DRY" -eq 0 ]; then
+  if systemctl is-failed --quiet configure-efa-fsx-lustre-client.service 2>/dev/null; then
+    fatal "configure-efa-fsx-lustre-client.service FAILED this boot — journalctl -u configure-efa-fsx-lustre-client.service; do NOT hand-configure around it"
+  elif ! systemctl is-active --quiet configure-efa-fsx-lustre-client.service 2>/dev/null; then
+    if lsmod | grep -qE '^(libcfs|lnet) '; then
+      fatal "libcfs/lnet already loaded before the AWS configurator ran ($(lsmod | awk '/^(libcfs|lnet|kefalnd|ksocklnd|lustre) /{printf "%s ",$1}')) — its libcfs CPT options would NOT apply. Find what loaded them (journalctl -b, /etc/modules-load.d); never configure around it"
+    fi
+  fi
 fi
 
 step "4. EFA LNet config + boot re-arm (vendored AWS bundle)"
 [ -x "$VENDOR_DIR/setup.sh" ] || fatal "vendored bundle missing at $VENDOR_DIR (see VENDORED.md)"
+# --tcp-name pinned from IMDS (2026-09-10): the configurator's default is "the
+# first UP interface in `hostname -I`", which is an ordering accident once a
+# second netdev exists (second_efa_type=efa). setup.sh bakes the value into the
+# boot oneshot's ExecStart, so it is deterministic on every boot too.
+PRIMARY_IP=$(imds local-ipv4) || fatal "IMDS local-ipv4 unavailable — cannot pin the LNet tcp interface"
+TCP_IF=$(ip -br -4 addr | awk -v ip="$PRIMARY_IP" '$3 ~ "^"ip"/" {print $1; exit}')
+[ -n "$TCP_IF" ] || fatal "no interface carries IMDS local-ipv4 $PRIMARY_IP (ip -br -4 addr: $(ip -br -4 addr | tr '\n' ';'))"
+echo "LNet tcp interface pinned: $TCP_IF ($PRIMARY_IP)"
 if systemctl is-enabled --quiet configure-efa-fsx-lustre-client.service 2>/dev/null \
    && lnetctl net show 2>/dev/null | grep -q 'net type: efa'; then
   echo "already configured and armed (service enabled, efa net present) — skipping setup.sh"
+  grep -q -- "--tcp-name $TCP_IF" /etc/systemd/system/configure-efa-fsx-lustre-client.service 2>/dev/null \
+    || warn "armed unit does not carry --tcp-name $TCP_IF (older setup.sh invocation) — re-run setup.sh by hand to pin it, or accept hostname -I auto-detect"
 else
-  ( cd "$VENDOR_DIR" && run ./setup.sh ) || fatal "AWS configure-efa setup.sh failed — read its output above; do NOT hand-configure around it"
+  ( cd "$VENDOR_DIR" && run ./setup.sh --tcp-name "$TCP_IF" ) || fatal "AWS configure-efa setup.sh failed — read its output above; do NOT hand-configure around it"
 fi
 
 step "5. HARD GATE (D16): lnetctl must evidence an efa net"
@@ -183,14 +248,51 @@ else
     || fatal "mount failed"
 fi
 if [ "$DRY" -eq 0 ]; then
+  # Per-boot snapshot (2026-09-10): everything the 2026-08-21 failure analysis
+  # found missing from the evidence, captured before and after the proof write so
+  # every later probe has an exact same-boot baseline. Small text -> git; runs/
+  # convention.
+  SNAP_DIR="$REPO_ROOT/runs/$(date -u +%Y-%m-%d-%H%M%S)-lustre-phase2-boot-snapshot"
+  snapshot() { # snapshot <tag>
+    local d="$SNAP_DIR/$1"; mkdir -p "$d"
+    lnetctl net show -v 4      > "$d/lnetctl-net-show-v4.txt"   2>&1
+    lnetctl peer show -v 4     > "$d/lnetctl-peer-show-v4.txt"  2>&1
+    lnetctl stats show         > "$d/lnetctl-stats.txt"         2>&1
+    lnetctl global show        > "$d/lnetctl-global.txt"        2>&1
+    lnetctl udsp show          > "$d/lnetctl-udsp.txt"          2>&1
+    for dev in "${EFA_DEVS[@]}"; do
+      for f in /sys/class/infiniband/"$dev"/ports/1/hw_counters/*; do
+        [ -r "$f" ] && echo "$dev $(basename "$f") $(cat "$f")"
+      done
+    done > "$d/efa-hw-counters.txt" 2>/dev/null
+    lctl get_param osc.*.max_pages_per_rpc osc.*.max_rpcs_in_flight osc.*.import > "$d/osc-params-import.txt" 2>&1
+    lctl get_param timeout at_min at_max at_history > "$d/ptlrpc-timeouts.txt" 2>&1
+    lctl get_param lnet.lnet_transaction_timeout lnet.lnet_retry_count lnet.lnet_health_sensitivity > "$d/lnet-timeouts.txt" 2>&1
+    { echo "kernel: $(uname -r)"; rpm -q lustre-client; echo; modinfo efa; echo; modinfo kefalnd; } > "$d/provenance.txt" 2>&1
+    cat /etc/modprobe.d/modprobe.conf > "$d/modprobe.conf" 2>/dev/null
+    cat /etc/systemd/system/configure-efa-fsx-lustre-client.service > "$d/configure-efa.service" 2>/dev/null
+    lfs getstripe -d "$MNT"    > "$d/lfs-getstripe-root.txt"     2>&1
+    lfs df -h "$MNT"           > "$d/lfs-df.txt"                 2>&1
+    ip -br addr                > "$d/ip-br-addr.txt"             2>&1
+    ethtool -S "$TCP_IF" 2>/dev/null | grep -iE 'allowance|drop|err' > "$d/ethtool-$TCP_IF-allowance.txt" 2>&1
+  }
   efa_sends() { lnetctl net show -v 4 2>/dev/null | sed -n '/net type: efa/,/net type:/p' | awk '/send_count:/{s+=$2} END{print s+0}'; }
-  B=$(efa_sends)
+  efa_ctr_sum() { # efa_ctr_sum <counter> — summed over all EFA devices
+    local s=0 v; for dev in "${EFA_DEVS[@]}"; do v=$(cat "/sys/class/infiniband/$dev/ports/1/hw_counters/$1" 2>/dev/null || echo 0); s=$((s + v)); done; echo "$s"
+  }
+  snapshot pre-proof
+  B=$(efa_sends); RT_B=$(efa_ctr_sum retrans_timeout_events); RP_B=$(efa_ctr_sum retrans_pkts)
   dd if=/dev/zero of="$MNT/.wsi-phase2-transport-probe" bs=1M count=100 oflag=direct status=none \
     || { umount "$MNT"; fatal "direct-I/O probe write failed"; }
-  A=$(efa_sends)
+  A=$(efa_sends); RT_A=$(efa_ctr_sum retrans_timeout_events); RP_A=$(efa_ctr_sum retrans_pkts)
   rm -f "$MNT/.wsi-phase2-transport-probe"
+  snapshot post-proof
+  chown -R "$U:$U" "$SNAP_DIR" 2>/dev/null || true
   DELTA=$((A - B))
   echo "transport proof: efa send_count +$DELTA across a 100MiB direct write (expect ~100, one RPC per MiB)"
+  echo "transport proof: EFA retrans bracket across the same write: retrans_timeout_events +$((RT_A - RT_B)), retrans_pkts +$((RP_A - RP_B)) (expect 0/0; the 2026-08-21 box showed exactly 0 on small transfers)"
+  echo "boot snapshot: $SNAP_DIR/{pre-proof,post-proof}"
+  [ $((RT_A - RT_B)) -eq 0 ] || warn "EFA retransmission timeouts moved during a 100 MiB write — the small-transfer path is NOT clean on this boot (it was on 2026-08-21). Recorded, not fatal; the bulk-accept ladder will tell the rest."
   if [ "$DELTA" -lt 50 ]; then
     umount "$MNT"
     fatal "data moved but efa counters barely did (+$DELTA) — the mount is passing data over tcp despite the efa net. UNMOUNTED. This is exactly the silent failure D16 exists for."
@@ -267,6 +369,9 @@ if [ "$DRY" -eq 0 ] && [ -f /etc/motd.d/50-wsi ]; then
 fi
 
 step "DONE"
-echo "phase-2 complete: $MNT mounted, transport=efa (counter-proven), tuning applied+armed,"
+echo "phase-2 complete: $MNT mounted, transport=efa (counter-proven at 100 MiB), tuning applied+armed,"
 echo "fstab+systemd re-arm in place, env.sh updated. Cost/ceiling values and the environment"
 echo "contract remain SESSION work (human-ratified numbers; env-contract.py write --leg lustre)."
+echo "NOT yet proven: transport at SUSTAINED BULK rate. That is wsi-lustre-bulk-accept.service"
+echo "(After= this unit; runs once after bootstrap). No runs/.leg-state/lustre/bulk-transport-PASS"
+echo "means the leg is not runnable — the 2026-08-21 failure was invisible below bulk rate."

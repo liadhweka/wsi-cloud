@@ -369,11 +369,17 @@ step "6.1 baked lustre phase-2 (EFA config -> D16 gate -> counter-proven mount)"
 # tcp — the fstab automount alone would happily mount over a tcp-only lnet (the MGS
 # NID is @tcp), which is exactly the silent D16 failure. This unit is the 3am-
 # mechanical trigger for that.
+# Ordering (2026-09-10): phase-2 is ordered AFTER AWS's own configure-efa oneshot.
+# Without it the two race at boot: if phase-2 wins, its stage 4 sees no efa net
+# yet and calls setup.sh, which notices the service is already enabled and exits
+# 0 WITHOUT configuring; stage 5 then passes or fails on timing alone. On first
+# boot the AWS unit does not exist yet (phase-2 stage 4 creates it) — systemd
+# ignores After=/Wants= on a missing unit, so this is safe both ways.
 cat > /etc/systemd/system/wsi-lustre-phase2.service <<PHASE2UNIT
 [Unit]
 Description=WSI baked lustre phase-2 (EFA gate + counter-proven mount, D16)
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target configure-efa-fsx-lustre-client.service
+After=network-online.target configure-efa-fsx-lustre-client.service
 
 [Service]
 Type=oneshot
@@ -391,6 +397,43 @@ if systemctl start wsi-lustre-phase2.service; then
   echo "phase-2 oneshot: ran clean now, armed for every boot"
 else
   warn "phase-2 FAILED (journalctl -u wsi-lustre-phase2.service) — fs left unmounted by design (D16); manual fallback: docs/cloud-setup/LUSTRE-PROVISIONING.md"
+fi
+
+step "6.2 bulk-transport acceptance ladder (D16 at bulk rate; unattended)"
+# The 2026-08-21 failure only appears under SUSTAINED bulk writes — the 100 MiB
+# phase-2 proof cannot see it. scripts/wsi-lustre-bulk-accept.sh runs the 120 s
+# reproducer with bracketed EFA/LNet/dmesg telemetry and, on FAIL, walks the
+# isolation ladder (single rail -> single OST -> reads) so one apply yields the
+# full matrix. It waits for this bootstrap to finish, runs detached (--no-block),
+# and writes runs/.leg-state/lustre/bulk-transport-{PASS,FAIL}. It skips itself
+# on later boots once a verdict exists (FORCE=1 to re-run); it never re-hammers
+# the fs at 3am on its own. Wire run-leg.sh to refuse the leg without PASS.
+cat > /etc/systemd/system/wsi-lustre-bulk-accept.service <<ACCEPTUNIT
+[Unit]
+Description=WSI lustre bulk-write transport acceptance ladder (D16 at bulk rate)
+Requires=wsi-lustre-phase2.service
+After=wsi-lustre-phase2.service
+RequiresMountsFor=$WEKA_MNT
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+TimeoutStartSec=4h
+ExecStart=$REPO/scripts/wsi-lustre-bulk-accept.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+ACCEPTUNIT
+systemctl daemon-reload
+systemctl enable wsi-lustre-bulk-accept.service
+if [ -x "$REPO/scripts/wsi-lustre-bulk-accept.sh" ]; then
+  systemctl start --no-block wsi-lustre-bulk-accept.service \
+    && echo "bulk-accept: launched detached; follow with: journalctl -u wsi-lustre-bulk-accept.service -f" \
+    || warn "bulk-accept unit failed to start (journalctl -u wsi-lustre-bulk-accept.service)"
+else
+  warn "scripts/wsi-lustre-bulk-accept.sh missing or not executable — bulk-transport acceptance NOT run; run-leg.sh must refuse the leg"
 fi
 fi
 
@@ -631,6 +674,11 @@ mkdir -p /etc/motd.d 2>/dev/null || true
     echo "     docs/cloud-setup/LUSTRE-PROVISIONING.md"
   else
     echo "  3. Paste the TEMP/ handoff the last session wrote (convention: prompts/handoff-skeleton.md)"
+  fi
+  if [ "$LEG" = "lustre" ]; then
+    echo "  4. Bulk-transport acceptance runs UNATTENDED after this bootstrap finishes:"
+    echo "     journalctl -u wsi-lustre-bulk-accept.service -f"
+    echo "     verdict: ls ~/wsi-cloud/runs/.leg-state/lustre/bulk-transport-*   (no PASS = leg not runnable)"
   fi
   echo "Logs: /var/log/wsi-bootstrap.log, wsi-env-build.log, wsi-prefetch.log"
   echo "Triage: grep WSI- /var/log/wsi-bootstrap.log"
